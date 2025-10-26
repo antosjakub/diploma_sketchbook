@@ -26,7 +26,7 @@ function get_laplace_op_matrix(n, d)
 end
 
 
-n = 64
+n = 100
 d = 4
 N = n^d
 
