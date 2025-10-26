@@ -1,0 +1,24 @@
+n=64
+d=1
+N=64
+
+Problem statement:
+Delta u = f
+BC: u = 0
+
+u_analytic = sin(pi*x_1) * ... * sin(pi*x_d)
+f = -d*pi^2 * sin(pi*x_1) * ... * sin(pi*x_d) = -d*pi^2 * u
+
+───────────────────────────────────────────────────────────────────────────────────
+                                          Time                    Allocations      
+                                 ───────────────────────   ────────────────────────
+        Tot / % measured:             2.20s /  75.2%            328MiB /  85.1%    
+
+Section                  ncalls     time    %tot     avg     alloc    %tot      avg
+───────────────────────────────────────────────────────────────────────────────────
+5) solve system               1    579ms   35.0%   579ms    133MiB   47.8%   133MiB
+4) construct matrix           1    506ms   30.6%   506ms   57.2MiB   20.5%  57.2MiB
+1) construct grid vect        1    350ms   21.2%   350ms   55.0MiB   19.7%  55.0MiB
+2) eval u_analytic            1    154ms    9.3%   154ms   27.4MiB    9.8%  27.4MiB
+3) eval f_fun                 1   63.7ms    3.9%  63.7ms   6.00MiB    2.2%  6.00MiB
+───────────────────────────────────────────────────────────────────────────────────
