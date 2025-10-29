@@ -12,21 +12,40 @@ end
 # E L, L E
 # E E L, E L E, L E E
 # E E E L, E E L E, E L E E, L E E E
-# (E E E L), (E E L) (E), (E L) (E E), (L) (E E E)
-# E ... E L = L of size n^(k+1) if E is there k times
 function get_laplace_op_matrix(n, d)
-	L_full = get_1d_laplace_op_matrix(n^d)
-	for k in 1:(d-1)
-		L = get_1d_laplace_op_matrix(n^(d-k))
-		size = n^k
+	L = get_1d_laplace_op_matrix(n)
+	if d == 1
+		L_full = L
+	elseif d == 2
+		E = sparse(I, n, n)
+		L_full = kron(E, L) + kron(L, E)
+	elseif d >= 3
+		# step 1
+		size = n^(d-1)
+		E = sparse(I, size, size)
+		L_full = kron(E, L)
+		# step 2:d-1
+		for k in 2:(d-1)
+			n_Es_lhs = d-k
+			n_Es_rhs = k-1
+			# lhs
+			size = n^(n_Es_lhs)
+			E = sparse(I, size, size)
+			kron_lhs = kron(E, L)
+			# rhs
+			size = n^(n_Es_rhs)
+			E = sparse(I, size, size)
+			L_full += kron(kron_lhs, E)
+		end
+		# step d
+		size = n^(d-1)
 		E = sparse(I, size, size)
 		L_full += kron(L, E)
 	end
-	L_full
 end
 
 
-n = 100
+n = 64
 d = 4
 N = n^d
 
@@ -67,24 +86,19 @@ using TimerOutputs
 
 const to = TimerOutput()
 
-println("1) Constructing a vector from the grid...")
-@timeit to "1) construct grid vect" grid_points_as_1d_vect = get_grid_points_as_1d_vect(n,d);
+println("1) Evaluating f_fun on the grid vector...")
+@timeit to "1) eval f_fun" F = h^2 * f_fun.(get_grid_points_as_1d_vect(n,d));
 
-println("2) Evaluating u_analytic_fun on the grid vector...")
-@timeit to "2) eval u_analytic" U_analytic = u_analytic_fun.(grid_points_as_1d_vect);
+println("2) Constructing the laplace matrix...")
+@timeit to "2) construct matrix" L = get_laplace_op_matrix(n,d);
 
-println("3) Evaluating f_fun on the grid vector...")
-@timeit to "3) eval f_fun" f = f_fun.(grid_points_as_1d_vect);
-F = h^2 * f;
-
-println("4) Constructing the laplace matrix...")
-@timeit to "4) construct matrix" L = get_laplace_op_matrix(n,d);
-
-println("5) Running CG...")
+println("3) Running CG...")
 using IterativeSolvers
-@timeit to "5) solve system" U_cg = cg(L, F)
+@timeit to "3) solve system" U_cg = cg(L, F)
 
 #U_direct = L \ F;
+#grid_points_as_1d_vect = get_grid_points_as_1d_vect(n,d);
+#U_analytic = u_analytic_fun.(grid_points_as_1d_vect);
 
 show(to)
 println()

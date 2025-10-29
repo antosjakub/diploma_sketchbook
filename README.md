@@ -1,17 +1,27 @@
-# roadmap
+# Numerically solving the Fokker-Planck PDE on high-dimensional domains
 
-# Poisson eq. (elliptic) / Heat eq. (parabolic)
+## Latest updates
 
 
-### standard approach
+## Roadmap
 
-FD (finite differences) / FEM (finite element method) $\to$ get matrix system $A x = b$ $to$ how to solve?
+### Equations to try
 
+- Poisson eq. (elliptic)
+- optionally: Heat eq. (parabolic)
+- Fokker-Planck eq. (parabolic)
+
+### 1) Poisson eq. (elliptic)
+FD (finite differences) / FEM (finite element method) $\to$ get matrix system $A x = b$ $\to$ how to solve? Some other way to discretize?
+
+#### a) standard approaches
 - just invert it!
 - matrix iteration method - if you can save the matrix
     - Jacobi / Gauss-Seidel
     - CG
         - symmetric, positive definite
+
+#### b) alternative stategies
 - multigrid
 - FFT
     - solve the PDE in place - no iteration - just compute 1 FT and 1 iFT - but on the entire grid
@@ -19,15 +29,16 @@ FD (finite differences) / FEM (finite element method) $\to$ get matrix system $A
     - for large dim
 - MC??
 
-### NNs
-try:
-    - PINN
-    - PDE $\to$ variational form $\to$ minimize functional $J(u)$
+#### c) NNs
 
+- PINN
+- PDE $\to$ variational form $\to$ minimize functional $J(u)$
 
-# Fokker-Planck
+### 2) Heat eq. (parabolic) <- optional
 
-### apply the NNs from the prev chapeter
+### 3) Fokker-Planck
+
+apply the NNs from the prev chapeter
 
 perhaps also BSDE?
 
