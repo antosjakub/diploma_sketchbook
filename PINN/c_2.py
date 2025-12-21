@@ -1,12 +1,14 @@
 import torch
 import torch.nn as nn
-import matplotlib.pyplot as plt
 
+from test_suite import *
+
+# seed
 torch.manual_seed(42)
-
 # cuda or cpu
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {device}")
+
 
 class PINN(nn.Module):
     def __init__(self, D, hidden_size=64):
@@ -23,10 +25,10 @@ class PINN(nn.Module):
             nn.Tanh(),
             nn.Linear(hidden_size, 1)
         )
-    
     def forward(self, x):
         return self.net(x)
 
+    
 def compute_derivatives(model, X):
     """
     Compute u, grad u, and laplace u
@@ -35,7 +37,7 @@ def compute_derivatives(model, X):
     u = model(X)
     bs, D = X.shape
 
-    # Gradient
+    # Gradient - spatial & temporatal
     grad_u = torch.autograd.grad(
         inputs=X,
         outputs=u,
@@ -44,9 +46,9 @@ def compute_derivatives(model, X):
         retain_graph=True,
     )[0]
     
-    # Laplacian - stored as [d2u/dx1^2, d2u/dx2^2, ..., d2u/dxd^2, d2u/dt^2]
-    laplace_u = torch.zeros_like(X)
-    for i in range(D):
+    # Laplacian - spatial only
+    spatial_laplace_u = torch.zeros_like(u)
+    for i in range(D-1):
         hess_row = torch.autograd.grad(
             inputs=X,
             outputs=grad_u[:,i].sum(),
@@ -54,22 +56,21 @@ def compute_derivatives(model, X):
             create_graph=True,
             retain_graph=True
         )[0]
-        laplace_u[:,i] = hess_row[:,i]
+        spatial_laplace_u += hess_row[:,i:i+1]
 
-    # shapes: bs x 1, bs x D, bs x D 
-    return u, grad_u, laplace_u
+    # shapes: bs x 1, bs x D, bs x 1
+    return u, grad_u, spatial_laplace_u
 
-def sample_hypercube_boundary(d, num_samples, device='cpu'):
+
+def sample_hypercube_boundary(num_samples, d, device='cpu'):
     """
-    Fast boundary sampling for d-dimensional hypercube [0,1]^d.
-    
+    Boundary sampling for d-dimensional hypercube [0,1]^d
     Parameters:
+    - num_samples: number of points to sample
     - d: num of spatial dimensions
-    - num_samples: number of boundary points
     - device: 'cuda' or 'cpu'
-    
     Returns:
-    - tensor of shape (num_samples, d) with requires_grad=False
+    - tensor of shape (num_samples, d)
     """
     # Sample all coordinates uniformly from [0,1]
     samples = torch.rand(num_samples, d, device=device, requires_grad=False)
@@ -85,82 +86,69 @@ def sample_hypercube_boundary(d, num_samples, device='cpu'):
     
     return samples
 
-def pde_loss(model, X, alpha=0.01, d=2):
+
+def pde_loss(model, X_in):
     """
-    Compute PDE residual for d-dimensional heat equation:
-    u_t = alpha * Δu
-    where Δu = d²u/dx1² + d²u/dx2² + ... + d²u/dxd²
-    
-    X: (batch_size, d+1) tensor where columns are [x1, x2, ..., xd, t]
+    X_in: (batch_size, d+1) tensor
     """
-    X.requires_grad_(True)
-    
-    u, grad_u, laplace_u = compute_derivatives(model, X)
-    
-    # Time derivative (last column)
-    u_t = grad_u[:, -1]
-    
-    # Laplacian (sum of second derivatives in spatial dimensions)
-    spatial_laplacian = laplace_u[:, :d].sum(dim=1)
-    
-    # PDE residual: u_t - alpha * Δu = 0
-    residual = u_t - alpha * spatial_laplacian
+    X_in.requires_grad = True
+    u, grad_u, spatial_laplace_u = compute_derivatives(model, X_in)
+    residual = pde_residual(X_in, u, grad_u, spatial_laplace_u)
     return torch.mean(residual**2)
 
-def initial_condition_loss(model, X_ic, d=2):
+def initial_condition_loss(model, X_ic):
     """
-    Initial condition: u(x1, ..., xd, 0) = prod(sin(pi * xi))
-    X_ic: (batch_size, d+1) tensor with t=0
+    X_ic: (batch_size, d+1) tensor with t = 0
+    IC: u(x,0) = u_0(x)
     """
     u_pred = model(X_ic)
-    
-    # Initial condition: product of sin(pi * xi) for all spatial dimensions
-    u_true = torch.ones_like(u_pred)
-    for i in range(d):
-        u_true = u_true * torch.sin(torch.pi * X_ic[:, i:i+1])
-    
+    u_true = u_0(X_ic[:,:-1])
     return torch.mean((u_pred - u_true)**2)
 
 def boundary_condition_loss(model, X_bc):
     """
-    Boundary condition: u = 0 on all boundaries
     X_bc: (batch_size, d+1) tensor with points on boundary
+    BC: u(x,t) = 0
     """
     u_pred = model(X_bc)
     return torch.mean(u_pred**2)
 
-def generate_training_data(d=2, n_interior=2000, n_boundary=400, n_initial=400, 
-                          t_max=1.0, device='cpu'):
+
+def generate_training_data(
+        d,
+        n_interior=2_000, n_boundary=400, n_initial=400, 
+        device='cpu'
+    ):
     """
     Generate collocation points for training
-    
     Parameters:
     - d: spatial dimensions
-    - n_interior: number of interior points for PDE
-    - n_boundary: number of boundary points
-    - n_initial: number of initial condition points
-    - t_max: maximum time value
     - device: 'cuda' or 'cpu'
     """
     # Interior points (for PDE): [x1, ..., xd, t]
-    X_interior = torch.rand(n_interior, d + 1, device=device)
-    X_interior[:, -1] = X_interior[:, -1] * t_max  # Scale time to [0, t_max]
+    X_interior = torch.rand(n_interior, d+1, device=device)
     
-    # Boundary points: spatial coords on boundary, t random in [0, t_max]
-    X_boundary_spatial = sample_hypercube_boundary(d, n_boundary, device=device)
-    t_boundary = torch.rand(n_boundary, 1, device=device) * t_max
-    X_boundary = torch.cat([X_boundary_spatial, t_boundary], dim=1)
+    # Boundary points: spatial coords on boundary, t random in [0, 1]
+    x_boundary = sample_hypercube_boundary(n_boundary, d, device=device)
+    t_boundary = torch.rand(n_boundary, 1, device=device)
+    X_boundary = torch.cat([x_boundary, t_boundary], dim=1)
     
     # Initial condition points: spatial coords random in [0,1]^d, t=0
-    X_initial_spatial = torch.rand(n_initial, d, device=device)
+    x_initial = torch.rand(n_initial, d, device=device)
     t_initial = torch.zeros(n_initial, 1, device=device)
-    X_initial = torch.cat([X_initial_spatial, t_initial], dim=1)
+    X_initial = torch.cat([x_initial, t_initial], dim=1)
     
     return X_interior, X_boundary, X_initial
 
-def train_pinn(model, optimizer, scheduler, d=2, n_epochs=10_000, 
-               lambda_pde=1.0, lambda_bc=10.0, lambda_ic=10.0,
-               device='cpu'):
+
+def train_pinn(
+        model,
+        optimizer, scheduler,
+        d,
+        n_epochs=10_000, 
+        lambda_pde=1.0, lambda_bc=10.0, lambda_ic=10.0,
+        device='cpu'
+    ):
     """Train the PINN model"""
     
     # Generate training data
@@ -174,14 +162,12 @@ def train_pinn(model, optimizer, scheduler, d=2, n_epochs=10_000,
         optimizer.zero_grad()
         
         # Compute individual losses
-        loss_pde = pde_loss(model, X_interior, alpha=0.01, d=d)
+        loss_pde = pde_loss(model, X_interior)
         loss_bc = boundary_condition_loss(model, X_boundary)
-        loss_ic = initial_condition_loss(model, X_initial, d=d)
+        loss_ic = initial_condition_loss(model, X_initial)
         
         # Total loss with weights
         loss = lambda_pde * loss_pde + lambda_bc * loss_bc + lambda_ic * loss_ic
-        #loss = lambda_bc * loss_bc + lambda_ic * loss_ic
-        #loss = lambda_pde * loss_pde
         
         # Backward pass
         loss.backward()
@@ -196,19 +182,20 @@ def train_pinn(model, optimizer, scheduler, d=2, n_epochs=10_000,
         if (epoch + 1) % 500 == 0:
             print(f'Epoch {epoch+1}/{n_epochs}, Loss: {loss.item():.6f}, '
                   f'PDE: {loss_pde.item():.6f}, BC: {loss_bc.item():.6f}, '
-                  f'IC: {loss_ic.item():.6f}, LR: {optimizer.param_groups[0]["lr"]:.6f}')
+                  f'IC: {loss_ic.item():.6f}, lr: {optimizer.param_groups[0]["lr"]:.6f}')
     
     return losses
 
 
 # Main execution
 if __name__ == "__main__":
-    # Set spatial dimension
-    d = 2  # Change this to 1, 2, 3, etc. for different dimensions
-    D = d + 1  # Total input dimension (spatial + time)
+    # space dims
+    d = 2
+    # space + time dims
+    D = d + 1
     
     print(f"\n{'='*60}")
-    print(f"Training PINN for {d}D Heat Equation")
+    print(f"Training PINN for {d}D PDE")
     print(f"Domain: [0,1]^{d} x [0,1]")
     print(f"{'='*60}\n")
     
@@ -232,11 +219,8 @@ if __name__ == "__main__":
                        n_epochs=5_000, device=device)
     print("\nTraining complete!")
     
-    # Save the results - pde eq, analytic sol, rhs
-    # dim
-    # model
-    # losses
 
+    # Save the results
     torch.save(model, 'model.pth')
 
     import json
@@ -246,4 +230,4 @@ if __name__ == "__main__":
     torch.save(torch.tensor(losses), 'losses.pth')
     print("\nResults saved.")
 
-    
+   
