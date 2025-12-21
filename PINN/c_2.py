@@ -158,10 +158,14 @@ def train_pinn(
     )
     
     losses = []
+    l2_errs = []
     
     for epoch in range(n_epochs):
         optimizer.zero_grad()
         
+        #X_interior, X_boundary, X_initial = generate_training_data(
+        #    d=d, n_interior=2000, n_boundary=400, n_initial=400, device=device
+        #)
         # Compute individual losses
         loss_pde = pde_loss(model, X_interior)
         loss_bc = boundary_condition_loss(model, X_boundary)
@@ -181,11 +185,20 @@ def train_pinn(
         
         # Print progress
         if (epoch + 1) % 500 == 0:
+            X_interior_2, X_boundary_2, X_initial_2 = generate_training_data(
+                d=d, n_interior=2000, n_boundary=400, n_initial=400, device=device
+            )
+            u_pred = model(X_interior_2)
+            u_true = u_analytic(X_interior_2)
+            l2_err = torch.sqrt(torch.mean((u_pred - u_true) ** 2)).item()
+            l2_errs.append(l2_err)
             print(f'Epoch {epoch+1}/{n_epochs}, Loss: {loss.item():.6f}, '
                   f'PDE: {loss_pde.item():.6f}, BC: {loss_bc.item():.6f}, '
-                  f'IC: {loss_ic.item():.6f}, lr: {optimizer.param_groups[0]["lr"]:.6f}')
+                  f'IC: {loss_ic.item():.6f}, lr: {optimizer.param_groups[0]["lr"]:.6f}, '
+                  f'l2: {l2_err:.6f}'
+            )
     
-    return losses
+    return losses, l2_errs
 
 
 # Main execution
@@ -216,7 +229,7 @@ if __name__ == "__main__":
     # )
 
     # Train the model
-    losses = train_pinn(model, optimizer, scheduler, d=d, 
+    losses, l2_errs = train_pinn(model, optimizer, scheduler, d=d, 
                        n_epochs=5_000, device=device)
     print("\nTraining complete!")
     
@@ -229,6 +242,7 @@ if __name__ == "__main__":
         json.dump({"d": d}, f, ensure_ascii=False, indent=4)
 
     torch.save(torch.tensor(losses), 'losses.pth')
+    torch.save(torch.tensor(l2_errs), 'l2_errs.pth')
     print("\nResults saved.")
 
    

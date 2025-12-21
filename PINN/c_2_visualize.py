@@ -120,6 +120,7 @@ if __name__ == "__main__":
 
     model = torch.load('model.pth', weights_only=False)
     losses = torch.load('losses.pth')
+    l2_errs = torch.load('l2_errs.pth')
     import json
     with open("metadata.json", "r") as f:
         metadata = json.load(f)
@@ -135,6 +136,15 @@ if __name__ == "__main__":
     plt.title('Training Loss')
     plt.grid(True)
     plt.savefig('training_loss.png', dpi=150)
+
+    # Plot l2
+    plt.figure(figsize=(10, 5))
+    plt.semilogy(l2_errs)
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('L2 error')
+    plt.grid(True)
+    plt.savefig('l2_errs.png', dpi=150)
     
     # Visualize solution
     print("\nGenerating visualizations...")
