@@ -27,7 +27,7 @@ Set
 Consider
 
 $$
-\partial u + L\,u = f\,, in\, Q_T \\
+\partial_t u + L\,u = f\,, in\, Q_T \\
 u = 0\,, on\, (0,T)\times \Omega \\
 u(0,\cdot) = g\,, on\, \Omega
 $$
@@ -41,7 +41,7 @@ Where
 
 $$
 L\,u := - \sum_{i,j=1}^d \frac{\partial}{\partial x_i}(a_{ij}\frac{\partial u}{\partial x_j}) + \sum_{i=1}^d b_i \frac{\partial u}{\partial x_i} + c\, u \\
-= -\,div (A \, \nabla u) + \vec{b} \cdot u + c\, u
+= -\,div (A \, \nabla u) + \vec{b} \cdot \nabla u + c\, u
 $$
 
 Where 
@@ -75,15 +75,19 @@ $$
 
 Taking
 $$
-A(t,x)=\alpha\,I_{d\times d},\:\: \vec{b} = \nabla w,\:\: c = \Delta w
+A=\alpha\,I_{d\times d},\:\: \vec{b} = \nabla w,\:\: c = \Delta w
 $$
+
+Where
+- $\alpha \in R$
+- $w : Q_T \to R$
 
 We get
 $$
 \partial_t u - \alpha\,\Delta u + \nabla w \cdot \nabla u + \Delta w\: u = 0
 $$
 
-Using standard notation in the field
+Using standard notation
 - $ \alpha = D $
 - $ u(t,x) = p(t,x) $
 - $ w(t,x) = \mu\,v(t,x) $
@@ -94,11 +98,11 @@ $$
 
 We get
 $$
-\partial_t p = D\,\Delta p - \mu\,\nabla \cdot (p\,\nabla v) = 0
+\partial_t p = D\,\Delta p - \mu\,\nabla \cdot (p\,\nabla v)
 $$
 
 Where
-- $D,\, \mu$ are constants
+- $D,\, \mu \, \in R$
 - $v : Q_T \to R$
 
 
