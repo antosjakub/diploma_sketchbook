@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
+from test_suite import *
 
 torch.manual_seed(41)
 
@@ -39,7 +40,7 @@ def visualize_solution_1d(model, t_val=0.1, device='cpu'):
         u_pred = model(X)
     
     # Analytical solution
-    u_true = torch.exp(-torch.pi**2 * 0.01 * torch.tensor(t_val)) * torch.sin(torch.pi * x)
+    u_true = u_analytic(X)
     
     plt.figure(figsize=(12, 4))
     
@@ -81,7 +82,8 @@ def visualize_solution_2d(model, t_val=0.1, device='cpu'):
         U_pred = u_pred.reshape(100, 100)
     
     # Analytical solution
-    U_true = torch.exp(-2 * torch.pi**2 * 0.01 * torch.tensor(t_val)) * torch.sin(torch.pi * X_grid) * torch.sin(torch.pi * Y_grid)
+    u_true = u_analytic(X)
+    U_true = u_true.reshape(100,100)
     
     fig, axes = plt.subplots(1, 3, figsize=(15, 4))
     

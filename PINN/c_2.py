@@ -111,7 +111,8 @@ def boundary_condition_loss(model, X_bc):
     BC: u(x,t) = 0
     """
     u_pred = model(X_bc)
-    return torch.mean(u_pred**2)
+    u_true = u_D(X_bc)
+    return torch.mean((u_pred - u_true)**2)
 
 
 def generate_training_data(
