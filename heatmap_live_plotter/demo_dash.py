@@ -5,7 +5,7 @@ from dash import Dash, dcc, html, Input, Output, State
 
 # read from metadata
 t_max = 10.0
-d = 6
+d = 7
 def u_analytic(X):
     # X.shape = (batch size, spatial+time dims)
     bs, D = X.shape
@@ -26,32 +26,38 @@ def get_coord_names(d):
 nx = 100
 nt = 200
 
-xi = np.linspace(0, 1, nx)
-xj = np.linspace(0, 1, nx)
+#xi = np.linspace(0, 1, nx)
+#xj = np.linspace(0, 1, nx)
+xi = np.linspace(-2.0, 2.0, nx)
+xj = np.linspace(-2.0, 2.0, nx)
 Xi_grid, Xj_grid = np.meshgrid(xi, xj, indexing='ij')
 xi_flat = Xi_grid.reshape(-1, 1)
 xj_flat = Xj_grid.reshape(-1, 1)
 
-# initialize - those are to be updated
-t_val = 0.0
-x_vals = 0.5*np.ones(d)
-plot_dims = [0,1]
-
 # define domain
-x_flat_list = []
-for di in range(d):
-    if di == plot_dims[0]:
-        x_flat_list.append(xi_flat)
-    elif di == plot_dims[1]:
-        x_flat_list.append(xj_flat)
-    else:
-        fixed_flat = np.ones_like(xi_flat) * x_vals[di]
-        x_flat_list.append(fixed_flat)
+def define_domain(plot_dims, x_vals):
+    x_flat_list = []
+    for di in range(d):
+        if di == plot_dims[0]:
+            x_flat_list.append(xi_flat)
+        elif di == plot_dims[1]:
+            x_flat_list.append(xj_flat)
+        else:
+            fixed_flat = np.ones_like(xi_flat) * x_vals[di]
+            x_flat_list.append(fixed_flat)
+    return x_flat_list
 
-t_flat = np.ones_like(xi_flat) * t_val
+
+# initialize
+t_val_init = 0.0
+x_vals_init = 0.5*np.ones(d)
+plot_dims = [0,1]
+x_flat_list = define_domain(plot_dims, x_vals_init)
+t_flat = np.ones_like(xi_flat) * t_val_init
 X = np.concatenate([*x_flat_list, t_flat], axis=1)
 Y = u_analytic(X)
 Y_grid = Y.reshape(nx, nx)
+print("sessin saved")
 
 
 """
@@ -66,12 +72,13 @@ selecting
 """
 
 
+
 # --- initial figure ----------------------------------------------
 fig = go.Figure(
     data=go.Heatmap(
         z=Y_grid,
-        x=xi_flat,
-        y=xj_flat,
+        x=xi,
+        y=xj,
         colorscale="Viridis",
         zmin=-1,
         zmax=1,
@@ -80,18 +87,67 @@ fig = go.Figure(
 )
 fig.update_layout(
     margin=dict(l=40, r=40, t=40, b=40),
-    xaxis_title="x",
-    yaxis_title="y",
+    xaxis_title="x1",
+    yaxis_title="x2",
+    # --- enforce equal aspect ratio ---
+    xaxis=dict(scaleanchor="y", constrain="domain"),
+    yaxis=dict(constrain="domain")
 )
+
+
+#tick_vals = [0.0, 0.25, 0.5, 0.75, 1.0]
+#fig.update_xaxes(
+#    tickmode="array",
+#    tickvals=tick_vals,
+#    ticktext=[str(v) for v in tick_vals]
+#)
+#fig.update_yaxes(
+#    tickmode="array",
+#    tickvals=tick_vals,
+#    ticktext=[str(v) for v in tick_vals]
+#)
+
 
 # --- Dash app ----------------------------------------------------
 app = Dash(__name__)
 
+# As many sliders as there are spatial dimensions
+N_SLIDERS_PER_ROW = 3
+# number of full sliders
+n_full_slider_rows = 2 #np.ceil(d/n_sliders_per_row)
+# number of sliders in the last unfilled row
+n_sliders_last_row = 1
+assert N_SLIDERS_PER_ROW*n_full_slider_rows + n_sliders_last_row == d
+
+spatial_sliders = []
+for ri in range(n_full_slider_rows+1):
+    if ri != n_full_slider_rows:
+        n_sliders = N_SLIDERS_PER_ROW
+    else:
+        n_sliders = n_sliders_last_row
+    if n_sliders != 0:
+        spatial_sliders.append(
+            html.Div(
+                [html.Div(
+                    [html.Label(f"x{s+1}"), dcc.Slider(id=f"slider_x{s+1}", min=0, max=1, value=0.5)],
+                    style={"width": "30%"}
+                ) for s in range(N_SLIDERS_PER_ROW*ri, N_SLIDERS_PER_ROW*ri+n_sliders)],
+                style={
+                    "display": "flex",
+                    "justifyContent": "space-between"
+                }
+            )
+        )
+
+
+
 app.layout = html.Div(
     [
+        dcc.Location(id='url', refresh=True),
         html.Div(
             [
                 html.Div([
+                    html.Div("", style={"width": "10%"}),
                     html.Div("animate", style={"width": "10%"}),
                     html.Div(
                         dcc.Dropdown(["t"] + get_coord_names(d), "t", id="animate_di"),
@@ -99,7 +155,7 @@ app.layout = html.Div(
                     ),
                     html.Div(dcc.Slider(id="slider_t", min=0, max=t_max, value=0.0), style={"width": "30%"}),
                     html.Div(html.Button("Play", id="play-button", n_clicks=0), style={"width": "10%"}),
-                    html.Div("", style={"width": "40%"}),
+                    #html.Div("", style={"width": "40%"}),
                 ], style={"display": "flex", "alignItems": "center"}),
 
                 dcc.Interval(
@@ -115,26 +171,28 @@ app.layout = html.Div(
         html.Div([
             html.Div(
                 html.Div([
-                    html.Div("xi-axis", style={"width": "20%"}),
+                    html.Div("", style={"width": "10%"}),
+                    html.Div("xi-axis", style={"width": "10%"}),
                     html.Div(
                         dcc.Dropdown(get_coord_names(d), "x1", id="xi-axis"),
-                        style={"width": "80%"}
+                        style={"width": "10%"}
                     )],
                     style={"display": "flex", "alignItems": "center"},
-                ), style={"width": "50%"}
+                ), #style={"width": "50%"}
             ),
-            #dcc.Store(id="xi-axis_prev_val", data="x1"),
+            dcc.Store(id="xi-axis-prev", data="x1"),
             html.Div(
                 html.Div([
-                    html.Div("xj-axis", style={"width": "20%"}),
+                    html.Div("", style={"width": "10%"}),
+                    html.Div("xj-axis", style={"width": "10%"}),
                     html.Div(
                         dcc.Dropdown(get_coord_names(d), "x2", id="xj-axis"),
-                        style={"width": "80%"}
+                        style={"width": "10%"}
                     )],
                     style={"display": "flex", "alignItems": "center"},
-                ), style={"width": "50%"}
+                ), #style={"width": "50%"}
             ),
-            #dcc.Store(id="xj-axis_prev_val", data="x2"),
+            dcc.Store(id="xj-axis-prev", data="x2"),
             ]
             #], style={
             #    "display": "flex",
@@ -144,52 +202,27 @@ app.layout = html.Div(
 
         dcc.Graph(id="heatmap", figure=fig, style={"height": "80vh"}),
 
-        html.Div([
-            html.Div(
-                [html.Label("x1"), dcc.Slider(id="slider_x1", min=0, max=1, value=0.5)],
-                style={"width": "45%"}
-            ),
-            html.Div(
-                [html.Label("x2"), dcc.Slider(id="slider_x2", min=0, max=1, value=0.5)],
-                style={"width": "45%"}
-            ),
-            ], style={
-                "display": "flex",
-                "justifyContent": "space-between"
-            }
-        ),
-        html.Div([
-            html.Div(
-                [html.Label("x3"), dcc.Slider(id="slider_x3", min=0, max=1, value=0.5)],
-                style={"width": "45%"}
-            ),
-            html.Div(
-                [html.Label("x4"), dcc.Slider(id="slider_x4", min=0, max=1, value=0.5)],
-                style={"width": "45%"}
-            ),
-            ], style={
-                "display": "flex",
-                "justifyContent": "space-between"
-            }
-        ),
+
+        *spatial_sliders,
     ]
 )
 
-@app.callback(
-    [Output(f"slider_x{i+1}", "disabled") for i in range(4)],
-    Input("xi-axis", "value"),
-    Input("xj-axis", "value"),
-)
-def disable_slider(xi_chosen, xj_chosen):
-    disabed_list = []
-    if xi_chosen == xj_chosen:
-        print("Illegal to set same xi xj")
-    for i in range(4):
-        if f"x{i+1}" == xi_chosen or f"x{i+1}" == xj_chosen:
-            disabed_list.append(True)
-        else:
-            disabed_list.append(False)
-    return disabed_list
+#@app.callback(
+#    Output("heatmap", "figure"),
+#    Input('url', 'href'), # Triggers on page load or refresh
+#    State("heatmap", "figure"),
+#)
+#def reset_heatmap(href, current_fig):
+#    print("sessin reloaded")
+#    t_flat = np.ones_like(xi_flat) * t_val
+#    X = np.concatenate([*x_flat_list, t_flat], axis=1)
+#    Y = u_analytic(X)
+#    Y_grid = Y.reshape(nx, nx)
+#    current_fig["data"][0]["z"] = Y_grid
+#    return current_fig
+
+
+
 
 # Toggle play / pause
 @app.callback(
@@ -198,6 +231,7 @@ def disable_slider(xi_chosen, xj_chosen):
     Output("play-button", "children"),
     Input("play-button", "n_clicks"),
     State("is-playing", "data"),
+    prevent_initial_call=True,
 )
 def toggle_play(n_clicks, is_playing):
     if n_clicks is None:
@@ -222,24 +256,73 @@ def update_slider(n_intervals, value):
         return value
 
 from dash import callback_context
-# Update heatmap when time index changes
+# Update heatmap when
+# - choose different axes
+# - move the time or space sliders
 @app.callback(
+    # outputs
     Output("heatmap", "figure"),
-    Input("slider_t", "value"),
-    Input("slider_x1", "value"),
+    [Output(f"slider_x{i+1}", "disabled") for i in range(d)],
+    [Output("xi-axis-prev", "data"), Output("xj-axis-prev", "data")],
+    # inputs
+    Input('url', 'href'), # Triggers on page load or refresh
+    [Input("xi-axis", "value"), Input("xj-axis", "value")],
+    [Input("slider_t", "value")] + [Input(f"slider_x{i+1}", "value") for i in range(d)],
+    # states
+    [State("xi-axis-prev", "data"), State("xj-axis-prev", "data")],
     State("heatmap", "figure"),
-    prevent_initial_call=True,
 )
-def update_heatmap(t_value, x_value, current_fig):
+def update_heatmap(*args):
     trigger = callback_context.triggered_id
-    if trigger == "slider_t":
-        X[:, -1:] = t_value * np.ones_like(xi_flat)
-    elif trigger == "slider_x1":
-        X[:, 0:1] = x_value * np.ones_like(xi_flat)
+    # inputs
+    href = args[0]
+    xi_axis = args[1]
+    xj_axis = args[2]
+    t_value = args[3]
+    x_values = args[4:-3]
+    # states
+    xi_axis_prev = args[-3]
+    xj_axis_prev = args[-2]
+    current_fig = args[-1]
+    #### disable sliders ####
+    disabed_list = []
+    if xi_axis == xj_axis:
+        print("Illegal to set same xi xj")
+    for i in range(d):
+        if f"x{i+1}" == xi_axis or f"x{i+1}" == xj_axis:
+            disabed_list.append(True)
+        else:
+            disabed_list.append(False)
+    #### update X ####
+    global X
+    ###### initial heat map ######
+    if trigger == "url":
+        t_flat = np.ones_like(xi_flat) * t_val_init
+        print("session refreshed")
+        X = np.concatenate([*x_flat_list, t_flat], axis=1)
+    ###### choosing different axes ######
+    elif trigger == "xi-axis" or trigger == "xj-axis":
+        prev_axes = [int(xi_axis_prev[1:])-1, int(xj_axis_prev[1:])-1]
+        X[:, prev_axes[0]] = np.ones(nx**2) * x_values[prev_axes[0]]
+        X[:, prev_axes[1]] = np.ones(nx**2) * x_values[prev_axes[1]]
+        plot_dims = [int(xi_axis[1:])-1, int(xj_axis[1:])-1]
+        X[:, plot_dims[0]] = xi_flat[:,0]
+        X[:, plot_dims[1]] = xj_flat[:,0]
+    ###### setting values via slider ######
+    else:
+        coord_name = trigger[len("slider_"):]
+        if coord_name == "t":
+            X[:, -1:] = t_value * np.ones_like(xi_flat)
+        elif coord_name[0] == "x":
+            di = int(coord_name[1:])-1
+            X[:, di:di+1] = x_values[di] * np.ones_like(xi_flat)
+    # update figure
     Y = u_analytic(X)
     Y_grid = Y.reshape(nx, nx)
     current_fig["data"][0]["z"] = Y_grid
-    return current_fig
+    current_fig["layout"]["xaxis"]["title"]["text"] = xi_axis
+    current_fig["layout"]["yaxis"]["title"]["text"] = xj_axis
+    return current_fig, *disabed_list, xi_axis, xj_axis
 
 
 if __name__ == "__main__":
