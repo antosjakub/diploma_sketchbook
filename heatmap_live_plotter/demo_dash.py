@@ -5,7 +5,7 @@ from dash import Dash, dcc, html, Input, Output, State
 
 # read from metadata
 t_max = 10.0
-d = 7
+d = 8
 def u_analytic(X):
     # X.shape = (batch size, spatial+time dims)
     bs, D = X.shape
@@ -82,11 +82,14 @@ fig = go.Figure(
         colorscale="Viridis",
         zmin=-1,
         zmax=1,
-        colorbar=dict(title="u(x1,..,xd,t)"),
+        #colorbar=dict(title="u(x1,..,xd,t)", len=0.75, thickness=7, title_side="right"),
+        colorbar=dict(len=0.75, thickness=7),
     )
 )
 fig.update_layout(
-    margin=dict(l=40, r=40, t=40, b=40),
+    #title="model",
+    title=dict(text='Heatmap 1', y=0.9, yanchor='top'),
+    margin=dict(l=0, r=0, t=0, b=0),
     xaxis_title="x1",
     yaxis_title="x2",
     # --- enforce equal aspect ratio ---
@@ -114,9 +117,9 @@ app = Dash(__name__)
 # As many sliders as there are spatial dimensions
 N_SLIDERS_PER_ROW = 3
 # number of full sliders
-n_full_slider_rows = 2 #np.ceil(d/n_sliders_per_row)
+n_full_slider_rows = d//N_SLIDERS_PER_ROW
 # number of sliders in the last unfilled row
-n_sliders_last_row = 1
+n_sliders_last_row = d - N_SLIDERS_PER_ROW*n_full_slider_rows
 assert N_SLIDERS_PER_ROW*n_full_slider_rows + n_sliders_last_row == d
 
 spatial_sliders = []
@@ -200,7 +203,21 @@ app.layout = html.Div(
             #}
         ),
 
-        dcc.Graph(id="heatmap", figure=fig, style={"height": "80vh"}),
+        #dcc.Graph(id="heatmap", figure=fig, style={"height": "80vh"}),
+        #dcc.Graph(id="heatmap", figure=fig),
+        html.Div([
+            html.Div([
+                dcc.Graph(figure=fig, id="heatmap")
+            ], style={'width': '33%', 'display': 'inline-block'}),
+
+            html.Div([
+                dcc.Graph(figure=fig)
+            ], style={'width': '33%', 'display': 'inline-block'}),
+
+            html.Div([
+                dcc.Graph(figure=fig)
+            ], style={'width': '33%', 'display': 'inline-block'})
+        ]),
 
 
         *spatial_sliders,
