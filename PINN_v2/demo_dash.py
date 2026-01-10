@@ -51,6 +51,12 @@ def eval_funs(X):
 def get_coord_names(d):
     return [f"x{i+1}" for i in range(d)]
 
+def update_minmax(min_new, min_best, max_new, max_best):
+    return [
+        min_new if min_new < min_best else min_best,
+        max_new if max_new > max_best else max_best
+    ]
+
 # --- create grid data ---------------------------------
 nx = 100
 nt = 200
@@ -356,6 +362,32 @@ def update_heatmap(*args):
         plot_dims = [int(xi_axis[1:])-1, int(xj_axis[1:])-1]
         X[:, plot_dims[0]] = xi_flat[:,0]
         X[:, plot_dims[1]] = xj_flat[:,0]
+        ## calculate the zmin and zmax from all time using only u_analysis
+        #Xz = torch.zeros_like(X)
+        #Xz[:,:-1] = X[:,:-1]
+        #ymin_2, ymax_2 = torch.inf, -torch.inf
+        #ymin_3, ymax_3 = torch.inf, -torch.inf
+        #print("def", ymin_2, ymax_2)
+        #print("def", ymin_3, ymax_3)
+        #for i in range(nt):
+        #    t = t_max * i/nt
+        #    Xz[:,-1] = t * torch.ones(nx**2)
+        #    Y2 = fun_2(Xz)
+        #    Y3 = fun_1(Xz) - Y2
+        #    Y2_minmax = Y2.aminmax()
+        #    Y3_minmax = Y3.aminmax()
+        #    ymin_2, ymax_2 = update_minmax(Y2_minmax[0], ymin_2, Y2_minmax[1], ymax_2)
+        #    ymin_3, ymax_3 = update_minmax(Y3_minmax[0], ymin_3, Y3_minmax[1], ymax_3)
+        #print("cal", ymin_2, ymax_2)
+        #print("cal", ymin_3, ymax_3)
+        ## update the zmin/zmax
+        #for i in range(3):
+        #    if i != 2:
+        #        curr_figs[i]["data"][0]["zmin"] = ymin_2
+        #        curr_figs[i]["data"][0]["zmax"] = ymax_2
+        #    else:
+        #        curr_figs[i]["data"][0]["zmin"] = ymin_3
+        #        curr_figs[i]["data"][0]["zmax"] = ymax_3
     ###### setting values via slider ######
     else:
         coord_name = trigger[len("slider_"):]
@@ -364,6 +396,7 @@ def update_heatmap(*args):
         elif coord_name[0] == "x":
             di = int(coord_name[1:])-1
             X[:, di:di+1] = x_values[di] * torch.ones_like(xi_flat)
+
     # update figure
     Y1_grid = fun_1(X).reshape(nx,nx).numpy()
     Y2_grid = fun_2(X).reshape(nx,nx).numpy()
@@ -373,11 +406,11 @@ def update_heatmap(*args):
     for i in range(3):
         curr_figs[i]["data"][0]["z"] = Y_grids[i]
         if i != 2:
-            curr_figs[i]["data"][0]["zmin"] = zmin
-            curr_figs[i]["data"][0]["zmax"] = zmax
+            curr_figs[i]["data"][0]["zmin"] = 0.0 #zmin
+            curr_figs[i]["data"][0]["zmax"] = 1.0 #zmax
         else:
-            curr_figs[i]["data"][0]["zmin"] = Y_grids[-1].min()
-            curr_figs[i]["data"][0]["zmax"] = Y_grids[-1].max()
+            curr_figs[i]["data"][0]["zmin"] = -0.1 #Y_grids[-1].min()
+            curr_figs[i]["data"][0]["zmax"] = 0.1 #Y_grids[-1].max()
         curr_figs[i]["layout"]["xaxis"]["title"]["text"] = xi_axis
         curr_figs[i]["layout"]["yaxis"]["title"]["text"] = xj_axis
     return *curr_figs, *disabed_list, xi_axis, xj_axis
