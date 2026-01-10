@@ -27,21 +27,13 @@ def fun_2(X):
     # return shape = (batch size, 1)
     return (u_space * u_time).unsqueeze(dim=1)
     #return torch.array([u_space * u_time])
-def fun_3(X):
-    # X.shape = (batch size, spatial+time dims)
-    bs, D = X.shape
-    d = D-1
-    alpha = 1.0
-    u_space = torch.prod(torch.sin(torch.pi * X[:,:-1]), dim=1) # .shape = (bs,)
-    u_time = torch.exp(- d * alpha * torch.pi**2 * X[:,-1]) # .shape = (bs,)
-    # return shape = (batch size, 1)
-    return (u_space * u_time).unsqueeze(dim=1)
-    #return torch.array([u_space * u_time])
 
 
-funs = [fun_1, fun_2, fun_3]
 def eval_funs(X):
-    return [funs[i](X).reshape(nx,nx) for i in range(3)]
+    Y1_grid = fun_1(X).reshape(nx,nx)
+    Y2_grid = fun_2(X).reshape(nx,nx)
+    return Y1_grid, Y2_grid, Y1_grid-Y2_grid
+
 
 def get_coord_names(d):
     return [f"x{i+1}" for i in range(d)]
@@ -362,10 +354,11 @@ def update_heatmap(*args):
             di = int(coord_name[1:])-1
             X[:, di:di+1] = x_values[di] * torch.ones_like(xi_flat)
     # update figure
+    Y1_grid = fun_1(X).reshape(nx,nx).numpy()
+    Y2_grid = fun_2(X).reshape(nx,nx).numpy()
+    Y_grids = [Y1_grid, Y2_grid, Y1_grid-Y2_grid]
     for i in range(3):
-        Y = funs[i](X)
-        Y_grid = Y.reshape(nx, nx)
-        curr_figs[i]["data"][0]["z"] = Y_grid.numpy()
+        curr_figs[i]["data"][0]["z"] = Y_grids[i]
         curr_figs[i]["layout"]["xaxis"]["title"]["text"] = xi_axis
         curr_figs[i]["layout"]["yaxis"]["title"]["text"] = xj_axis
     return *curr_figs, *disabed_list, xi_axis, xj_axis
