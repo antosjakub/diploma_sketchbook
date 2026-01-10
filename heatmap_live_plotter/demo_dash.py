@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 import plotly.graph_objects as go
 from dash import Dash, dcc, html, Input, Output, State
 
@@ -11,11 +12,11 @@ def u_analytic(X):
     bs, D = X.shape
     d = D-1
     alpha = 0.01
-    u_space = np.prod(np.sin(np.pi * X[:,:-1]), axis=1) # .shape = (bs,)
-    u_time = np.exp(- d * alpha * np.pi**2 * X[:,-1]) # .shape = (bs,)
+    u_space = torch.prod(torch.sin(torch.pi * X[:,:-1]), dim=1) # .shape = (bs,)
+    u_time = torch.exp(- d * alpha * torch.pi**2 * X[:,-1]) # .shape = (bs,)
     # return shape = (batch size, 1)
-    #return (u_space * u_time).unsqueeze(dim=1)
-    return np.array([u_space * u_time])
+    return (u_space * u_time).unsqueeze(dim=1)
+    #return torch.array([u_space * u_time])
 
 
 def get_coord_names(d):
@@ -26,11 +27,11 @@ def get_coord_names(d):
 nx = 100
 nt = 200
 
-#xi = np.linspace(0, 1, nx)
-#xj = np.linspace(0, 1, nx)
-xi = np.linspace(-2.0, 2.0, nx)
-xj = np.linspace(-2.0, 2.0, nx)
-Xi_grid, Xj_grid = np.meshgrid(xi, xj, indexing='ij')
+#xi = torch.linspace(0, 1, nx)
+#xj = torch.linspace(0, 1, nx)
+xi = torch.linspace(-2.0, 2.0, nx)
+xj = torch.linspace(-2.0, 2.0, nx)
+Xi_grid, Xj_grid = torch.meshgrid(xi, xj, indexing='ij')
 xi_flat = Xi_grid.reshape(-1, 1)
 xj_flat = Xj_grid.reshape(-1, 1)
 
@@ -43,18 +44,18 @@ def define_domain(plot_dims, x_vals):
         elif di == plot_dims[1]:
             x_flat_list.append(xj_flat)
         else:
-            fixed_flat = np.ones_like(xi_flat) * x_vals[di]
+            fixed_flat = torch.ones_like(xi_flat) * x_vals[di]
             x_flat_list.append(fixed_flat)
     return x_flat_list
 
 
 # initialize
 t_val_init = 0.0
-x_vals_init = 0.5*np.ones(d)
+x_vals_init = 0.5*torch.ones(d)
 plot_dims = [0,1]
 x_flat_list = define_domain(plot_dims, x_vals_init)
-t_flat = np.ones_like(xi_flat) * t_val_init
-X = np.concatenate([*x_flat_list, t_flat], axis=1)
+t_flat = torch.ones_like(xi_flat) * t_val_init
+X = torch.cat([*x_flat_list, t_flat], dim=1)
 Y = u_analytic(X)
 Y_grid = Y.reshape(nx, nx)
 print("sessin saved")
@@ -76,9 +77,9 @@ selecting
 # --- initial figure ----------------------------------------------
 fig = go.Figure(
     data=go.Heatmap(
-        z=Y_grid,
-        x=xi,
-        y=xj,
+        z=Y_grid.numpy(),
+        x=xi.numpy(),
+        y=xj.numpy(),
         colorscale="Viridis",
         zmin=-1,
         zmax=1,
@@ -88,7 +89,7 @@ fig = go.Figure(
 )
 fig.update_layout(
     #title="model",
-    title=dict(text='Heatmap 1', y=0.9, yanchor='top'),
+    title=dict(text='Heatmap 1', y=0.98, yanchor='top'),
     margin=dict(l=0, r=0, t=0, b=0),
     xaxis_title="x1",
     yaxis_title="x2",
@@ -231,8 +232,8 @@ app.layout = html.Div(
 #)
 #def reset_heatmap(href, current_fig):
 #    print("sessin reloaded")
-#    t_flat = np.ones_like(xi_flat) * t_val
-#    X = np.concatenate([*x_flat_list, t_flat], axis=1)
+#    t_flat = torch.ones_like(xi_flat) * t_val
+#    X = torch.concatenate([*x_flat_list, t_flat], dim=1)
 #    Y = u_analytic(X)
 #    Y_grid = Y.reshape(nx, nx)
 #    current_fig["data"][0]["z"] = Y_grid
@@ -314,14 +315,14 @@ def update_heatmap(*args):
     global X
     ###### initial heat map ######
     if trigger == "url":
-        t_flat = np.ones_like(xi_flat) * t_val_init
+        t_flat = torch.ones_like(xi_flat) * t_val_init
         print("session refreshed")
-        X = np.concatenate([*x_flat_list, t_flat], axis=1)
+        X = torch.cat([*x_flat_list, t_flat], dim=1)
     ###### choosing different axes ######
     elif trigger == "xi-axis" or trigger == "xj-axis":
         prev_axes = [int(xi_axis_prev[1:])-1, int(xj_axis_prev[1:])-1]
-        X[:, prev_axes[0]] = np.ones(nx**2) * x_values[prev_axes[0]]
-        X[:, prev_axes[1]] = np.ones(nx**2) * x_values[prev_axes[1]]
+        X[:, prev_axes[0]] = torch.ones(nx**2) * x_values[prev_axes[0]]
+        X[:, prev_axes[1]] = torch.ones(nx**2) * x_values[prev_axes[1]]
         plot_dims = [int(xi_axis[1:])-1, int(xj_axis[1:])-1]
         X[:, plot_dims[0]] = xi_flat[:,0]
         X[:, plot_dims[1]] = xj_flat[:,0]
@@ -329,14 +330,14 @@ def update_heatmap(*args):
     else:
         coord_name = trigger[len("slider_"):]
         if coord_name == "t":
-            X[:, -1:] = t_value * np.ones_like(xi_flat)
+            X[:, -1:] = t_value * torch.ones_like(xi_flat)
         elif coord_name[0] == "x":
             di = int(coord_name[1:])-1
-            X[:, di:di+1] = x_values[di] * np.ones_like(xi_flat)
+            X[:, di:di+1] = x_values[di] * torch.ones_like(xi_flat)
     # update figure
     Y = u_analytic(X)
     Y_grid = Y.reshape(nx, nx)
-    current_fig["data"][0]["z"] = Y_grid
+    current_fig["data"][0]["z"] = Y_grid.numpy()
     current_fig["layout"]["xaxis"]["title"]["text"] = xi_axis
     current_fig["layout"]["yaxis"]["title"]["text"] = xj_axis
     return current_fig, *disabed_list, xi_axis, xj_axis
