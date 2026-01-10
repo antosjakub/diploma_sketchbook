@@ -4,29 +4,42 @@ import plotly.graph_objects as go
 from dash import Dash, dcc, html, Input, Output, State
 
 
-# read from metadata
+## read from metadata
+#t_max = 1.0
+#d = 8
+#def fun_1(X):
+#    # X.shape = (batch size, spatial+time dims)
+#    bs, D = X.shape
+#    d = D-1
+#    alpha = 0.01
+#    u_space = torch.prod(torch.sin(torch.pi * X[:,:-1]), dim=1) # .shape = (bs,)
+#    u_time = torch.exp(- d * alpha * torch.pi**2 * X[:,-1]) # .shape = (bs,)
+#    # return shape = (batch size, 1)
+#    return (u_space * u_time).unsqueeze(dim=1)
+#    #return torch.array([u_space * u_time])
+#def fun_2(X):
+#    # X.shape = (batch size, spatial+time dims)
+#    bs, D = X.shape
+#    d = D-1
+#    alpha = 0.1
+#    u_space = torch.prod(torch.sin(torch.pi * X[:,:-1]), dim=1) # .shape = (bs,)
+#    u_time = torch.exp(- d * alpha * torch.pi**2 * X[:,-1]) # .shape = (bs,)
+#    # return shape = (batch size, 1)
+#    return (u_space * u_time).unsqueeze(dim=1)
+#    #return torch.array([u_space * u_time])
+
+d = 3
 t_max = 1.0
-d = 8
+
+from main import PINN
+model = torch.load('model.pth', weights_only=False)
 def fun_1(X):
-    # X.shape = (batch size, spatial+time dims)
-    bs, D = X.shape
-    d = D-1
-    alpha = 0.01
-    u_space = torch.prod(torch.sin(torch.pi * X[:,:-1]), dim=1) # .shape = (bs,)
-    u_time = torch.exp(- d * alpha * torch.pi**2 * X[:,-1]) # .shape = (bs,)
-    # return shape = (batch size, 1)
-    return (u_space * u_time).unsqueeze(dim=1)
-    #return torch.array([u_space * u_time])
-def fun_2(X):
-    # X.shape = (batch size, spatial+time dims)
-    bs, D = X.shape
-    d = D-1
-    alpha = 0.1
-    u_space = torch.prod(torch.sin(torch.pi * X[:,:-1]), dim=1) # .shape = (bs,)
-    u_time = torch.exp(- d * alpha * torch.pi**2 * X[:,-1]) # .shape = (bs,)
-    # return shape = (batch size, 1)
-    return (u_space * u_time).unsqueeze(dim=1)
-    #return torch.array([u_space * u_time])
+    with torch.no_grad():
+        return model(X)
+
+import pde_models
+pde_model = pde_models.HeatEquation(d)
+fun_2 = pde_model.u_analytic
 
 
 def eval_funs(X):
@@ -42,10 +55,8 @@ def get_coord_names(d):
 nx = 100
 nt = 200
 
-#xi = torch.linspace(0, 1, nx)
-#xj = torch.linspace(0, 1, nx)
-xi = torch.linspace(-2.0, 2.0, nx)
-xj = torch.linspace(-2.0, 2.0, nx)
+xi = torch.linspace(0.0, 1.0, nx)
+xj = torch.linspace(0.0, 1.0, nx)
 Xi_grid, Xj_grid = torch.meshgrid(xi, xj, indexing='ij')
 xi_flat = Xi_grid.reshape(-1, 1)
 xj_flat = Xj_grid.reshape(-1, 1)
@@ -85,17 +96,17 @@ selecting
 """
 
 # --- initial figure ----------------------------------------------
-def create_figure(Y_grid, title, colorscale):
+def create_figure(Y_grid, title, colorscale, zmin=None,zmax=None):
     fig = go.Figure(
         data=go.Heatmap(
             z=Y_grid.numpy(),
             x=xi.numpy(),
             y=xj.numpy(),
             colorscale=colorscale,
-            zmin=-1,
-            zmax=1,
-            #colorbar=dict(title="u(x1,..,xd,t)", len=0.75, thickness=7, title_side="right"),
+            zmin=zmin,
+            zmax=zmax,
             colorbar=dict(len=0.75, thickness=7),
+            #colorbar=dict(title="u(x1,..,xd,t)", len=0.75, thickness=7, title_side="right"),
         )
     )
     fig.update_layout(
@@ -113,7 +124,7 @@ def create_figure(Y_grid, title, colorscale):
 
 Y_grids = eval_funs(X)
 titles = ["u_model", "u_analytic", "absolute_error"]
-colorscales = ["Viridis", "Viridis", "Viridis"]
+colorscales = 2*["Plasma"]+["Hot"]
 figs = []
 for i in range(3):
     figs.append(create_figure(Y_grids[i], titles[i], colorscales[i]))
@@ -357,8 +368,16 @@ def update_heatmap(*args):
     Y1_grid = fun_1(X).reshape(nx,nx).numpy()
     Y2_grid = fun_2(X).reshape(nx,nx).numpy()
     Y_grids = [Y1_grid, Y2_grid, Y1_grid-Y2_grid]
+    zmin = Y2_grid.min()
+    zmax = Y2_grid.max()
     for i in range(3):
         curr_figs[i]["data"][0]["z"] = Y_grids[i]
+        if i != 2:
+            curr_figs[i]["data"][0]["zmin"] = zmin
+            curr_figs[i]["data"][0]["zmax"] = zmax
+        else:
+            curr_figs[i]["data"][0]["zmin"] = Y_grids[-1].min()
+            curr_figs[i]["data"][0]["zmax"] = Y_grids[-1].max()
         curr_figs[i]["layout"]["xaxis"]["title"]["text"] = xi_axis
         curr_figs[i]["layout"]["yaxis"]["title"]["text"] = xj_axis
     return *curr_figs, *disabed_list, xi_axis, xj_axis
