@@ -5,9 +5,9 @@ from dash import Dash, dcc, html, Input, Output, State
 
 
 # read from metadata
-t_max = 10.0
+t_max = 1.0
 d = 8
-def u_analytic(X):
+def fun_1(X):
     # X.shape = (batch size, spatial+time dims)
     bs, D = X.shape
     d = D-1
@@ -17,11 +17,34 @@ def u_analytic(X):
     # return shape = (batch size, 1)
     return (u_space * u_time).unsqueeze(dim=1)
     #return torch.array([u_space * u_time])
+def fun_2(X):
+    # X.shape = (batch size, spatial+time dims)
+    bs, D = X.shape
+    d = D-1
+    alpha = 0.1
+    u_space = torch.prod(torch.sin(torch.pi * X[:,:-1]), dim=1) # .shape = (bs,)
+    u_time = torch.exp(- d * alpha * torch.pi**2 * X[:,-1]) # .shape = (bs,)
+    # return shape = (batch size, 1)
+    return (u_space * u_time).unsqueeze(dim=1)
+    #return torch.array([u_space * u_time])
+def fun_3(X):
+    # X.shape = (batch size, spatial+time dims)
+    bs, D = X.shape
+    d = D-1
+    alpha = 1.0
+    u_space = torch.prod(torch.sin(torch.pi * X[:,:-1]), dim=1) # .shape = (bs,)
+    u_time = torch.exp(- d * alpha * torch.pi**2 * X[:,-1]) # .shape = (bs,)
+    # return shape = (batch size, 1)
+    return (u_space * u_time).unsqueeze(dim=1)
+    #return torch.array([u_space * u_time])
 
+
+funs = [fun_1, fun_2, fun_3]
+def eval_funs(X):
+    return [funs[i](X).reshape(nx,nx) for i in range(3)]
 
 def get_coord_names(d):
     return [f"x{i+1}" for i in range(d)]
-
 
 # --- create grid data ---------------------------------
 nx = 100
@@ -56,48 +79,52 @@ plot_dims = [0,1]
 x_flat_list = define_domain(plot_dims, x_vals_init)
 t_flat = torch.ones_like(xi_flat) * t_val_init
 X = torch.cat([*x_flat_list, t_flat], dim=1)
-Y = u_analytic(X)
-Y_grid = Y.reshape(nx, nx)
+
 print("sessin saved")
 
 
 """
 animation
 - just keep increating the value of one coordinate
-
 slider
 - set val of one coord
-
 selecting
 - keep X the same, just redraw
 """
 
-
-
 # --- initial figure ----------------------------------------------
-fig = go.Figure(
-    data=go.Heatmap(
-        z=Y_grid.numpy(),
-        x=xi.numpy(),
-        y=xj.numpy(),
-        colorscale="Viridis",
-        zmin=-1,
-        zmax=1,
-        #colorbar=dict(title="u(x1,..,xd,t)", len=0.75, thickness=7, title_side="right"),
-        colorbar=dict(len=0.75, thickness=7),
+def create_figure(Y_grid, title, colorscale):
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=Y_grid.numpy(),
+            x=xi.numpy(),
+            y=xj.numpy(),
+            colorscale=colorscale,
+            zmin=-1,
+            zmax=1,
+            #colorbar=dict(title="u(x1,..,xd,t)", len=0.75, thickness=7, title_side="right"),
+            colorbar=dict(len=0.75, thickness=7),
+        )
     )
-)
-fig.update_layout(
-    #title="model",
-    title=dict(text='Heatmap 1', y=0.98, yanchor='top'),
-    margin=dict(l=0, r=0, t=0, b=0),
-    xaxis_title="x1",
-    yaxis_title="x2",
-    # --- enforce equal aspect ratio ---
-    xaxis=dict(scaleanchor="y", constrain="domain"),
-    yaxis=dict(constrain="domain")
-)
+    fig.update_layout(
+        #title="model",
+        title=dict(text=title, y=0.98, yanchor='top'),
+        margin=dict(l=0, r=0, t=0, b=0),
+        xaxis_title="x1",
+        yaxis_title="x2",
+        # --- enforce equal aspect ratio ---
+        xaxis=dict(scaleanchor="y", constrain="domain"),
+        yaxis=dict(constrain="domain")
+    )
+    return fig
 
+
+Y_grids = eval_funs(X)
+titles = ["u_model", "u_analytic", "absolute_error"]
+colorscales = ["Viridis", "Viridis", "Viridis"]
+figs = []
+for i in range(3):
+    figs.append(create_figure(Y_grids[i], titles[i], colorscales[i]))
 
 #tick_vals = [0.0, 0.25, 0.5, 0.75, 1.0]
 #fig.update_xaxes(
@@ -116,7 +143,7 @@ fig.update_layout(
 app = Dash(__name__)
 
 # As many sliders as there are spatial dimensions
-N_SLIDERS_PER_ROW = 3
+N_SLIDERS_PER_ROW = 4
 # number of full sliders
 n_full_slider_rows = d//N_SLIDERS_PER_ROW
 # number of sliders in the last unfilled row
@@ -208,15 +235,15 @@ app.layout = html.Div(
         #dcc.Graph(id="heatmap", figure=fig),
         html.Div([
             html.Div([
-                dcc.Graph(figure=fig, id="heatmap")
+                dcc.Graph(figure=figs[0], id="fig1")
             ], style={'width': '33%', 'display': 'inline-block'}),
 
             html.Div([
-                dcc.Graph(figure=fig)
+                dcc.Graph(figure=figs[1], id="fig2")
             ], style={'width': '33%', 'display': 'inline-block'}),
 
             html.Div([
-                dcc.Graph(figure=fig)
+                dcc.Graph(figure=figs[2], id="fig3")
             ], style={'width': '33%', 'display': 'inline-block'})
         ]),
 
@@ -267,7 +294,7 @@ def update_slider(n_intervals, value):
     if value is None:
         value = 0.0
     #return (value + 1) % nt
-    value += 10*1/nt
+    value += t_max/nt
     if value > t_max:
         return 0.0
     else:
@@ -278,8 +305,8 @@ from dash import callback_context
 # - choose different axes
 # - move the time or space sliders
 @app.callback(
-    # outputs
-    Output("heatmap", "figure"),
+    # outputOs
+    [Output(f"fig{i+1}", "figure") for i in range(3)],
     [Output(f"slider_x{i+1}", "disabled") for i in range(d)],
     [Output("xi-axis-prev", "data"), Output("xj-axis-prev", "data")],
     # inputs
@@ -288,7 +315,7 @@ from dash import callback_context
     [Input("slider_t", "value")] + [Input(f"slider_x{i+1}", "value") for i in range(d)],
     # states
     [State("xi-axis-prev", "data"), State("xj-axis-prev", "data")],
-    State("heatmap", "figure"),
+    [State(f"fig{i+1}", "figure") for i in range(3)],
 )
 def update_heatmap(*args):
     trigger = callback_context.triggered_id
@@ -297,11 +324,11 @@ def update_heatmap(*args):
     xi_axis = args[1]
     xj_axis = args[2]
     t_value = args[3]
-    x_values = args[4:-3]
+    x_values = args[4:-5]
     # states
-    xi_axis_prev = args[-3]
-    xj_axis_prev = args[-2]
-    current_fig = args[-1]
+    xi_axis_prev = args[-5]
+    xj_axis_prev = args[-4]
+    curr_figs = list(args[-3:])
     #### disable sliders ####
     disabed_list = []
     if xi_axis == xj_axis:
@@ -335,12 +362,13 @@ def update_heatmap(*args):
             di = int(coord_name[1:])-1
             X[:, di:di+1] = x_values[di] * torch.ones_like(xi_flat)
     # update figure
-    Y = u_analytic(X)
-    Y_grid = Y.reshape(nx, nx)
-    current_fig["data"][0]["z"] = Y_grid.numpy()
-    current_fig["layout"]["xaxis"]["title"]["text"] = xi_axis
-    current_fig["layout"]["yaxis"]["title"]["text"] = xj_axis
-    return current_fig, *disabed_list, xi_axis, xj_axis
+    for i in range(3):
+        Y = funs[i](X)
+        Y_grid = Y.reshape(nx, nx)
+        curr_figs[i]["data"][0]["z"] = Y_grid.numpy()
+        curr_figs[i]["layout"]["xaxis"]["title"]["text"] = xi_axis
+        curr_figs[i]["layout"]["yaxis"]["title"]["text"] = xj_axis
+    return *curr_figs, *disabed_list, xi_axis, xj_axis
 
 
 if __name__ == "__main__":
