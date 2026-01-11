@@ -2,34 +2,26 @@ import numpy as np
 import torch
 import plotly.graph_objects as go
 from dash import Dash, dcc, html, Input, Output, State
+import json
 
 
-## read from metadata
-#t_max = 1.0
-#d = 8
-#def fun_1(X):
-#    # X.shape = (batch size, spatial+time dims)
-#    bs, D = X.shape
-#    d = D-1
-#    alpha = 0.01
-#    u_space = torch.prod(torch.sin(torch.pi * X[:,:-1]), dim=1) # .shape = (bs,)
-#    u_time = torch.exp(- d * alpha * torch.pi**2 * X[:,-1]) # .shape = (bs,)
-#    # return shape = (batch size, 1)
-#    return (u_space * u_time).unsqueeze(dim=1)
-#    #return torch.array([u_space * u_time])
-#def fun_2(X):
-#    # X.shape = (batch size, spatial+time dims)
-#    bs, D = X.shape
-#    d = D-1
-#    alpha = 0.1
-#    u_space = torch.prod(torch.sin(torch.pi * X[:,:-1]), dim=1) # .shape = (bs,)
-#    u_time = torch.exp(- d * alpha * torch.pi**2 * X[:,-1]) # .shape = (bs,)
-#    # return shape = (batch size, 1)
-#    return (u_space * u_time).unsqueeze(dim=1)
-#    #return torch.array([u_space * u_time])
 
-d = 3
+u_zminmax_const = [-1.0, 1.0]
+err_zminmax_const = [-0.1, 0.1]
+
+u_zminmax_manual = True
+err_zminmax_manual = False
+
+nx = 100
+nt = 200
+
+
+with open('args.json') as f:
+    args = json.load(f)
+    d = args["d"]
+
 t_max = 1.0
+
 
 from main import PINN
 model = torch.load('model.pth', weights_only=False)
@@ -39,6 +31,7 @@ def fun_1(X):
 
 import pde_models
 pde_model = pde_models.HeatEquation(d)
+pde_model.load_pde_params("pde_params.json")
 fun_2 = pde_model.u_analytic
 
 
@@ -58,9 +51,6 @@ def update_minmax(min_new, min_best, max_new, max_best):
     ]
 
 # --- create grid data ---------------------------------
-nx = 100
-nt = 200
-
 xi = torch.linspace(0.0, 1.0, nx)
 xj = torch.linspace(0.0, 1.0, nx)
 Xi_grid, Xj_grid = torch.meshgrid(xi, xj, indexing='ij')
@@ -184,61 +174,83 @@ for ri in range(n_full_slider_rows+1):
 app.layout = html.Div(
     [
         dcc.Location(id='url', refresh=True),
-        html.Div(
-            [
-                html.Div([
-                    html.Div("", style={"width": "10%"}),
-                    html.Div("animate", style={"width": "10%"}),
-                    html.Div(
-                        dcc.Dropdown(["t"] + get_coord_names(d), "t", id="animate_di"),
-                        style={"width": "10%"}
-                    ),
-                    html.Div(dcc.Slider(id="slider_t", min=0, max=t_max, value=0.0), style={"width": "30%"}),
-                    html.Div(html.Button("Play", id="play-button", n_clicks=0), style={"width": "10%"}),
-                    #html.Div("", style={"width": "40%"}),
-                ], style={"display": "flex", "alignItems": "center"}),
-
-                dcc.Interval(
-                    id="interval",
-                    interval=50, # ms between frames (20 FPS)
-                    n_intervals=0,
-                    disabled=True, # start paused
-                ),
-                dcc.Store(id="is-playing", data=False),
-            ]
-        ),
+        #dcc.Markdown(r"$u_{analytic}(x_1,\ldots,x_n,t) = \sin(a_1\,x_1)\cdot\ldots\cdot\sin(a_n\,x_n)\,e^{- \alpha\,(a_1^2+\ldots+a_n^2)\,t}$", mathjax=True),
+        #dcc.Markdown(r"$\partial_t u = \alpha \Delta u$", mathjax=True),
 
         html.Div([
-            html.Div(
+            # -- left box - General
+            html.Div([
+                #html.H3("General"),
+                # -- time slider & play --
                 html.Div([
-                    html.Div("", style={"width": "10%"}),
-                    html.Div("xi-axis", style={"width": "10%"}),
-                    html.Div(
-                        dcc.Dropdown(get_coord_names(d), "x1", id="xi-axis"),
-                        style={"width": "10%"}
-                    )],
-                    style={"display": "flex", "alignItems": "center"},
-                ), #style={"width": "50%"}
-            ),
-            dcc.Store(id="xi-axis-prev", data="x1"),
-            html.Div(
+                    html.Div("", style={"width": "20%"}),
+                    html.Div("time", style={"width": "10%"}),
+                    html.Div(dcc.Slider(id="slider_t", min=0, max=t_max, value=0.0), style={"width": "60%"}),
+                    html.Div(html.Button("Play", id="play-button", n_clicks=0), style={"width": "10%"}),
+                    dcc.Interval(
+                        id="interval",
+                        interval=50, # ms between frames (20 FPS)
+                        n_intervals=0,
+                        disabled=True, # start paused
+                    ),
+                    dcc.Store(id="is-playing", data=False),
+                ], style={"display": "flex", "alignItems": "center"}),
+                # -- space coords dropboxes --
                 html.Div([
-                    html.Div("", style={"width": "10%"}),
-                    html.Div("xj-axis", style={"width": "10%"}),
+                    # -- xi dropbox --
                     html.Div(
-                        dcc.Dropdown(get_coord_names(d), "x2", id="xj-axis"),
-                        style={"width": "10%"}
-                    )],
-                    style={"display": "flex", "alignItems": "center"},
-                ), #style={"width": "50%"}
+                        html.Div([
+                            html.Div("", style={"width": "20%"}),
+                            html.Div("xi-axis", style={"width": "10%"}),
+                            html.Div(
+                                dcc.Dropdown(get_coord_names(d), "x1", id="xi-axis"),
+                                style={"width": "20%"}
+                            )],
+                            style={"display": "flex", "alignItems": "center"},
+                        ),
+                    ),
+                    dcc.Store(id="xi-axis-prev", data="x1"),
+                    # -- xj dropbox --
+                    html.Div(
+                        html.Div([
+                            html.Div("", style={"width": "20%"}),
+                            html.Div("xj-axis", style={"width": "10%"}),
+                            html.Div(
+                                dcc.Dropdown(get_coord_names(d), "x2", id="xj-axis"),
+                                style={"width": "20%"}
+                            )],
+                            style={"display": "flex", "alignItems": "center"},
+                        ),
+                    ),
+                    dcc.Store(id="xj-axis-prev", data="x2"),
+                    ]
+                ),
+                ], style={"width": "50%"}
             ),
-            dcc.Store(id="xj-axis-prev", data="x2"),
-            ]
-            #], style={
-            #    "display": "flex",
-            #    "justifyContent": "space-between"
-            #}
-        ),
+            # -- right box - Advanced
+            html.Div([
+                #html.Div([
+                #    html.Div("u_model / u_analytic"),
+                #    dcc.Checklist(["set colorbar range manually"], id="u_set_manually"),
+                #    html.Div([
+                #        html.Div("", style={"width": "10%"}),
+                #        html.Div("zmin", style={"width": "10%"}),
+                #        html.Div(
+                #            dcc.Input(placeholder="-1.0", id="u_zmin"),
+                #            style={"width": "30%"}
+                #        ),
+                #        html.Div("zmax", style={"width": "10%"}),
+                #        html.Div(
+                #            dcc.Input(placeholder="1.0", id="u_zmax"),
+                #            style={"width": "30%"}
+                #        ),
+                #    ], style={"display": "flex", "alignItems": "center"}),
+                #    # the same here:
+                #    html.Div("absolute_error"),
+                #])
+                ], style={"width": "50%"}
+            ),
+        ], style={"display": "flex", "alignItems": "center"}),
 
         #dcc.Graph(id="heatmap", figure=fig, style={"height": "80vh"}),
         #dcc.Graph(id="heatmap", figure=fig),
@@ -401,20 +413,21 @@ def update_heatmap(*args):
     Y1_grid = fun_1(X).reshape(nx,nx).numpy()
     Y2_grid = fun_2(X).reshape(nx,nx).numpy()
     Y_grids = [Y1_grid, Y2_grid, Y1_grid-Y2_grid]
-    zmin = Y2_grid.min()
-    zmax = Y2_grid.max()
+    # calc zminmax
+    u_zminmax = u_zminmax_const if u_zminmax_manual else [Y2_grid.min(), Y2_grid.max()]
+    err_zminmax = err_zminmax_const if err_zminmax_manual else [Y_grids[-1].min(), Y_grids[-1].max()]
     for i in range(3):
         curr_figs[i]["data"][0]["z"] = Y_grids[i]
         if i != 2:
-            curr_figs[i]["data"][0]["zmin"] = 0.0 #zmin
-            curr_figs[i]["data"][0]["zmax"] = 1.0 #zmax
+            curr_figs[i]["data"][0]["zmin"] = u_zminmax[0]
+            curr_figs[i]["data"][0]["zmax"] = u_zminmax[1]
         else:
-            curr_figs[i]["data"][0]["zmin"] = -0.1 #Y_grids[-1].min()
-            curr_figs[i]["data"][0]["zmax"] = 0.1 #Y_grids[-1].max()
+            curr_figs[i]["data"][0]["zmin"] = err_zminmax[0]
+            curr_figs[i]["data"][0]["zmax"] = err_zminmax[1]
         curr_figs[i]["layout"]["xaxis"]["title"]["text"] = xi_axis
         curr_figs[i]["layout"]["yaxis"]["title"]["text"] = xj_axis
     return *curr_figs, *disabed_list, xi_axis, xj_axis
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=8090)
