@@ -1,0 +1,7 @@
+*.pth
+__pycache__
+
+*.gif
+*.png
+*.txt
+*.json

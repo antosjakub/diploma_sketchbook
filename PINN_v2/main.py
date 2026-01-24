@@ -293,7 +293,7 @@ if __name__ == "__main__":
 
     # Save the results
     torch.save(model, 'model.pth')
-    torch.save(torch.tensor(losses), 'losses.pth')
-    torch.save(torch.tensor(l2_errs), 'l2_errs.pth')
+    torch.save(torch.tensor(losses), 'training_loss.pth')
+    torch.save(torch.tensor(l2_errs), 'training_l2_error.pth')
     print("\nResults saved.")
 
