@@ -1,44 +1,20 @@
-# Numerically solving the Fokker-Planck PDE on high-dimensional domains
+
+# Numerically solving the Fokker-Planck Partial Differential Equation on high-dimensional domains
 
 ## Latest updates
 
+```PINN/```
+- `demo_dash.py`
+    - python (dash) webpage for visually checking the quality of the trained PINN model
+    - supports switching between different dimensional axes
+    - displays 2d heatplots
+- `pde_models.py`- 
+- `main.py` - trainable PINN module
 
-## Roadmap
 
-### Equations to try
+## Overview
 
-- Poisson eq. (elliptic)
-- optionally: Heat eq. (parabolic)
-- Fokker-Planck eq. (parabolic)
+traditional solvers - FDM, FEM, multigrid, ... - all perform discretization of the domain - issue
 
-### 1) Poisson eq. (elliptic)
-FD (finite differences) / FEM (finite element method) $\to$ get matrix system $A x = b$ $\to$ how to solve? Some other way to discretize?
 
-#### a) standard approaches
-- just invert it!
-- matrix iteration method - if you can save the matrix
-    - Jacobi / Gauss-Seidel
-    - CG
-        - symmetric, positive definite
-
-#### b) alternative stategies
-- multigrid
-- FFT
-    - solve the PDE in place - no iteration - just compute 1 FT and 1 iFT - but on the entire grid
-- sparse grids
-    - for large dim
-- MC??
-
-#### c) NNs
-
-- PINN
-- PDE $\to$ variational form $\to$ minimize functional $J(u)$
-
-### 2) Heat eq. (parabolic) <- optional
-
-### 3) Fokker-Planck
-
-apply the NNs from the prev chapeter
-
-perhaps also BSDE?
 

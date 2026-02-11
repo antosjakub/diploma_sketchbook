@@ -13,6 +13,19 @@
     - https://www.sciencedirect.com/science/article/abs/pii/S0021999118307125
 - Score-Based Physics-Informed Neural Networks for High-Dimensional Fokker-Planck Equations
     - https://arxiv.org/abs/2402.07465
+- Hutchinson Trace Estimation for High-Dimensional and High-Order Physics-Informed Neural Networks
+    - https://arxiv.org/html/2312.14499
+
+
+https://arxiv.org/abs/2004.01806
+https://arxiv.org/pdf/2402.07465
+
+
+karniadakis info
+https://maziarraissi.github.io/PINNs/
+
+code:
+https://github.com/maziarraissi/PINNs
 
 
 ## btw

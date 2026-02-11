@@ -173,4 +173,9 @@ u(r) = 4\epsilon~ \Big[\,\Big(\frac{r_0}{r}\Big)^{12}-\Big(\frac{r_0}{r}\Big)^6\
 $$
 
 
+- how does the domain look like?
+- x = position of all atoms
+- what are the symmetries here?
+- translational symmetry
+- rotational symmetry
 
