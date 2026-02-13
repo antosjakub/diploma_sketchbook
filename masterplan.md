@@ -2,11 +2,19 @@
 
 ### Equations to try
 
-- Poisson eq. (elliptic)
-- optionally: Heat eq. (parabolic)
-- Fokker-Planck eq. (parabolic)
+time dependent & parabolic
+- Heat eq.
+- Fokker-Planck eq.
 
-### 1) Poisson eq. (elliptic)
+other major if time
+- hamolton jacobi?
+- belllman?
+- finnacial one
+- schroedinger
+
+## Problem setup
+
+### A simple case: Poisson eq. (elliptic, no time dependence)
 FD (finite differences) / FEM (finite element method) $\to$ get matrix system $A x = b$ $\to$ how to solve? Some other way to discretize?
 
 #### a) standard approaches
@@ -29,51 +37,18 @@ FD (finite differences) / FEM (finite element method) $\to$ get matrix system $A
 - PINN
 - PDE $\to$ variational form $\to$ minimize functional $J(u)$
 
-### 2) Heat eq. (parabolic) <- optional
 
-### 3) Fokker-Planck
+### What changes for time dependent eqs?
+
+- explicit time evolution? - nope, issue with stability
+- implicit time evolution? - similar as before - solve linear system
 
 apply the NNs from the prev chapeter
 
 perhaps also BSDE?
 
+#### Heat eq. (parabolic)
 
-----------------
+#### Fokker-Planck
 
-
-
-fix equations, increase dimension
-try the same methods
-
-
-
-
-kardiakis Fokker-Planck specific paper
-
-
-
-
-
-try the major parabolic eqs
-- heat
-- FP
-- hamolton jacobi?
-- belllman?
-- finnacial one
-- if time - schroedinger
-
-
-
-pinns?
-- just try the most obvious and important things
-
-- main problems in higher dims?
-    - grad computation?
-
-- what are the most important parts?
-    - parallel
-    - sampling parts
-    - hyperparams
-
-try diff approaches
-    - sampling
+look at kardiakis Fokker-Planck specific paper
