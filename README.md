@@ -1,5 +1,5 @@
 
-# Numerically solving the Fokker-Planck Partial Differential Equation on high-dimensional domains
+# Numerically solving Partial Differential Equations on high-dimensional domains
 
 ## Latest updates
 
