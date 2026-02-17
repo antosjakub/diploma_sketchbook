@@ -1,115 +1,85 @@
 \documentclass{beamer}
-\usepackage{amsmath}%
-\usepackage{amsfonts}%
-\usepackage{amssymb}%
 
-%\usepackage{hyperref}
-
+% Packages (if needed)
 \usepackage{graphicx}
-\usepackage{subfig}
 
-\usepackage[english]{babel}
-\usepackage[utf8]{inputenc}
-
-\usepackage{multicol}
-%\usepackage{natbib}%
-\usepackage{units}
-
-\usepackage{stmaryrd}
-\usepackage{gensymb}
-\usepackage{bibentry}
-\usepackage{accents}
-
-%\usepackage{booktabs}
-
-\usepackage{tensor}
-\usepackage[bbgreekl]{mathbbol}
-\usepackage{bm}
-\usepackage{ulem}
-
-% FANCY TABLES
-\usepackage{booktabs}
-\usepackage{multirow}
-\usepackage{threeparttable}
-
-%\usetheme{Luebeck}
-%\usetheme{Madrid}
-\usetheme{CambridgeUS}
-%\usetheme{Pittsburgh}
-%\usetheme{default}
-%\mode<presentation>
-
-%FOR CAMBRIDGE US THEME -- red bullets/captions in itemize environment
-\setbeamercolor{item projected}{bg=red}
-\setbeamertemplate{enumerate items}[default]
-\setbeamertemplate{navigation symbols}{}
-\setbeamercovered{transparent}
-
-\setbeamercolor*{enumerate item}{fg=red}
-\setbeamercolor*{enumerate subitem}{fg=red}
-\setbeamercolor*{enumerate subsubitem}{fg=red}
-
-\setbeamercolor{block title}{fg=red}
-\setbeamercolor{caption name}{fg=red}
-
-\title[Stability analysis]{Thermodynamics of viscoelastic rate-type fluids and its implications for stability analysis}
-\author[V\'{\i}t Pr\r{u}\v{s}a] {V\'{\i}t Pr\r{u}\v{s}a \\ \texttt{prusv@karlin.mff.cuni.cz}}
-\institute[Charles University]{Charles University, Czech Republic}
+% Presentation information
+\title{Your Presentation Title}
+\subtitle{Optional Subtitle}
+\author{Your Name}
+\institute{Your University/Institution}
 \date{\today}
 
-
-%\input{vit-prusa-macros-experimental}
-
-\let\newblock\relax
-
-\newcommand{\smallbibentry}[1]{{\tiny \bibentry{#1}}}
-
-% \AtBeginSection[]
-% {
-%   \begin{frame}
-% %    \frametitle{Outline}
-%     \tableofcontents[currentsection]
-%   \end{frame}
-% }
-
 \begin{document}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
+% Title slide
+\frame{\titlepage}
+
+
+%%%%%%%%%%%%%%%% Begin Standard solvers
 \begin{frame}
-\titlepage
-\bibliographystyle{plain}
-%\nobibliography{vit-prusa}
-\end{frame}
+\frametitle{Grid based solvers}
+- FDM
+- FEM
+cg, 
+- 
 
+Challanges in high dimensions
+- need to store
+How to address them
+- parallelize
+
+Hardware requirements
+- RAM memory
+- SSD storage
+\end{frame}
+%%%%%%%%%%%%%%%% End Standard solvers
+
+
+%%%%%%%%%%%%%%%% Begin PINNs
 \begin{frame}
-  \frametitle{Outline}
-  \tableofcontents
+\frametitle{Physics Informed Neural Networks (PINNs)}
+Intro
+- show diagram
+- loss from NN
+- how to train?
+- sample points
+
+Challanges in high dimensions
+- laplace operator computation
+
+How to handle them
+- stoch laplace comp
+- domain - based on loss
+- parallel
+
+
+Advantages / Disagvantages
+\begin{itemize}
+    \item flexibility
+    \item memory efficient
+\end{itemize}
+
+Hardware requirements
+- GPU(s)
 \end{frame}
-
-\section{Introduction}
-\label{sec:introduction}
+%%%%%%%%%%%%%%%% End PINNs
 
 
+%%%%%%%%%%%%%%%% Begin deep BSDE
 \begin{frame}
-  \frametitle{Thermodynamically open systems}
-  %\begin{center}
-    %\includegraphics[width=0.8\textwidth]{figures/vessel-open}
-  %\end{center}
-
-  \tiny
-  Example: any system with external forcing (Rayleigh--B\'enard convection, Taylor--Couette flow)\\
-  Expected behaviour: conditional asymptotic stability of the non-equilibrium steady state\\
-  \vfill
-  %\smallbibentry{chandrasekhar.s:hydrodynamic}
+\frametitle{Deep BSDE method}
+- just mention as next to try
 \end{frame}
+%%%%%%%%%%%%%%%% End deep BSDE
 
 
-\section*{Conclusion}
-\label{sec:conclusion-1}
-
-\begin{frame}
-  \frametitle{Conclusion}
-\end{frame}
 
 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \end{document}
