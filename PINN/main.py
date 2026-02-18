@@ -19,6 +19,8 @@ parser.add_argument("--lambda_bc", default=10.0, type=float, help="")
 parser.add_argument("--lambda_ic", default=10.0, type=float, help="")
 parser.add_argument("--gamma", default=0.9, type=float, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--lr", default=0.001, type=float, help="")
+parser.add_argument("--n_steps_lbfgs", default=500, type=int, help="Number of L-BFGS steps after Adam. Set to 0 to skip.")
+parser.add_argument("--lr_lbfgs", default=1.0, type=float, help="Learning rate for L-BFGS (typically 1.0).")
 
 
 class PINN(nn.Module):
@@ -167,6 +169,7 @@ def train_pinn(
         n_steps_log=500,
         n_points_pde=2000, n_points_bc=400, n_points_ic=400,
         lambda_pde=1.0, lambda_bc=10.0, lambda_ic=10.0,
+        n_steps_lbfgs=500, lr_lbfgs=1.0,
         device='cpu'
     ):
     """Train the PINN model"""
@@ -238,6 +241,85 @@ def train_pinn(
     return losses, l2_errs
 
 
+def train_pinn_lbfgs(
+        model,
+        pde_residual, bc_residual, ic_residual,
+        u_analytic,
+        d,
+        n_steps=500,
+        n_steps_log=100,
+        n_points_pde=2000, n_points_bc=400, n_points_ic=400,
+        lambda_pde=1.0, lambda_bc=10.0, lambda_ic=10.0,
+        lr_lbfgs=1.0,
+        device='cpu'
+    ):
+    """Fine-tune the PINN model with L-BFGS after Adam pre-training."""
+
+    # Sample fixed collocation points (L-BFGS works best with a fixed dataset)
+    X_interior, X_boundary, X_initial = sample_collocation_points(
+        d, n_points_pde, n_points_bc, n_points_ic, device
+    )
+    X_interior.requires_grad = True
+
+    optimizer_lbfgs = torch.optim.LBFGS(
+        model.parameters(),
+        lr=lr_lbfgs,
+        max_iter=20,           # inner CG iterations per step
+        max_eval=25,
+        history_size=50,
+        tolerance_grad=1e-7,
+        tolerance_change=1e-9,
+        line_search_fn='strong_wolfe'
+    )
+
+    losses = []
+    l2_errs = []
+    step_counter = [0]  # mutable counter accessible inside closure
+
+    def closure():
+        optimizer_lbfgs.zero_grad()
+        loss_pde = pde_loss(model, X_interior, pde_residual)
+        loss_bc  = boundary_condition_loss(model, X_boundary, bc_residual)
+        loss_ic  = initial_condition_loss(model, X_initial, ic_residual)
+        loss = lambda_pde * loss_pde + lambda_bc * loss_bc + lambda_ic * loss_ic
+        loss.backward()
+        return loss
+
+    print(f"\n{'='*60}")
+    print(f"Starting L-BFGS fine-tuning ({n_steps} steps)")
+    print(f"{'='*60}\n")
+
+    for si in range(n_steps):
+        loss = optimizer_lbfgs.step(closure)
+        losses.append(loss.item())
+        step_counter[0] += 1
+
+        if (si + 1) % n_steps_log == 0:
+            X_interior_test, _, _ = sample_collocation_points(
+                d, n_points_pde, n_points_bc, n_points_ic, device=device
+            )
+            with torch.no_grad():
+                u_pred = model(X_interior_test)
+                u_true = u_analytic(X_interior_test)
+            l2_err = torch.sqrt(torch.mean((u_pred - u_true) ** 2)).item()
+            l2_errs.append(l2_err)
+
+            # Recompute individual losses for logging (no grad needed)
+            with torch.no_grad():
+                u_bc  = model(X_boundary)
+                u_ic  = model(X_initial)
+            X_log = X_interior.detach().requires_grad_(True)
+            loss_pde_log = pde_loss(model, X_log, pde_residual)
+            loss_bc_log  = boundary_condition_loss(model, X_boundary, bc_residual)
+            loss_ic_log  = initial_condition_loss(model, X_initial, ic_residual)
+
+            print(f'[L-BFGS] Step {si+1}/{n_steps}, Loss: {loss.item():.6f}, '
+                  f'PDE: {loss_pde_log.item():.6f}, BC: {loss_bc_log.item():.6f}, '
+                  f'IC: {loss_ic_log.item():.6f}, L2: {l2_err:.6f}')
+
+    return losses, l2_errs
+
+
 # Main execution
 if __name__ == "__main__":
 
@@ -283,6 +365,26 @@ if __name__ == "__main__":
         n_points_pde=args.n_points_pde, n_points_bc=args.n_points_bc, n_points_ic=args.n_points_ic,
         device=device
     )
+    print("\nAdam training complete!")
+
+    # --- Phase 2: L-BFGS fine-tuning ---
+    if args.n_steps_lbfgs > 0:
+        losses_lbfgs, l2_errs_lbfgs = train_pinn_lbfgs(
+            model,
+            pde_model.pde_residual, pde_model.bc_residual, pde_model.ic_residual,
+            pde_model.u_analytic,
+            d,
+            n_steps=args.n_steps_lbfgs,
+            n_steps_log=args.n_steps_log,
+            lambda_pde=args.lambda_pde, lambda_bc=args.lambda_bc, lambda_ic=args.lambda_ic,
+            n_points_pde=args.n_points_pde, n_points_bc=args.n_points_bc, n_points_ic=args.n_points_ic,
+            lr_lbfgs=args.lr_lbfgs,
+            device=device
+        )
+        losses    += losses_lbfgs
+        l2_errs   += l2_errs_lbfgs
+        print("\nL-BFGS fine-tuning complete!")
+    
     print("\nTraining complete!")
     
     import json
@@ -296,4 +398,3 @@ if __name__ == "__main__":
     torch.save(torch.tensor(losses), 'training_loss.pth')
     torch.save(torch.tensor(l2_errs), 'training_l2_error.pth')
     print("\nResults saved.")
-
