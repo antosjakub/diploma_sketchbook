@@ -36,14 +36,16 @@ $$
 
 $$
 U^{t+1}
-= \frac{\alpha\,\tau}{h^2} L\,U^t + U^{t} + \tau F^t
-= (I + \frac{\alpha\,\tau}{h^2}L) \, U^{t} + \tau F^t
+= \frac{\alpha\,\tau}{h^2} (L\,U^t + G^t)
++ U^{t} + \tau F^t
+= (I + \frac{\alpha\,\tau}{h^2}L) \, U^{t} + \frac{\alpha\,\tau}{h^2} \,G^t + \tau F^t
 $$
 
 We just iteratively compute $U^{t+1}$ according to:
 
 $$
-U^{t+1} = (I + \frac{\alpha\,\tau}{h^2}L) \, U^{t} + \tau F^t
+U^{t+1}
+= (I + \frac{\alpha\,\tau}{h^2}L) \, U^{t} + \frac{\alpha\,\tau}{h^2} \,G^t + \tau F^t
 $$
 
 where $U_0$ is given by the initial condition.
@@ -63,19 +65,21 @@ $$
 
 $$
 U^{t+1} -
-\frac{\alpha\,\tau}{h^2} L\,U^{t+1}
+\frac{\alpha\,\tau}{h^2} ( L\,U^{t+1} + G^{t+1} )
 = (I - \frac{\alpha\,\tau}{h^2} L)\, U^{t+1}
+- \frac{\alpha\,\tau}{h^2} G^{t+1}
 = U^t + \tau F^{t+1}
 $$
 
 To get $U^{t+1}$ from $U^{t}$, we need to solve:
 
 $$
-(I - \frac{\alpha\,\tau}{h^2} L)\, U^{t+1} = U^t + \tau F^{t+1}
+(I - \frac{\alpha\,\tau}{h^2} L)\, U^{t+1}
+= U^t + \frac{\alpha\,\tau}{h^2} G^{t+1} + \tau F^{t+1}
 $$
 
 (We need to solve $A\,x=b$, where $x$ and $b$ are of size $n^d$.)
 
 - $A = (I - \frac{\alpha\,\tau}{h^2} L)$
 - $x = U^{t+1}$
-- $b = U^t + \tau F^{t+1}$
+- $b = U^t + \frac{\alpha\,\tau}{h^2} G^{t+1} + \tau F^{t+1}$
