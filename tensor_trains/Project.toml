@@ -1,0 +1,14 @@
+name = "tensor_trains"
+uuid = "5e2db118-83ca-4bc0-bd27-56758c6e1687"
+authors = ["Jakub Antos <antos_j@outlook.com>"]
+version = "0.1.0"
+
+[deps]
+ITensorMPS = "0d1a4710-d33b-49a5-8f18-73bdf49b47e2"
+ITensors = "9136182c-28ba-11e9-034c-db9fb085ebd5"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+
+[compat]
+ITensorMPS = "0.3.28"
+ITensors = "0.9.19"
+LinearAlgebra = "1.11.0"
