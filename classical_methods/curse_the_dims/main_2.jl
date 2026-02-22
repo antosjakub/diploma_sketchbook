@@ -4,10 +4,10 @@ using LinearOperators
 using SparseArrays
 
 
-function get_1d_laplace_sparse_matrix(n)
-	off = ones(n-1)
-	diag = ones(n)
-	spdiagm(-1 => off, 0 => -2diag, 1 => off)
+function get_1d_laplace_sparse_matrix(n::Int, ::Type{T}=Float64) where {T<:AbstractFloat}
+    off = ones(T, n-1)
+    diag = -2 * ones(T, n)
+    spdiagm(-1 => off, 0 => diag, 1 => off)
 end
 
 
@@ -25,86 +25,65 @@ end
 # (E x L) x (E E)
 # L x E E E
 
-function get_laplace_sparse_matrix(n::Int, d::Int)
-	L = get_1d_laplace_sparse_matrix(n)
-	if d == 1
-		L_full = L
-	elseif d == 2
-		E = sparse(I, n, n)
-		L_full = kron(E, L) + kron(L, E)
-	elseif d >= 3
-		# step 1
-		size = n^(d-1)
-		E = sparse(I, size, size)
-		L_full = kron(E, L)
-		# step 2:d-1
-		for k in 2:(d-1)
-			n_Es_lhs = d-k
-			n_Es_rhs = k-1
-			# lhs
-			size = n^(n_Es_lhs)
-			E = sparse(I, size, size)
-			kron_lhs = kron(E, L)
-			# rhs
-			size = n^(n_Es_rhs)
-			E = sparse(I, size, size)
-			L_full += kron(kron_lhs, E)
-		end
-		# step d
-		size = n^(d-1)
-		E = sparse(I, size, size)
-		L_full += kron(L, E)
-	end
+function get_laplace_sparse_matrix(n::Int, d::Int, ::Type{T}=Float64) where {T<:AbstractFloat}
+    L = get_1d_laplace_sparse_matrix(n, T)
+    if d == 1
+        L_full = L
+    elseif d == 2
+        E = sparse(1:n, 1:n, ones(T,n), n, n)
+        L_full = kron(E, L) + kron(L, E)
+    elseif d >= 3
+        # step 1
+        size_ = n^(d-1)
+        E = sparse(1:size_, 1:size_, ones(T,size_), size_, size_)
+        L_full = kron(E, L)
+        # step 2:d-1
+        for k in 2:(d-1)
+            n_Es_lhs = d-k
+            n_Es_rhs = k-1
+            # lhs
+            size_lhs = n^n_Es_lhs
+            E_lhs = sparse(1:size_lhs, 1:size_lhs, ones(T,size_lhs), size_lhs, size_lhs)
+            kron_lhs = kron(E_lhs, L)
+            # rhs
+            size_rhs = n^n_Es_rhs
+            E_rhs = sparse(1:size_rhs, 1:size_rhs, ones(T,size_rhs), size_rhs, size_rhs)
+            L_full += kron(kron_lhs, E_rhs)
+        end
+        # step d
+        size_ = n^(d-1)
+        E = sparse(1:size_, 1:size_, ones(T,size_), size_, size_)
+        L_full += kron(L, E)
+    end
+    return L_full
 end
 
-# possible update:
-#function laplace_operator!(v, buffer)
-#    # create a different view - does not copy the underlaying data
-#    U  = reshape(v,      ntuple(_ -> n, d))
-#    LU = reshape(buffer, ntuple(_ -> n, d))
-#
-#    fill!(LU, zero(eltype(v)))
-#    for dim in 1:d
-#        index_rs = ntuple(i -> i == dim ? (2:n)     : Colon(), d)
-#        index_ls = ntuple(i -> i == dim ? (1:(n-1)) : Colon(), d)
-#        LU[index_rs...] .+= U[index_ls...]
-#        LU[index_ls...] .+= U[index_rs...]
-#    end
-#    LU .-= 2d .* U
-#
-#    # overwrite input with result
-#    v .= buffer
-#end
-## allocate once
-#buffer = similar(v)
-#laplace_operator!(v, buffer)
+function laplace_operator!(v::Vector{T}, buffer::Vector{T}) where {T<:AbstractFloat}
+    # create a different view - does not copy the underlaying data
+    U  = reshape(v,      ntuple(_ -> n, d))
+    LU = reshape(buffer, ntuple(_ -> n, d))
 
-function laplace_operator(v)
-
-    # from vector of value to values on a grid
-    U = reshape(v, ntuple(i -> n, d)) 
-
-    # apply the laplace stencil on every value on the grid
-    LU = zeros(size(U));
+    fill!(LU, zero(eltype(v)))
     for dim in 1:d
-        index_rs = ntuple(i -> i == dim ? (2:n) : Colon(), d)
+        index_rs = ntuple(i -> i == dim ? (2:n)     : Colon(), d)
         index_ls = ntuple(i -> i == dim ? (1:(n-1)) : Colon(), d)
         LU[index_rs...] .+= U[index_ls...]
         LU[index_ls...] .+= U[index_rs...]
     end
-    LU .-= 2*d*U
+    LU .-= 2d .* U
 
-    vec(LU)
+    # overwrite input with result
+    v .= buffer
 end
 
 """
 returns Matrix of size (n^d x d)
 - allocates nothing else
 """
-function  get_grid_points_as_1d_vect(n::Int, d::Int)
+function  get_grid_points_as_1d_vect(n::Int, d::Int, ::Type{T}=Float64) where {T<:AbstractFloat}
     N = n^d
-    h = 1/(n+1)
-    coords = Matrix{Float64}(undef, N, d)
+    h = T(1/(n+1))
+    coords = Matrix{T}(undef, N, d)
 
     for k in 1:d
         inner = n^(k-1)
@@ -114,7 +93,7 @@ function  get_grid_points_as_1d_vect(n::Int, d::Int)
         end
     end
 
-    return h * coords
+    return h .* coords
 end
 
 

@@ -2,6 +2,12 @@
 import os
 import json
 
+# in one plot, show:
+# - diff float types = Float64,33
+# - matrix L vs vector Ut
+# - discret n=32,48,64
+# which combinations enables us to go to dim=5?
+
 
 timer_report = {}
 for filename in os.listdir('results'):
@@ -34,10 +40,10 @@ y = y[indices]
 print(x)
 print(y)
 
-byte_names = ['kB', 'MB', 'GB', 'TB']
+byte_names = ['B', 'kB', 'MB', 'GB', 'TB']
 powers = np.arange(4,10+1, dtype=int)
 values = 10**(powers % 3)
-labels = np.array(byte_names)[((powers // 3) - 1)]
+labels = np.array(byte_names)[((powers // 3))]
 y_ticks = []
 for l, v in zip(labels, values):
     y_ticks.append(f'{str(v)} {l}')
