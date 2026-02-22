@@ -58,29 +58,54 @@ function get_laplace_sparse_matrix(n::Int, d::Int, ::Type{T}=Float64) where {T<:
     return L_full
 end
 
-function laplace_operator!(v::Vector{T}, buffer::Vector{T}) where {T<:AbstractFloat}
-    # create a different view - does not copy the underlaying data
-    U  = reshape(v,      ntuple(_ -> n, d))
-    LU = reshape(buffer, ntuple(_ -> n, d))
 
-    fill!(LU, zero(eltype(v)))
-    for dim in 1:d
-        index_rs = ntuple(i -> i == dim ? (2:n)     : Colon(), d)
-        index_ls = ntuple(i -> i == dim ? (1:(n-1)) : Colon(), d)
-        LU[index_rs...] .+= U[index_ls...]
-        LU[index_ls...] .+= U[index_rs...]
+function create_operators(n::Int, d::Int, ::Type{T}=Float64) where {T<:AbstractFloat}
+    """
+    v -> Lv
+    apply the L operator on vector v
+    modifies both v and buffer
+    """
+    function laplace_operator!(v_new::Vector{T}, v::Vector{T})
+        # create a different view - does not copy the underlaying data
+        U  = reshape(v,     ntuple(_ -> n, d))
+        LU = reshape(v_new, ntuple(_ -> n, d))
+
+        fill!(LU, zero(eltype(v)))
+        for dim in 1:d
+            index_rs = ntuple(i -> i == dim ? (2:n)     : Colon(), d)
+            index_ls = ntuple(i -> i == dim ? (1:(n-1)) : Colon(), d)
+            LU[index_rs...] .+= U[index_ls...]
+            LU[index_ls...] .+= U[index_rs...]
+        end
+        LU .-= 2d .* U
+
+        v_new
     end
-    LU .-= 2d .* U
 
-    # overwrite input with result
-    v .= buffer
+    # v_new = (I - r*L) v
+    function a_operator!(v_new::Vector{T}, v::Vector{T})
+        # v = input
+        # v_new = output
+        # ~ v_new = v - r * laplace_operator(v)
+        laplace_operator!(v_new, v)
+        v_new .*= - r
+        v_new .+= v
+    end
+
+    return a_operator!
 end
+# n,d = ...
+# a_operator! = create_operators(n,d)
+#A = LinearOperator(Float64, N, N, true, true, a_operator!)
+
+
+
 
 """
 returns Matrix of size (n^d x d)
 - allocates nothing else
 """
-function  get_grid_points_as_1d_vect(n::Int, d::Int, ::Type{T}=Float64) where {T<:AbstractFloat}
+function get_grid_points_as_1d_vect(n::Int, d::Int, ::Type{T}=Float64) where {T<:AbstractFloat}
     N = n^d
     h = T(1/(n+1))
     coords = Matrix{T}(undef, N, d)

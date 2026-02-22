@@ -4,7 +4,7 @@ using SparseArrays
 include("main_2.jl")
 include("pde_model.jl")
 
-type = "sparse" # op or sparse
+type = "op" # op or sparse
 n = 64
 d = 3
 ft = 32
@@ -41,8 +41,15 @@ using IterativeSolvers
 n_warm_up = 10
 N_warm_up = n_warm_up^d
 
-L = get_laplace_sparse_matrix(n_warm_up, d, FType)
-A = sparse(1:N_warm_up, 1:N_warm_up, ones(FType,N_warm_up), N_warm_up, N_warm_up) - r * L;
+if type == "sparse"
+    L = get_laplace_sparse_matrix(n_warm_up, d, FType)
+    A = sparse(1:N_warm_up, 1:N_warm_up, ones(FType,N_warm_up), N_warm_up, N_warm_up) - r * L;
+elseif type == "op"
+    a_operator! = create_operators(n_warm_up, d, FType)
+    A = LinearOperator(FType, N_warm_up, N_warm_up, true, true, a_operator!)
+else
+    print("!!! ISSUE !!!")
+end
 
 Ut = Vector{FType}(undef, N_warm_up)
 buffer = similar(Ut)
@@ -75,8 +82,15 @@ const to = TimerOutput()
 #function eval_on_grid!(vect, fun, t)
 #end
 
-@timeit to "L" L = get_laplace_sparse_matrix(n, d, FType)
-@timeit to "A" A = sparse(1:N, 1:N, ones(FType,N), N, N) - r * L;
+if type == "sparse"
+    @timeit to "L" L = get_laplace_sparse_matrix(n, d, FType)
+    @timeit to "A" A = sparse(1:N, 1:N, ones(FType,N), N, N) - r * L;
+elseif type == "op"
+    @timeit to "create ops" a_operator! = create_operators(n, d, FType)
+    @timeit to "A" A = LinearOperator(FType, N, N, true, true, a_operator!)
+else
+    print("!!! ISSUE !!!")
+end
 
 # intitialize
 @timeit to "init Ut" Ut = Vector{FType}(undef, N)
