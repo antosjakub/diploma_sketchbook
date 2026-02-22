@@ -45,7 +45,7 @@ if type == "sparse"
     L = get_laplace_sparse_matrix(n_warm_up, d, FType)
     A = sparse(1:N_warm_up, 1:N_warm_up, ones(FType,N_warm_up), N_warm_up, N_warm_up) - r * L;
 elseif type == "op"
-    a_operator! = create_operators(n_warm_up, d, FType)
+    a_operator! = create_operators(n_warm_up, d, r, FType)
     A = LinearOperator(FType, N_warm_up, N_warm_up, true, true, a_operator!)
 else
     print("!!! ISSUE !!!")
@@ -86,7 +86,7 @@ if type == "sparse"
     @timeit to "L" L = get_laplace_sparse_matrix(n, d, FType)
     @timeit to "A" A = sparse(1:N, 1:N, ones(FType,N), N, N) - r * L;
 elseif type == "op"
-    @timeit to "create ops" a_operator! = create_operators(n, d, FType)
+    @timeit to "create ops" a_operator! = create_operators(n, d, r, FType)
     @timeit to "A" A = LinearOperator(FType, N, N, true, true, a_operator!)
 else
     print("!!! ISSUE !!!")

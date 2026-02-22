@@ -1,4 +1,5 @@
 
+using TimerOutputs
 using LinearAlgebra
 using LinearOperators
 using SparseArrays
@@ -58,42 +59,96 @@ function get_laplace_sparse_matrix(n::Int, d::Int, ::Type{T}=Float64) where {T<:
     return L_full
 end
 
+function create_operators(n::Int, d::Int, r::T, ::Type{T}=Float64) where {T<:AbstractFloat}
+    #rs_idxs = [ntuple(i -> i == dim ? (2:n) : Colon(), Val(d)) for dim in 1:d]
+    #ls_idxs = [ntuple(i -> i == dim ? (1:n-1) : Colon(), Val(d)) for dim in 1:d]
+    #shape_ = ntuple(_ -> n, d)
 
-function create_operators(n::Int, d::Int, ::Type{T}=Float64) where {T<:AbstractFloat}
-    """
-    v -> Lv
-    apply the L operator on vector v
-    modifies both v and buffer
-    """
+    #function laplace_operator!(v_new::Vector{T}, v::Vector{T})
+    #    U  = reshape(v, shape_)
+    #    LU = reshape(v_new, shape_)
+
+    #    fill!(LU, zero(T))
+    #    for dim in 1:d
+    #        @timeit to2 "1" LU[rs_idxs[dim]...] .+= U[ls_idxs[dim]...]
+    #        @timeit to2 "2" LU[ls_idxs[dim]...] .+= U[rs_idxs[dim]...]
+    #        #LU[rs_idxs[dim]...] .+= U[ls_idxs[dim]...]
+    #        #LU[ls_idxs[dim]...] .+= U[rs_idxs[dim]...]
+    #    end
+    #    LU .-= 2 * d .* U
+    #    show(to2)
+    #    v_new
+    #end
+
+    #strides = (1, n, n^2)   # for d=3; in general: strides[k] = n^(k-1)
+
+    # helper: convert Cartesian index (i₁,…,i_d) to linear index
+    #@inline function linidx(I::NTuple{d,Int})
+    #@inline function linidx(I)
+    #    idx = 1
+    #    s = 1
+    #    @inbounds for k in 1:d
+    #        idx += (I[k]-1)*s
+    #        s *= n
+    #    end
+    #    return idx
+    #end
+
+    #to2 = TimerOutput()
+    N = n^d
+    #i = 0
+    strides = ntuple(k -> n^(k-1), d)
+
     function laplace_operator!(v_new::Vector{T}, v::Vector{T})
-        # create a different view - does not copy the underlaying data
-        U  = reshape(v,     ntuple(_ -> n, d))
-        LU = reshape(v_new, ntuple(_ -> n, d))
+        fill!(v_new, zero(T))
+        
+        Ik = 0
+        @inbounds for idx in 1:N
+            # decode linear index to multi-index
+            #@timeit to2 "I $i" I = ntuple(k -> ((div(idx-1, strides[k]) % n) + 1), d)
+            #I = ntuple(k -> ((div(idx-1, strides[k]) % n) + 1), d)
 
-        fill!(LU, zero(eltype(v)))
-        for dim in 1:d
-            index_rs = ntuple(i -> i == dim ? (2:n)     : Colon(), d)
-            index_ls = ntuple(i -> i == dim ? (1:(n-1)) : Colon(), d)
-            LU[index_rs...] .+= U[index_ls...]
-            LU[index_ls...] .+= U[index_rs...]
+            u_center = v[idx]
+
+            acc = zero(T)
+            @inbounds for k in 1:d
+                Ik = (div(idx-1, strides[k]) % n) + 1
+
+                # + direction
+                #if I[k] < n
+                if Ik < n
+                    acc += v[idx + strides[k]]
+                end
+                # - direction
+                #if I[k] > 1
+                if Ik > 1
+                    acc += v[idx - strides[k]]
+                end
+            end
+
+            v_new[idx] = acc - 2T(d) * u_center
         end
-        LU .-= 2d .* U
-
-        v_new
+        #show(to2)
+        #i += 1
+        return v_new
     end
 
-    # v_new = (I - r*L) v
     function a_operator!(v_new::Vector{T}, v::Vector{T})
         # v = input
         # v_new = output
         # ~ v_new = v - r * laplace_operator(v)
+        #@timeit to2 "a_op_1 $i" laplace_operator!(v_new, v)
+        #@timeit to2 "a_op_2 $i" v_new .*= - r
+        #@timeit to2 "a_op_3 $i" v_new .+= v
         laplace_operator!(v_new, v)
         v_new .*= - r
         v_new .+= v
+        #show(to2)
+        #i = i+1
     end
-
     return a_operator!
 end
+
 # n,d = ...
 # a_operator! = create_operators(n,d)
 #A = LinearOperator(Float64, N, N, true, true, a_operator!)
