@@ -1,20 +1,21 @@
 ─────────────────────────────────────────────────────────────────────────
                                 Time                    Allocations      
                        ───────────────────────   ────────────────────────
-   Tot / % measured:        2.17s /  95.2%           1.63GiB /  99.6%    
+   Tot / % measured:        2.36s /  95.0%            647MiB /  98.9%    
 
 Section        ncalls     time    %tot     avg     alloc    %tot      avg
 ─────────────────────────────────────────────────────────────────────────
-solve CG            1    663ms   32.1%   663ms   1.69KiB    0.0%  1.69KiB
-init grid           1    604ms   29.3%   604ms   1.00GiB   61.5%  1.00GiB
-eval Ut             1    363ms   17.6%   363ms      384B    0.0%     384B
-eval f              1    351ms   17.0%   351ms      480B    0.0%     480B
-init buffer         1   37.0ms    1.8%  37.0ms    128MiB    7.7%   128MiB
-init Ut             1   15.3ms    0.7%  15.3ms    128MiB    7.7%   128MiB
-add to Ut           1   12.3ms    0.6%  12.3ms      224B    0.0%     224B
-post cg             1   10.7ms    0.5%  10.7ms      208B    0.0%     208B
-mult f              1   7.88ms    0.4%  7.88ms      768B    0.0%     768B
-init cg vars        1    133μs    0.0%   133μs    384MiB   23.1%   384MiB
-A                   1   39.0μs    0.0%  39.0μs   1.22KiB    0.0%  1.22KiB
-create ops          1   10.4μs    0.0%  10.4μs      416B    0.0%     416B
+eval f              1    763ms   34.0%   763ms      288B    0.0%     288B
+eval Ut             1    714ms   31.8%   714ms      288B    0.0%     288B
+solve CG            1    675ms   30.1%   675ms   1.69KiB    0.0%  1.69KiB
+init cg vars        1   48.0ms    2.1%  48.0ms    384MiB   60.0%   384MiB
+add to Ut           1   14.2ms    0.6%  14.2ms      224B    0.0%     224B
+mult f              1   10.6ms    0.5%  10.6ms   2.66KiB    0.0%  2.66KiB
+post cg             1   10.3ms    0.5%  10.3ms      208B    0.0%     208B
+init Ut             1   5.01ms    0.2%  5.01ms    128MiB   20.0%   128MiB
+init buffer         1   1.95ms    0.1%  1.95ms    128MiB   20.0%   128MiB
+A                   1   34.9μs    0.0%  34.9μs   1.22KiB    0.0%  1.22KiB
+create ops          1   9.80μs    0.0%  9.80μs      416B    0.0%     416B
+create f_fun        1   5.95μs    0.0%  5.95μs      544B    0.0%     544B
+create u_fun        1   4.66μs    0.0%  4.66μs      432B    0.0%     432B
 ─────────────────────────────────────────────────────────────────────────

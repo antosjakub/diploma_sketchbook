@@ -1,6 +1,6 @@
 {
-    "total_time_ns": 183584827,
-    "total_allocated_bytes": 158749528,
+    "total_time_ns": 144240108,
+    "total_allocated_bytes": 152470336,
     "time_ns": 0,
     "n_calls": 0,
     "allocated_bytes": 0,
@@ -8,23 +8,31 @@
         "mult f": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 62528,
+            "time_ns": 66395,
             "n_calls": 1,
-            "allocated_bytes": 224,
+            "allocated_bytes": 2720,
+            "inner_timers": {}
+        },
+        "eval Ut": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 7549457,
+            "n_calls": 1,
+            "allocated_bytes": 288,
             "inner_timers": {}
         },
         "A": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 75043757,
+            "time_ns": 28636840,
             "n_calls": 1,
-            "allocated_bytes": 64467768,
+            "allocated_bytes": 64479776,
             "inner_timers": {}
         },
         "init cg vars": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 16481,
+            "time_ns": 13906,
             "n_calls": 1,
             "allocated_bytes": 3146168,
             "inner_timers": {}
@@ -32,23 +40,15 @@
         "L": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 93796180,
+            "time_ns": 95388056,
             "n_calls": 1,
             "allocated_bytes": 82739832,
-            "inner_timers": {}
-        },
-        "init grid": {
-            "total_time_ns": 0,
-            "total_allocated_bytes": 0,
-            "time_ns": 4330711,
-            "n_calls": 1,
-            "allocated_bytes": 6291824,
             "inner_timers": {}
         },
         "solve CG": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 4291767,
+            "time_ns": 4274554,
             "n_calls": 1,
             "allocated_bytes": 1744,
             "inner_timers": {}
@@ -56,15 +56,15 @@
         "init Ut": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 18926,
+            "time_ns": 18635,
             "n_calls": 1,
-            "allocated_bytes": 1048840,
+            "allocated_bytes": 1049384,
             "inner_timers": {}
         },
         "add to Ut": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 67497,
+            "time_ns": 78027,
             "n_calls": 1,
             "allocated_bytes": 224,
             "inner_timers": {}
@@ -72,33 +72,41 @@
         "eval f": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 2972764,
+            "time_ns": 8133316,
             "n_calls": 1,
-            "allocated_bytes": 992,
+            "allocated_bytes": 288,
             "inner_timers": {}
         },
         "post cg": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 58170,
+            "time_ns": 63790,
             "n_calls": 1,
-            "allocated_bytes": 2704,
+            "allocated_bytes": 208,
+            "inner_timers": {}
+        },
+        "create f_fun": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 4429,
+            "n_calls": 1,
+            "allocated_bytes": 480,
             "inner_timers": {}
         },
         "init buffer": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 6231,
+            "time_ns": 8776,
             "n_calls": 1,
             "allocated_bytes": 1048840,
             "inner_timers": {}
         },
-        "eval Ut": {
+        "create u_fun": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 2919815,
+            "time_ns": 3927,
             "n_calls": 1,
-            "allocated_bytes": 368,
+            "allocated_bytes": 384,
             "inner_timers": {}
         }
     }

@@ -1,20 +1,21 @@
 ─────────────────────────────────────────────────────────────────────────
                                 Time                    Allocations      
                        ───────────────────────   ────────────────────────
-   Tot / % measured:        1.67s /  93.5%            839MiB /  99.1%    
+   Tot / % measured:        2.08s /  94.4%            327MiB /  97.8%    
 
 Section        ncalls     time    %tot     avg     alloc    %tot      avg
 ─────────────────────────────────────────────────────────────────────────
-solve CG            1    545ms   34.9%   545ms   1.67KiB    0.0%  1.67KiB
-init grid           1    413ms   26.5%   413ms    512MiB   61.5%   512MiB
-eval Ut             1    271ms   17.4%   271ms      368B    0.0%     368B
-eval f              1    265ms   17.0%   265ms      448B    0.0%     448B
-init buffer         1   36.2ms    2.3%  36.2ms   64.0MiB    7.7%  64.0MiB
-init Ut             1   13.0ms    0.8%  13.0ms   64.0MiB    7.7%  64.0MiB
-add to Ut           1   7.32ms    0.5%  7.32ms      224B    0.0%     224B
-post cg             1   5.25ms    0.3%  5.25ms      208B    0.0%     208B
-mult f              1   4.14ms    0.3%  4.14ms      768B    0.0%     768B
-init cg vars        1    154μs    0.0%   154μs    192MiB   23.1%   192MiB
-A                   1   33.0μs    0.0%  33.0μs   1.22KiB    0.0%  1.22KiB
-create ops          1   9.73μs    0.0%  9.73μs      416B    0.0%     416B
+eval f              1    694ms   35.4%   694ms      288B    0.0%     288B
+eval Ut             1    629ms   32.1%   629ms      288B    0.0%     288B
+solve CG            1    552ms   28.2%   552ms   1.67KiB    0.0%  1.67KiB
+init buffer         1   48.4ms    2.5%  48.4ms   64.0MiB   20.0%  64.0MiB
+init Ut             1   14.3ms    0.7%  14.3ms   64.0MiB   20.0%  64.0MiB
+mult f              1   8.50ms    0.4%  8.50ms   2.66KiB    0.0%  2.66KiB
+add to Ut           1   7.30ms    0.4%  7.30ms      224B    0.0%     224B
+post cg             1   5.22ms    0.3%  5.22ms      208B    0.0%     208B
+init cg vars        1    164μs    0.0%   164μs    192MiB   60.0%   192MiB
+A                   1   54.5μs    0.0%  54.5μs   1.22KiB    0.0%  1.22KiB
+create ops          1   13.7μs    0.0%  13.7μs      416B    0.0%     416B
+create f_fun        1   4.94μs    0.0%  4.94μs      480B    0.0%     480B
+create u_fun        1   4.71μs    0.0%  4.71μs      384B    0.0%     384B
 ─────────────────────────────────────────────────────────────────────────

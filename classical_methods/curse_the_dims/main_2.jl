@@ -176,6 +176,24 @@ function get_grid_points_as_1d_vect(n::Int, d::Int, ::Type{T}=Float64) where {T<
     return h .* coords
 end
 
+function eval_on_grid!(n::Int, d::Int, v::Vector{T}, fun, t::T) where {T<:AbstractFloat}
+    N = n^d
+    h = T(1/(n+1))
+    coords = Vector{T}(undef, d)
+
+    @inbounds for i in 1:N
+        for k in 1:d
+            inner = n^(k-1)
+            period = n^k
+            coords[k] = (i-1) % period ÷ inner + 1
+        end
+        coords .*= h
+        v[i] = fun(coords, t)
+    end
+    v
+end
+
+
 
 """
     compute_BC_corr(u_D, t, n, h, d)

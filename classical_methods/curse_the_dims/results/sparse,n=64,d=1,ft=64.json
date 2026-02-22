@@ -1,6 +1,6 @@
 {
-    "total_time_ns": 167416,
-    "total_allocated_bytes": 40848,
+    "total_time_ns": 171100,
+    "total_allocated_bytes": 40096,
     "time_ns": 0,
     "n_calls": 0,
     "allocated_bytes": 0,
@@ -8,15 +8,23 @@
         "mult f": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 4769,
+            "time_ns": 7073,
             "n_calls": 1,
-            "allocated_bytes": 224,
+            "allocated_bytes": 2720,
+            "inner_timers": {}
+        },
+        "eval Ut": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 8557,
+            "n_calls": 1,
+            "allocated_bytes": 256,
             "inner_timers": {}
         },
         "A": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 19477,
+            "time_ns": 21871,
             "n_calls": 1,
             "allocated_bytes": 13840,
             "inner_timers": {}
@@ -24,7 +32,7 @@
         "init cg vars": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 4678,
+            "time_ns": 4679,
             "n_calls": 1,
             "allocated_bytes": 1952,
             "inner_timers": {}
@@ -32,23 +40,15 @@
         "L": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 31990,
+            "time_ns": 31669,
             "n_calls": 1,
             "allocated_bytes": 15984,
-            "inner_timers": {}
-        },
-        "init grid": {
-            "total_time_ns": 0,
-            "total_allocated_bytes": 0,
-            "time_ns": 3717,
-            "n_calls": 1,
-            "allocated_bytes": 1376,
             "inner_timers": {}
         },
         "solve CG": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 68128,
+            "time_ns": 68950,
             "n_calls": 1,
             "allocated_bytes": 1760,
             "inner_timers": {}
@@ -56,15 +56,15 @@
         "init Ut": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 3817,
+            "time_ns": 3706,
             "n_calls": 1,
-            "allocated_bytes": 768,
+            "allocated_bytes": 1312,
             "inner_timers": {}
         },
         "add to Ut": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 4479,
+            "time_ns": 5670,
             "n_calls": 1,
             "allocated_bytes": 224,
             "inner_timers": {}
@@ -72,33 +72,41 @@
         "eval f": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 11512,
+            "time_ns": 4919,
             "n_calls": 1,
-            "allocated_bytes": 928,
+            "allocated_bytes": 256,
             "inner_timers": {}
         },
         "post cg": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 4950,
+            "time_ns": 3547,
             "n_calls": 1,
-            "allocated_bytes": 2704,
+            "allocated_bytes": 208,
+            "inner_timers": {}
+        },
+        "create f_fun": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 3516,
+            "n_calls": 1,
+            "allocated_bytes": 448,
             "inner_timers": {}
         },
         "init buffer": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 2875,
+            "time_ns": 3035,
             "n_calls": 1,
             "allocated_bytes": 768,
             "inner_timers": {}
         },
-        "eval Ut": {
+        "create u_fun": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 7024,
+            "time_ns": 3908,
             "n_calls": 1,
-            "allocated_bytes": 320,
+            "allocated_bytes": 368,
             "inner_timers": {}
         }
     }

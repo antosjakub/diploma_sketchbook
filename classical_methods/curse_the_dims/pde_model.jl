@@ -7,6 +7,23 @@ Args:
     x - Matrix
     t - float
 """
+function create_u_fun(d::Int, ::Type{T}=Float64) where {T<:AbstractFloat}
+    alpha = T(0.01)
+    k = 4*ones(T, d)
+    a = T(10)
+    beta = T(1.0)
+
+    function u_fun(coords::Vector{T}, t::T) where {T<:AbstractFloat}
+        out = T(1.0)
+        for j in 1:d
+            out *= sin(T(pi) * k[j] * coords[j])
+        end
+        out *= cos(a*t) * exp(-beta*t)
+        out
+    end
+
+    return u_fun
+end
 function u_analytic_fun!(out::Vector{T}, x::Matrix{T}, t::T) where {T<:AbstractFloat}
     N, d = size(x)
     alpha = T(0.01)
@@ -42,6 +59,24 @@ Args:
 
 f_fun(){Float64}
 """
+function create_f_fun(d::Int, ::Type{T}=Float64) where {T<:AbstractFloat}
+    alpha = T(0.01)
+    k = 4*ones(T, d)
+    k2 = sum(k.^2)
+    a = T(10)
+    beta = T(1.0)
+
+    function f_fun(coords::Vector{T}, t::T) where {T<:AbstractFloat}
+        out = T(1.0)
+        for j in 1:d
+            out *= sin(T(pi) * k[j] * coords[j])
+        end
+        out *= - ( a*sin(a*t) + (beta - alpha*T(pi)^2*k2)*cos(a*t) ) * exp(-beta*t)
+        out
+    end
+
+    return f_fun
+end
 function f_fun!(out::Vector{T}, x::Matrix{T}, t::T) where {T<:AbstractFloat}
     N, d = size(x)
     alpha = T(0.01)

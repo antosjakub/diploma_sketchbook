@@ -29,8 +29,9 @@ for key, value in timer_report.items():
     n = int(n.split('=')[1])
     d = int(d.split('=')[1])
     ft = int(ft.split('=')[1])
-    x.append(d)
-    y.append(timer_report[key]["A"]["allocated_bytes"])
+    if t == 'sparse' and n == 64 and ft == 64:
+        x.append(d)
+        y.append(timer_report[key]["init Ut"]["allocated_bytes"])
 import numpy as np
 x = np.array(x)
 y = np.array(y)
