@@ -1,6 +1,6 @@
 {
-    "total_time_ns": 783625,
-    "total_allocated_bytes": 2107528,
+    "total_time_ns": 17520193278,
+    "total_allocated_bytes": 18118267032,
     "time_ns": 0,
     "n_calls": 0,
     "allocated_bytes": 0,
@@ -8,49 +8,49 @@
         "A": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 313450,
+            "time_ns": 4101385352,
             "n_calls": 1,
-            "allocated_bytes": 849048,
+            "allocated_bytes": 5586850128,
             "inner_timers": {}
         },
         "solve CG": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 117543,
+            "time_ns": 866590116,
             "n_calls": 1,
-            "allocated_bytes": 133056,
+            "allocated_bytes": 536888992,
             "inner_timers": {}
         },
         "grid": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 42744,
+            "time_ns": 905227657,
             "n_calls": 1,
-            "allocated_bytes": 131440,
+            "allocated_bytes": 1073750240,
             "inner_timers": {}
         },
         "L": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 194719,
+            "time_ns": 10643675003,
             "n_calls": 1,
-            "allocated_bytes": 894648,
+            "allocated_bytes": 10518111304,
             "inner_timers": {}
         },
         "Ut": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 54616,
+            "time_ns": 420301697,
             "n_calls": 1,
-            "allocated_bytes": 33192,
+            "allocated_bytes": 134222208,
             "inner_timers": {}
         },
         "u += f": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 60553,
+            "time_ns": 583013453,
             "n_calls": 1,
-            "allocated_bytes": 66144,
+            "allocated_bytes": 268444160,
             "inner_timers": {}
         }
     }

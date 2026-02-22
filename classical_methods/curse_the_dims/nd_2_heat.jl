@@ -5,7 +5,7 @@ include("main_2.jl")
 include("pde_model.jl")
 
 n = 64
-d = 2
+d = 4
 N = n^d
 println("N = $N")
 
@@ -67,14 +67,17 @@ const to = TimerOutput()
 #end
 
 #report_name = 
+ft=64
+type="sparse"
+filename = "results/$type,n=$n,d=$d,ft=$ft" # op or sparse
 
-open("results/timings_n=$n,d=$d.txt", "w") do file
+open(filename * ".txt", "w") do file
     show(file, to)
 end
 
 
 using JSON
 result = TimerOutputs.todict(to)
-open("results/timings_n=$n,d=$d.json", "w") do file
+open(filename * ".json", "w") do file
     JSON.print(file, result, 4) # 4 = indent spaces
 end
