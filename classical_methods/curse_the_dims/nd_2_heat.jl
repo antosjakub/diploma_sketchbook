@@ -44,18 +44,23 @@ N_warm_up = n_warm_up^d
 L = get_laplace_sparse_matrix(n_warm_up, d, FType)
 A = sparse(1:N_warm_up, 1:N_warm_up, ones(FType,N_warm_up), N_warm_up, N_warm_up) - r * L;
 
-x = get_grid_points_as_1d_vect(n_warm_up, d, FType);
 Ut = Vector{FType}(undef, N_warm_up)
 buffer = similar(Ut)
-Ut .= u_analytic_fun!(Ut, x, FType(0.0))
-buffer .= f_fun!(buffer, x, FType(0.0))
+statevars = CGStateVariables(similar(Ut), similar(Ut), similar(Ut))
+x = get_grid_points_as_1d_vect(n_warm_up, d, FType);
+
+u_analytic_fun!(Ut, x, FType(0.0))
+f_fun!(buffer, x, FType(0.0))
 buffer .*= tau
 Ut .+= buffer
-Ut .= cg(
+cg!(
+    buffer,
     A,
     Ut;
+    statevars=statevars,
     verbose=true, maxiter=100
 );
+Ut .= buffer
 
 # init for Ut - vector
 # init for buffer - vector
@@ -73,18 +78,24 @@ const to = TimerOutput()
 @timeit to "L" L = get_laplace_sparse_matrix(n, d, FType)
 @timeit to "A" A = sparse(1:N, 1:N, ones(FType,N), N, N) - r * L;
 
-@timeit to "grid" x = get_grid_points_as_1d_vect(n, d, FType);
+# intitialize
 @timeit to "init Ut" Ut = Vector{FType}(undef, N)
 @timeit to "init buffer" buffer = similar(Ut)
-@timeit to "eval Ut" Ut .= u_analytic_fun!(Ut, x, FType(0.0))
-@timeit to "eval f" buffer .= f_fun!(buffer, x, FType(0.0))
+@timeit to "init cg vars" statevars = CGStateVariables(similar(Ut), similar(Ut), similar(Ut))
+@timeit to "init grid" x = get_grid_points_as_1d_vect(n, d, FType);
+#
+@timeit to "eval Ut" u_analytic_fun!(Ut, x, FType(0.0))
+@timeit to "eval f" f_fun!(buffer, x, FType(0.0))
 @timeit to "mult f" buffer .*= tau
 @timeit to "add to Ut" Ut .+= buffer
-@timeit to "solve CG" Ut .= cg(
+@timeit to "solve CG" cg!(
+    buffer,
     A,
     Ut;
+    statevars=statevars,
     verbose=true, maxiter=100
 );
+@timeit to "post cg" Ut .= buffer
 
 #@timeit to "L" L = get_laplace_sparse_matrix(n,d,T);
 #@timeit to "A" A = sparse(I, N, N) - r * L;
