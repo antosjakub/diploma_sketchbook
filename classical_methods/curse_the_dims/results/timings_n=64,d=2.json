@@ -1,0 +1,57 @@
+{
+    "total_time_ns": 783625,
+    "total_allocated_bytes": 2107528,
+    "time_ns": 0,
+    "n_calls": 0,
+    "allocated_bytes": 0,
+    "inner_timers": {
+        "A": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 313450,
+            "n_calls": 1,
+            "allocated_bytes": 849048,
+            "inner_timers": {}
+        },
+        "solve CG": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 117543,
+            "n_calls": 1,
+            "allocated_bytes": 133056,
+            "inner_timers": {}
+        },
+        "grid": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 42744,
+            "n_calls": 1,
+            "allocated_bytes": 131440,
+            "inner_timers": {}
+        },
+        "L": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 194719,
+            "n_calls": 1,
+            "allocated_bytes": 894648,
+            "inner_timers": {}
+        },
+        "Ut": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 54616,
+            "n_calls": 1,
+            "allocated_bytes": 33192,
+            "inner_timers": {}
+        },
+        "u += f": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 60553,
+            "n_calls": 1,
+            "allocated_bytes": 66144,
+            "inner_timers": {}
+        }
+    }
+}

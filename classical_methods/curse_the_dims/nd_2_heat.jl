@@ -5,7 +5,7 @@ include("main_2.jl")
 include("pde_model.jl")
 
 n = 64
-d = 4
+d = 2
 N = n^d
 println("N = $N")
 
@@ -28,12 +28,12 @@ using IterativeSolvers
 n_warm_up = 10
 N_warm_up = n_warm_up^d
 L = get_laplace_sparse_matrix(n_warm_up, d)
-A_impl = sparse(I, N_warm_up, N_warm_up) - r * L;
+A = sparse(I, N_warm_up, N_warm_up) - r * L;
 x = get_grid_points_as_1d_vect(n_warm_up, d);
 Ut = u_analytic_fun(x, 0.0)
 Ut .+= tau * f_fun(x, 0.0)
 Ut .= cg(
-    A_impl,
+    A,
     Ut;
     verbose=true
 );
@@ -43,13 +43,13 @@ using TimerOutputs
 const to = TimerOutput()
 
 @timeit to "L" L = get_laplace_sparse_matrix(n,d);
-@timeit to "A_impl" A_impl = sparse(I, N, N) - r * L;
+@timeit to "A" A = sparse(I, N, N) - r * L;
 
 @timeit to "grid" x = get_grid_points_as_1d_vect(n,d);
-@timeit to "ut" Ut = u_analytic_fun(x, 0.0);
+@timeit to "Ut" Ut = u_analytic_fun(x, 0.0);
 @timeit to "u += f" Ut .+= tau * f_fun(x, 0.0);
 @timeit to "solve CG" Ut .= cg(
-    A_impl,
+    A,
     Ut;
     verbose=true
 );
@@ -60,12 +60,21 @@ const to = TimerOutput()
 #    Ut .+= tau * f_fun(x, t);
 #
 #    Ut .= cg(
-#        A_impl,
+#        A,
 #        Ut;
 #        verbose=true
 #    );
 #end
 
-open("timings_d=$d.txt", "w") do file
+#report_name = 
+
+open("results/timings_n=$n,d=$d.txt", "w") do file
     show(file, to)
+end
+
+
+using JSON
+result = TimerOutputs.todict(to)
+open("results/timings_n=$n,d=$d.json", "w") do file
+    JSON.print(file, result, 4) # 4 = indent spaces
 end
