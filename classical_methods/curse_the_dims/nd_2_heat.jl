@@ -4,10 +4,17 @@ using SparseArrays
 include("main_2.jl")
 include("pde_model.jl")
 
-type = "op" # op or sparse
-n = 64
-d = 3
-ft = 32
+#type = "op" # op or sparse
+#n = 64
+#d = 3
+#ft = 32
+
+type = ARGS[1]
+n = parse(Int, ARGS[2])
+d = parse(Int, ARGS[3])
+ft = parse(Int, ARGS[4])
+
+
 if ft == 16
     FType = Float16
 elseif ft == 32
@@ -19,8 +26,9 @@ else
 end
 
 filename = "results/$type,n=$n,d=$d,ft=$ft"
-println(filename)
 N = n^d
+println("================================")
+println(filename)
 println("N = $N")
 
 

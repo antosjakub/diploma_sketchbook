@@ -1,20 +1,20 @@
 ─────────────────────────────────────────────────────────────────────────
                                 Time                    Allocations      
                        ───────────────────────   ────────────────────────
-   Tot / % measured:        309ms /  66.0%            210MiB /  96.5%    
+   Tot / % measured:        1.67s /  93.5%            839MiB /  99.1%    
 
 Section        ncalls     time    %tot     avg     alloc    %tot      avg
 ─────────────────────────────────────────────────────────────────────────
-L                   1   98.1ms   48.2%  98.1ms    102MiB   50.1%   102MiB
-A                   1   83.7ms   41.1%  83.7ms   79.3MiB   39.0%  79.3MiB
-solve CG            1   6.91ms    3.4%  6.91ms   1.72KiB    0.0%  1.72KiB
-init grid           1   6.40ms    3.1%  6.40ms   12.0MiB    5.9%  12.0MiB
-eval Ut             1   4.13ms    2.0%  4.13ms      352B    0.0%     352B
-eval f              1   4.12ms    2.0%  4.12ms      976B    0.0%     976B
-post cg             1    122μs    0.1%   122μs   2.64KiB    0.0%  2.64KiB
-add to Ut           1    120μs    0.1%   120μs      224B    0.0%     224B
-mult f              1   63.5μs    0.0%  63.5μs      224B    0.0%     224B
-init Ut             1   21.5μs    0.0%  21.5μs   2.00MiB    1.0%  2.00MiB
-init cg vars        1   14.2μs    0.0%  14.2μs   6.00MiB    3.0%  6.00MiB
-init buffer         1   7.96μs    0.0%  7.96μs   2.00MiB    1.0%  2.00MiB
+solve CG            1    545ms   34.9%   545ms   1.67KiB    0.0%  1.67KiB
+init grid           1    413ms   26.5%   413ms    512MiB   61.5%   512MiB
+eval Ut             1    271ms   17.4%   271ms      368B    0.0%     368B
+eval f              1    265ms   17.0%   265ms      448B    0.0%     448B
+init buffer         1   36.2ms    2.3%  36.2ms   64.0MiB    7.7%  64.0MiB
+init Ut             1   13.0ms    0.8%  13.0ms   64.0MiB    7.7%  64.0MiB
+add to Ut           1   7.32ms    0.5%  7.32ms      224B    0.0%     224B
+post cg             1   5.25ms    0.3%  5.25ms      208B    0.0%     208B
+mult f              1   4.14ms    0.3%  4.14ms      768B    0.0%     768B
+init cg vars        1    154μs    0.0%   154μs    192MiB   23.1%   192MiB
+A                   1   33.0μs    0.0%  33.0μs   1.22KiB    0.0%  1.22KiB
+create ops          1   9.73μs    0.0%  9.73μs      416B    0.0%     416B
 ─────────────────────────────────────────────────────────────────────────

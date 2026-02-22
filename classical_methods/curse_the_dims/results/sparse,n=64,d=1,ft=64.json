@@ -1,6 +1,6 @@
 {
-    "total_time_ns": 769379,
-    "total_allocated_bytes": 38464,
+    "total_time_ns": 167416,
+    "total_allocated_bytes": 40848,
     "time_ns": 0,
     "n_calls": 0,
     "allocated_bytes": 0,
@@ -8,7 +8,7 @@
         "mult f": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 11873,
+            "time_ns": 4769,
             "n_calls": 1,
             "allocated_bytes": 224,
             "inner_timers": {}
@@ -16,23 +16,47 @@
         "A": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 55804,
+            "time_ns": 19477,
             "n_calls": 1,
             "allocated_bytes": 13840,
+            "inner_timers": {}
+        },
+        "init cg vars": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 4678,
+            "n_calls": 1,
+            "allocated_bytes": 1952,
+            "inner_timers": {}
+        },
+        "L": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 31990,
+            "n_calls": 1,
+            "allocated_bytes": 15984,
+            "inner_timers": {}
+        },
+        "init grid": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 3717,
+            "n_calls": 1,
+            "allocated_bytes": 1376,
             "inner_timers": {}
         },
         "solve CG": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 573471,
+            "time_ns": 68128,
             "n_calls": 1,
-            "allocated_bytes": 4544,
+            "allocated_bytes": 1760,
             "inner_timers": {}
         },
         "init Ut": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 7123,
+            "time_ns": 3817,
             "n_calls": 1,
             "allocated_bytes": 768,
             "inner_timers": {}
@@ -40,7 +64,7 @@
         "add to Ut": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 17810,
+            "time_ns": 4479,
             "n_calls": 1,
             "allocated_bytes": 224,
             "inner_timers": {}
@@ -48,31 +72,23 @@
         "eval f": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 9499,
+            "time_ns": 11512,
             "n_calls": 1,
-            "allocated_bytes": 400,
+            "allocated_bytes": 928,
             "inner_timers": {}
         },
-        "grid": {
+        "post cg": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 8312,
+            "time_ns": 4950,
             "n_calls": 1,
-            "allocated_bytes": 1376,
-            "inner_timers": {}
-        },
-        "L": {
-            "total_time_ns": 0,
-            "total_allocated_bytes": 0,
-            "time_ns": 61740,
-            "n_calls": 1,
-            "allocated_bytes": 15984,
+            "allocated_bytes": 2704,
             "inner_timers": {}
         },
         "init buffer": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 7124,
+            "time_ns": 2875,
             "n_calls": 1,
             "allocated_bytes": 768,
             "inner_timers": {}
@@ -80,9 +96,9 @@
         "eval Ut": {
             "total_time_ns": 0,
             "total_allocated_bytes": 0,
-            "time_ns": 16623,
+            "time_ns": 7024,
             "n_calls": 1,
-            "allocated_bytes": 336,
+            "allocated_bytes": 320,
             "inner_timers": {}
         }
     }
