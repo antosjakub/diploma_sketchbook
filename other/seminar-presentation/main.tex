@@ -18,28 +18,170 @@
 % Title slide
 \frame{\titlepage}
 
-
-%%%%%%%%%%%%%%%% Begin Standard solvers
+%%%%%%%%%%%%%%%% Begin
 \begin{frame}
-\frametitle{Grid based solvers}
-- FDM
-- FEM
-cg, 
-- 
+\frametitle{Problem statement}
 
-Challanges in high dimensions
-- need to store
-How to address them
-- parallelize
+Let
+\begin{itemize}
+\item $\Omega \subset \mathbb{R}^d$ be open and bounded
+\item $T \in (0, \infty)$
+\item $Q_T = (0,T) \times \Omega$
+\end{itemize}
 
-Hardware requirements
-- RAM memory
-- SSD storage
+Consider
+\begin{align*}
+\partial_t u + L\,u = f \quad &\text{in } Q_T \\
+u(0,x) = u_{IC}(x)\quad &\text{on } \Omega \\
+u(t,x) = u_{BC}(t,x)\quad &\text{on } (0,T)\times \Omega
+\end{align*}
+
+Where
+\begin{itemize}
+\item $L\,u = -\alpha\,\Delta u + \vec{b} \cdot \nabla u + c\, u$
+\item $u,f,c,u_{BC}: Q_T \to \mathbb{R}$
+\item $u_{IC}: \Omega \to \mathbb{R}$
+\item $b: Q_T \to \mathbb{R}^d$
+\end{itemize}
+
 \end{frame}
-%%%%%%%%%%%%%%%% End Standard solvers
+%%%%%%%%%%%%%%%% End
+
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
+\frametitle{Grid based solvers: FDM (Metoda konecnych differenci)}
+
+Now take
+$$ \vec{b}=\vec{0}, \quad c = 0, \quad u_{BC} = 0, \Omega = (0,1)^d $$
+and consider the system
+\begin{align*}
+\partial_t u - \alpha\,\Delta u = f \quad &\text{in } Q_T \\
+u(0,x) = u_{IC}(x)\quad &\text{on } \Omega \\
+u(t,x) = 0\quad &\text{on } (0,T)\times \Omega
+\end{align*}
+
+\end{frame}
+%%%%%%%%%%%%%%%% End
+
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
+\frametitle{FDM: discretize}
+
+$$ \partial_t u - \alpha\,\Delta u = f $$
+
+Discretization in 1d
+
+%$$ \partial_t u - \alpha\,\partial_{xx} u = f $$
+
+$\partial u / \partial t \approx \frac{u(t+\tau,x) - u(t,x)}{\tau} $
+
+$\partial u / \partial x \approx \frac{u(t,x+h/2) - u(t,x-h/2)}{h} $
+
+$\partial^2 u /\partial x^2 \approx \frac{u(t,x+h) - 2u(t,x) + u(t,x-h)}{h^2} $
+
+Discretization in 2d
+
+$\partial u / \partial t \approx \frac{u(t+\tau,x,y) - u(t,x,y)}{\tau} $
+
+$\partial u / \partial x \approx \frac{u(t,x+h/2,y) - u(t,x-h/2,y)}{h} $
+
+$\partial^2 u /\partial x^2 \approx \frac{u(t,x+h,y) - 2u(t,x,y) + u(t,x-h,y)}{h^2} $
+
+$\Delta\,u \approx \frac{u(t,x+h,y) - 2u(t,x,y) + u(t,x-h,y)}{h^2} + \frac{u(t,x+h,y) - 2u(t,x,y) + u(t,x-h,y)}{h^2} $
+
+Take a grid of values...
+Consider a grid ${x_i}_{i=1}^n$
 
 
-%%%%%%%%%%%%%%%% Begin PINNs
+\end{frame}
+%%%%%%%%%%%%%%%% End
+
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
+\frametitle{FDM: Towards the $A\,x=b$}
+
+implicit > explicit (explicit needs $\alpha \tau / h^2 \le 1/2$)
+
+$$
+\frac{u_i^{t+1} - u_i^{t}}{\tau}
+- \alpha\, \frac{u_{i+1}^{t+1} - 2u_i^{t+1} + u_{i-1}^{t+1}}{h^2} = f_i^{t+1}
+$$
+
+$$
+u_i^{t+1} -
+\frac{\alpha\,\tau}{h^2} (u_{i+1}^{t+1} - 2u_i^{t+1} + u_{i-1}^{t+1})
+= u_i^{t} + \tau f_i^{t+1}
+$$
+
+$$
+U^{t+1} -
+\frac{\alpha\,\tau}{h^2} L\,U^{t+1}
+= (I - \frac{\alpha\,\tau}{h^2} L)\, U^{t+1}
+= U^t + \tau F^{t+1}
+$$
+
+To get $U^{t+1}$ from $U^{t}$, we need to solve:
+
+$$
+(I - \frac{\alpha\,\tau}{h^2} L)\, U^{t+1}
+= U^t + \tau F^{t+1}
+$$
+
+We need to solve $A\,x=b$, where $x$ and $b$ are of size $N=n^d$.
+\begin{itemize}
+\item $A = (I - \frac{\alpha\,\tau}{h^2} L)$
+\item $x = U^{t+1}$
+\item $b = U^t + \tau F^{t+1}$
+\end{itemize}
+
+\end{frame}
+%%%%%%%%%%%%%%%% End
+
+
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
+\frametitle{FDM: The Curse (prokleti?) of Dimensionality}
+
+Solve $A\,x=b$, where $x$ and $b$ are of size $N=n^d$.
+\begin{itemize}
+\item $A = (I - \frac{\alpha\,\tau}{h^2} L)$
+\item $x = U^{t+1}$
+\item $b = U^t + \tau F^{t+1}$
+\end{itemize}
+
+Suppose $n=64$:
+
+\begin{center}
+\begin{tabular}{ c c c c c c c c c }
+ $d$ & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8\\ 
+ $n^d$ & 64 & 4,096 & 262,144 & 16.8e6 & 1.07e9 & 6.87e10 & 4.40e12 & 2.81e14
+\end{tabular}
+\end{center}
+
+textbf{Q: Stiffness matrix A is sparse (ridka), symmetric, positive definite - will it be enough to make any computation feasible?}
+
+% slide 1: Yes!
+% slide 2: Yes! But not really.
+textbf{A: Yes, but not really.}
+
+\end{frame}
+%%%%%%%%%%%%%%%% End
+
+
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
+\frametitle{FDM: The Curse of Dimensionality}
+
+The problem:
+\begin{itemize}
+    \item need to store the vectors in memory
+\end{itemize}
+
+\end{frame}
+%%%%%%%%%%%%%%%% End
+
+
+%%%%%%%%%%%%%%%% Begin
 \begin{frame}
 \frametitle{Physics Informed Neural Networks (PINNs)}
 Intro
@@ -66,15 +208,21 @@ Advantages / Disagvantages
 Hardware requirements
 - GPU(s)
 \end{frame}
-%%%%%%%%%%%%%%%% End PINNs
+%%%%%%%%%%%%%%%% End
 
 
-%%%%%%%%%%%%%%%% Begin deep BSDE
+%%%%%%%%%%%%%%%% Begin
 \begin{frame}
-\frametitle{Deep BSDE method}
-- just mention as next to try
+\frametitle{Next steps}
+
+\begin{itemize}
+    \item Fourier method - do not store the grid, only the coefficient of u in some basis.
+    \item Tensor trains - write $v \in\mathbb{R}^{n^d}$ as a tensor $v \in \mathbb{R}^{n\times n\times ... \times n}$.
+    \item Deep BSDE method - use the stochastic nature of the equation
+\end{itemize}
+
 \end{frame}
-%%%%%%%%%%%%%%%% End deep BSDE
+%%%%%%%%%%%%%%%% End
 
 
 
