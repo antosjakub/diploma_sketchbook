@@ -1,0 +1,113 @@
+{
+    "total_time_ns": 1287059296,
+    "total_allocated_bytes": 393409568,
+    "time_ns": 0,
+    "n_calls": 0,
+    "allocated_bytes": 0,
+    "inner_timers": {
+        "mult f": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 7360127,
+            "n_calls": 1,
+            "allocated_bytes": 2720,
+            "inner_timers": {}
+        },
+        "eval Ut": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 404069659,
+            "n_calls": 1,
+            "allocated_bytes": 288,
+            "inner_timers": {}
+        },
+        "A": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 41556,
+            "n_calls": 1,
+            "allocated_bytes": 1248,
+            "inner_timers": {}
+        },
+        "init cg vars": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 131792,
+            "n_calls": 1,
+            "allocated_bytes": 236040960,
+            "inner_timers": {}
+        },
+        "solve CG": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 385240130,
+            "n_calls": 1,
+            "allocated_bytes": 1728,
+            "inner_timers": {}
+        },
+        "init Ut": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 12441809,
+            "n_calls": 1,
+            "allocated_bytes": 78680256,
+            "inner_timers": {}
+        },
+        "create ops": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 10686,
+            "n_calls": 1,
+            "allocated_bytes": 416,
+            "inner_timers": {}
+        },
+        "eval f": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 427245925,
+            "n_calls": 1,
+            "allocated_bytes": 288,
+            "inner_timers": {}
+        },
+        "add to Ut": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 7018182,
+            "n_calls": 1,
+            "allocated_bytes": 224,
+            "inner_timers": {}
+        },
+        "post cg": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 7760250,
+            "n_calls": 1,
+            "allocated_bytes": 208,
+            "inner_timers": {}
+        },
+        "create f_fun": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 5937,
+            "n_calls": 1,
+            "allocated_bytes": 544,
+            "inner_timers": {}
+        },
+        "init buffer": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 35728494,
+            "n_calls": 1,
+            "allocated_bytes": 78680256,
+            "inner_timers": {}
+        },
+        "create u_fun": {
+            "total_time_ns": 0,
+            "total_allocated_bytes": 0,
+            "time_ns": 4749,
+            "n_calls": 1,
+            "allocated_bytes": 432,
+            "inner_timers": {}
+        }
+    }
+}
