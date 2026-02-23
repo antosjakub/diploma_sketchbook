@@ -1,0 +1,124 @@
+\documentclass{standalone}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, calc}
+\usepackage{amsmath}
+
+\begin{document}
+\begin{tikzpicture}[
+  nn/.style={circle, draw, minimum width=0.5cm, minimum height=0.8cm, align=center},
+  input/.style={nn, fill=blue!20},
+  hidden/.style={nn, fill=gray!20},
+  output/.style={nn, fill=green!20},
+  loss/.style={rectangle, draw, rounded corners, minimum width=2cm, minimum height=1cm, fill=yellow!20},
+  every node/.style={font=\footnotesize},
+  arrow/.style={-Stealth, thick}
+]
+
+% Inputs
+\node[input] (input1) {$t$};
+\node[input, below=0.1cm of input1] (input2) {$x_1$};
+\node[input, below=0.1cm of input2] (input3) {...};
+\node[input, below=0.1cm of input3] (input4) {$x_d$};
+
+% Hidden layers
+\node[hidden, above right=0.3cm and 1.2cm of input1] (h1) {};
+\node[hidden, below=0.4cm of h1] (h2) {};
+\node[hidden, below=0.4cm of h2] (h3) {};
+\node[hidden, below=0.4cm of h3] (h4) {};
+\node[hidden, below=0.4cm of h4] (h5) {};
+
+% Hidden layers
+\node[hidden, right=1.2cm of h1] (g1) {};
+\node[hidden, below=0.4cm of g1] (g2) {};
+\node[hidden, below=0.4cm of g2] (g3) {};
+\node[hidden, below=0.4cm of g3] (g4) {};
+\node[hidden, below=0.4cm of g4] (g5) {};
+
+% Output
+\node[output, right=0.8cm of g3] (output) {$u(t,x)$};
+
+% Arrows for NN
+\draw[arrow] (input1) -- (h1);
+\draw[arrow] (input1) -- (h2);
+\draw[arrow] (input1) -- (h3);
+\draw[arrow] (input1) -- (h4);
+\draw[arrow] (input1) -- (h5);
+\draw[arrow] (input2) -- (h1);
+\draw[arrow] (input2) -- (h2);
+\draw[arrow] (input2) -- (h3);
+\draw[arrow] (input2) -- (h4);
+\draw[arrow] (input2) -- (h5);
+\draw[arrow] (input3) -- (h1);
+\draw[arrow] (input3) -- (h2);
+\draw[arrow] (input3) -- (h3);
+\draw[arrow] (input3) -- (h4);
+\draw[arrow] (input3) -- (h5);
+\draw[arrow] (input4) -- (h1);
+\draw[arrow] (input4) -- (h2);
+\draw[arrow] (input4) -- (h3);
+\draw[arrow] (input4) -- (h4);
+\draw[arrow] (input4) -- (h5);
+
+\draw[arrow] (h1) -- (g1);
+\draw[arrow] (h1) -- (g2);
+\draw[arrow] (h1) -- (g3);
+\draw[arrow] (h1) -- (g4);
+\draw[arrow] (h1) -- (g5);
+\draw[arrow] (h2) -- (g1);
+\draw[arrow] (h2) -- (g2);
+\draw[arrow] (h2) -- (g3);
+\draw[arrow] (h2) -- (g4);
+\draw[arrow] (h2) -- (g5);
+\draw[arrow] (h3) -- (g1);
+\draw[arrow] (h3) -- (g2);
+\draw[arrow] (h3) -- (g3);
+\draw[arrow] (h3) -- (g4);
+\draw[arrow] (h3) -- (g5);
+\draw[arrow] (h4) -- (g1);
+\draw[arrow] (h4) -- (g2);
+\draw[arrow] (h4) -- (g3);
+\draw[arrow] (h4) -- (g4);
+\draw[arrow] (h4) -- (g5);
+\draw[arrow] (h5) -- (g1);
+\draw[arrow] (h5) -- (g2);
+\draw[arrow] (h5) -- (g3);
+\draw[arrow] (h5) -- (g4);
+\draw[arrow] (h5) -- (g5);
+
+\draw[arrow] (g1) -- (output);
+\draw[arrow] (g2) -- (output);
+\draw[arrow] (g3) -- (output);
+\draw[arrow] (g4) -- (output);
+\draw[arrow] (g5) -- (output);
+
+% Collocation points
+%\node[below=1cm of h2] (colloc) {Collocation\\points $\Omega$};
+%\draw[arrow] (colloc) to[bend right] (h1);
+
+% Data points
+\node[below=1cm of output] (data) {Data/BC\\$\Gamma$};
+\draw[arrow] (data) to[bend left] (output);
+
+% Auto-diff & residual
+\node[right=0.5cm of output] (ad) {Auto-diff};
+\draw[arrow] (output) -- (ad);
+\node[right=1cm of ad] (f) {$f = u_t + N[u] = 0$};
+\draw[arrow] (ad) -- (f);
+
+% Loss
+\node[loss, below=1.5cm of f] (lossbox) {
+$L_\text{tot} = L_u + L_f$\\[0.2cm]
+$L_u = \|u - z\|_\Gamma$\\[0.2cm]
+$L_f = \|f\|_\Omega$
+};
+\draw[arrow] ($(output.south east)!0.5!(f.south west)$) -- (lossbox.north west);
+\draw[arrow] (data) -- (lossbox.west);
+%\draw[arrow] (colloc) -- (lossbox.south);
+
+% PDE example
+\node[draw, rectangle, below=0.5cm of lossbox, fill=orange!20, minimum width=3cm] (pde) {
+$\frac{\partial u}{\partial t} + \mathcal{N}[u; \lambda] = 0$
+};
+
+\end{tikzpicture}
+\end{document}

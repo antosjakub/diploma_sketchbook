@@ -153,16 +153,15 @@ Solve $A\,x=b$, where $x$ and $b$ are of size $N=n^d$.
 \end{itemize}
 
 Suppose $n=64$:
-\begin{center}
+%\begin{center}
 \begin{tabular}{ c c c c c c c c c }
  $d$ & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8\\ 
  $n^d$ & 64 & 4,096 & 262,144 & 16.8e6 & 1.07e9 & 6.87e10 & 4.40e12 & 2.81e14
 \end{tabular}
-\end{center}
+%\end{center}
 
 \pause
-$\implies$  The Curse of Dimensionality (prokleti?) 
-
+$\implies$  The Curse of Dimensionality (prokleti?) \\
 
 \pause
 \textbf{Question: Stiffness matrix A is sparse (ridka), symmetric, positive definite - will it be enough to make any computation feasible?}
@@ -178,11 +177,24 @@ $\implies$  The Curse of Dimensionality (prokleti?)
 \begin{frame}[fragile]
 \frametitle{FDM: The Curse of Dimensionality}
 
-Problem:
+\textbf{Answer: Yes!}
+\pause
 \begin{itemize}
-    \item memory
+    \item Conjugate gradients (CG)
+    \begin{itemize}
+        \item solves Ax=b, for x where A is a symmetric, positive-definite linear operator
+        \item uses short recurrences $\implies$ fixed memory costs and fixed computational costs per iteration
+    \end{itemize}
 \end{itemize}
 
+\pause
+\textbf{Answer: Not really...}
+\pause
+\begin{itemize}
+    \item Problem = memory
+\end{itemize}
+
+\pause
 \begin{lstlisting}[breaklines=true,frame=single,basicstyle=\footnotesize\ttfamily]
 X = get_grid_as_1d_vector(n,d); # N x d
 U = u_IC.(X, t=0.0)             # N
@@ -206,11 +218,11 @@ for loop
 \begin{lstlisting}[breaklines=true,frame=single,basicstyle=\footnotesize\ttfamily]
 U = Vector{FType}(undef, N)     # N
 buffer = similar(U)             # N
-statevars = CGStateVariables(
+statevars = CGStateVariables(   # N x 3
     similar(U),
     similar(U),
     similar(U)
-)                               # N x 3
+)
                         # total = N x 5
 eval_on_grid!(n, d, U, u_IC, FType(0.0))
 a_operator! = create_operator(n, d, r, FType)
@@ -233,8 +245,29 @@ for loop
 \begin{frame}
 \frametitle{FDM: The Curse of Dimensionality}
 
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=80mm]{img/fdm_total_alloc.png}
+    \label{fig:fdm_total_alloc}
+    \caption{Total allocated memory for various discretizations. Equals the memory needed to allocate 5 vectors of size $N=n^d$.}
+\end{figure}
 
 \end{frame}
+%%%%%%%%%%%%%%%% End
+
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
+\frametitle{FDM: The Curse of Dimensionality}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=80mm]{img/fdm_cg_runtime.png}
+    \label{fig:fdm_cg_runtim}
+    \caption{Duration of a CG run (solving the system $A\,x=b$, where $A=I-\frac{\alpha \tau}{h^2}\,L,\:x=U^{t+1},\:b=U^t+\tau\,F^t$).}
+\end{figure}
+
+\end{frame}
+%%%%%%%%%%%%%%%% End
 
 
 %%%%%%%%%%%%%%%% Begin
