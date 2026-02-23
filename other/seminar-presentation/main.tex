@@ -22,6 +22,7 @@
 \begin{frame}
 \frametitle{Problem statement}
 
+\pause
 Let
 \begin{itemize}
 \item $\Omega \subset \mathbb{R}^d$ be open and bounded
@@ -29,6 +30,7 @@ Let
 \item $Q_T = (0,T) \times \Omega$
 \end{itemize}
 
+\pause
 Consider
 \begin{align*}
 \partial_t u + L\,u = f \quad &\text{in } Q_T \\
@@ -36,9 +38,11 @@ u(0,x) = u_{IC}(x)\quad &\text{on } \Omega \\
 u(t,x) = u_{BC}(t,x)\quad &\text{on } (0,T)\times \Omega
 \end{align*}
 
+\pause
 Where
 \begin{itemize}
 \item $L\,u = -\alpha\,\Delta u + \vec{b} \cdot \nabla u + c\, u$
+\pause
 \item $u,f,c,u_{BC}: Q_T \to \mathbb{R}$
 \item $u_{IC}: \Omega \to \mathbb{R}$
 \item $b: Q_T \to \mathbb{R}^d$
@@ -69,28 +73,26 @@ u(t,x) = 0\quad &\text{on } (0,T)\times \Omega
 
 $$ \partial_t u - \alpha\,\Delta u = f $$
 
-Discretization in 1d
+Finite differences
 
-%$$ \partial_t u - \alpha\,\partial_{xx} u = f $$
+- Forward difference in time
 
 $\partial u / \partial t \approx \frac{u(t+\tau,x) - u(t,x)}{\tau} $
+
+- Central difference in space
 
 $\partial u / \partial x \approx \frac{u(t,x+h/2) - u(t,x-h/2)}{h} $
 
 $\partial^2 u /\partial x^2 \approx \frac{u(t,x+h) - 2u(t,x) + u(t,x-h)}{h^2} $
 
-Discretization in 2d
+Create a uniform grid in time and space
 
-$\partial u / \partial t \approx \frac{u(t+\tau,x,y) - u(t,x,y)}{\tau} $
+$$ \{x_i\}_{i=0}^{n+1} = (x_0, x_1, ..., x_n, x_{n+1}), \quad x_0 = 0.0, \quad x_{n+1} = 1.0 $$
 
-$\partial u / \partial x \approx \frac{u(t,x+h/2,y) - u(t,x-h/2,y)}{h} $
+Define
 
-$\partial^2 u /\partial x^2 \approx \frac{u(t,x+h,y) - 2u(t,x,y) + u(t,x-h,y)}{h^2} $
+$$ u^t_i = u(t^n, x_i) $$
 
-$\Delta\,u \approx \frac{u(t,x+h,y) - 2u(t,x,y) + u(t,x-h,y)}{h^2} + \frac{u(t,x+h,y) - 2u(t,x,y) + u(t,x-h,y)}{h^2} $
-
-Take a grid of values...
-Consider a grid ${x_i}_{i=1}^n$
 
 
 \end{frame}
@@ -150,7 +152,6 @@ Solve $A\,x=b$, where $x$ and $b$ are of size $N=n^d$.
 \end{itemize}
 
 Suppose $n=64$:
-
 \begin{center}
 \begin{tabular}{ c c c c c c c c c }
  $d$ & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8\\ 
@@ -158,11 +159,11 @@ Suppose $n=64$:
 \end{tabular}
 \end{center}
 
-textbf{Q: Stiffness matrix A is sparse (ridka), symmetric, positive definite - will it be enough to make any computation feasible?}
+\pause
+\textbf{Question: Stiffness matrix A is sparse (ridka), symmetric, positive definite - will it be enough to make any computation feasible?}
 
-% slide 1: Yes!
-% slide 2: Yes! But not really.
-textbf{A: Yes, but not really.}
+\pause
+\textbf{Answer: Yes!}\pause\textbf{ But not really...}
 
 \end{frame}
 %%%%%%%%%%%%%%%% End
