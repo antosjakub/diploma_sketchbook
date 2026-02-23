@@ -24,22 +24,31 @@ print(f'Plotting for: {list(timer_report.keys())}')
 
 x = []
 y = []
-for key, value in timer_report.items():
+data = {}
+for key in timer_report.keys():
     t,n,d,ft = key.split(',')
     n = int(n.split('=')[1])
     d = int(d.split('=')[1])
     ft = int(ft.split('=')[1])
-    if t == 'sparse' and n == 64 and ft == 64:
-        x.append(d)
-        y.append(timer_report[key]["init Ut"]["allocated_bytes"])
+    if t == 'op' and ft == 64:
+        #identifier = f'Float{ft},n={n}'
+        identifier = f'n={n}'
+        if identifier not in data:
+            data[identifier] = {'x': [], 'y': []}
+        data[identifier]['x'].append(d)
+        data[identifier]['y'].append(timer_report[key]["init Ut"]["allocated_bytes"])
+data = dict(sorted(data.items(), reverse=True))
 import numpy as np
-x = np.array(x)
-y = np.array(y)
-indices = np.argsort(x)
-x = x[indices]
-y = y[indices]
-print(x)
-print(y)
+for identifier, vals in data.items():
+    x = vals['x']
+    y = vals['y']
+    x = np.array(x)
+    y = np.array(y)
+    indices = np.argsort(x)
+    x = x[indices]
+    y = y[indices]
+    data[identifier]['x'] = x
+    data[identifier]['y'] = y
 
 byte_names = ['B', 'kB', 'MB', 'GB', 'TB']
 powers = np.arange(4,10+1, dtype=int)
@@ -52,17 +61,23 @@ for l, v in zip(labels, values):
 
 import matplotlib.pyplot as plt
 fig, ax = plt.subplots()
+ax.set_title(r"A = operator, allocate 5 vectors of size $N = n^d$")
 ax.grid(visible=True)
 ax.set_xticks(x)
 ax.set_xlabel("d (dimension)")
 ax.set_yscale('log')
 ax.set_yticks(10**powers)
 ax.set_yticklabels(y_ticks)
-ax.set_ylabel("allocation size")
-ax.plot(x, y)
-ax.scatter(x, y)
-plt.show()
+ax.set_ylabel("Total allocation size")
+for identifier, vals in data.items():
+    x = vals['x']
+    y = 5*vals['y']
+    ax.plot(x, y, label=identifier)
+    ax.scatter(x, y)
+ax.legend()
+plt.tight_layout()
 plt.savefig("plot.png", dpi=150)
+plt.close()
 
 #labels = list(timer_report.keys())
 ##times  = [timer_report[k]["time_ns"] / 1e9 for k in labels]
