@@ -1,29 +1,34 @@
 using LinearAlgebra
 using LinearOperators
 using SparseArrays
+using Serialization
 include("main_2.jl")
 include("pde_model.jl")
 
-#type = "op" # op or sparse
-#n = 64
-#d = 3
-#ft = 32
+#type = ARGS[1]
+#n = parse(Int, ARGS[2])
+#d = parse(Int, ARGS[3])
+#ft = parse(Int, ARGS[4])
 
-type = ARGS[1]
-n = parse(Int, ARGS[2])
-d = parse(Int, ARGS[3])
-ft = parse(Int, ARGS[4])
+type = "op" # op or sparse
+n = 64
+d = 4
+ft = 32
+
+serialize_result = false
+solve_single_time_step = true
+t_max = 1.0
+nt = 100
 
 
-if ft == 16
-    FType = Float16
-elseif ft == 32
-    FType = Float32
-elseif ft == 64
-    FType = Float64
-else
-    print("!!! ISSUE !!!")
-end
+FType = get_FloatType(ft)
+
+t_max = FType(t_max)
+h = FType( 1 / (n+1) )
+tau = FType(t_max / (nt-1))
+# need r <= 1 (implicit) or 1/2 (explicit)
+alpha = FType(0.01)
+r = FType(alpha * tau / h^2)
 
 filename = "results/$type,n=$n,d=$d,ft=$ft"
 N = n^d
@@ -31,17 +36,6 @@ println("================================")
 println(filename)
 println("N = $N")
 
-
-alpha = FType(0.01)
-
-h = FType( 1 / (n+1) )
-
-t_max = FType(0.1)
-n_iters = 10
-tau = FType(t_max / (n_iters-1))
-
-# need r <= 1 (implicit) or 1/2 (explicit)
-r = FType(alpha * tau / h^2)
 
 using IterativeSolvers
 
@@ -78,12 +72,6 @@ cg!(
 );
 Ut .= buffer
 
-# init for Ut - vector
-# init for buffer - vector
-# calc f - store to buffer
-# Ut += tau * f
-# 
-# 
 
 using TimerOutputs
 const to = TimerOutput()
@@ -106,50 +94,48 @@ end
 @timeit to "create f_fun" f_fun_2 = create_f_fun(d, FType)
 @timeit to "create u_fun" u_analytic_fun_2 = create_u_fun(d, FType)
 @timeit to "eval Ut" eval_on_grid!(n, d, Ut, u_analytic_fun_2, FType(0.0))
-@timeit to "eval f" eval_on_grid!(n, d, buffer, f_fun_2, FType(0.0))
-@timeit to "mult f" buffer .*= tau
-@timeit to "add to Ut" Ut .+= buffer
-@timeit to "solve CG" cg!(
-    buffer,
-    A,
-    Ut;
-    statevars=statevars,
-    verbose=true, maxiter=100
-);
-@timeit to "post cg" Ut .= buffer
+if serialize_result
+    serialize("temp/U0.dat", Ut)
+end
+#tau = FType(t_max / (nt-1))
+for ti in 2:1:nt
+    # b = U^{t-1} + tau * F^t
+    t = FType((ti-1)*tau)
+    @timeit to "eval f" eval_on_grid!(n, d, buffer, f_fun_2, t)
+    @timeit to "mult f" buffer .*= tau
+    @timeit to "add to Ut" Ut .+= buffer
+    @timeit to "solve CG" cg!(
+        buffer,
+        A,
+        Ut;
+        statevars=statevars,
+        verbose=true, maxiter=100
+    );
+    @timeit to "post cg" Ut .= buffer
+    if solve_single_time_step
+        break
+    end
+end
+if serialize_result
+    if solve_single_time_step
+        serialize("temp/U1.dat", Ut)
+    else
+        serialize("temp/UT.dat", Ut)
+    end
+end
 
-#@timeit to "L" L = get_laplace_sparse_matrix(n,d,T);
-#@timeit to "A" A = sparse(I, N, N) - r * L;
-#
-#@timeit to "grid" x = get_grid_points_as_1d_vect(n,d);
-#@timeit to "Ut" Ut = u_analytic_fun(x, 0.0);
-#@timeit to "u += f" Ut .+= tau * f_fun(x, 0.0);
-#@timeit to "solve CG" Ut .= cg(
-#    A,
-#    Ut;
-#    verbose=true
-#);
 
-#Ut = u_analytic_fun(x, 0.0);
-#for ti in 2:1:n_iters
-#    t = (ti-1)*tau
-#    Ut .+= tau * f_fun(x, t);
-#
-#    Ut .= cg(
-#        A,
-#        Ut;
-#        verbose=true
-#    );
-#end
 
-#report_name = 
+using JSON
+metadata = Dict("type" => type, "n" => n, "d" => d, "ft" => ft, "nt" => nt, "t_max" => t_max)
+open("temp/metadata.json", "w") do file
+    JSON.print(file, metadata, 4) # 4 = indent spaces
+end
 
 open(filename * ".txt", "w") do file
     show(file, to)
 end
 
-
-using JSON
 result = TimerOutputs.todict(to)
 open(filename * ".json", "w") do file
     JSON.print(file, result, 4) # 4 = indent spaces

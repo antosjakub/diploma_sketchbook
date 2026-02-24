@@ -11,7 +11,18 @@ function get_1d_laplace_sparse_matrix(n::Int, ::Type{T}=Float64) where {T<:Abstr
     spdiagm(-1 => off, 0 => diag, 1 => off)
 end
 
-
+function get_FloatType(ft::Int)
+    if ft == 16
+        return Float16
+    elseif ft == 32
+        return Float32
+    elseif ft == 64
+        return Float64
+    else
+        print("!!! ISSUE !!!")
+        return null
+    end
+end
 # L
 # E L, L E
 # E E L, E L E, L E E
