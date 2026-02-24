@@ -365,7 +365,10 @@ if __name__ == "__main__":
 
     # Prepare storage
     import os
-    dir_name = args.output_dir_name
+    if args.output_dir_name == 'run_latest':
+        dir_name = args.output_dir_name
+    else:
+        dir_name = f'run_history/{args.output_dir_name}'
     os.makedirs(dir_name, exist_ok=True)    
     
     # Initialize model
@@ -430,6 +433,7 @@ if __name__ == "__main__":
     pde_model.dump_pde_params(f'{dir_name}/pde_params.json')
 
     # Save the results
+    torch.save(model, f'{dir_name}/model.pth')
     torch.save(torch.tensor(losses), f'{dir_name}/training_loss.pth')
     torch.save(torch.tensor(l2_errs), f'{dir_name}/training_l2_error.pth')
     print("\nResults saved.")
