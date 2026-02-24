@@ -17,6 +17,7 @@ class HeatEquation:
         self.a = a
         self.a_2 = (self.a**2).sum()
         self.alpha = alpha
+        self.has_weak_form = True
     def dump_pde_params(self, file_path) -> None:
         pde_params = {"alpha": self.alpha, "a": list(map(lambda x: float(x), self.a))}
         json_dump(file_path, pde_params)
@@ -44,31 +45,22 @@ class HeatEquation:
         # return shape = (batch size, 1)
         return self.u_spatial(x).unsqueeze(dim=1)
     # --- RESIDUALS ---
+    # X.shape = (bs, D)
+    # u.shape = (bs, 1)
+    # grad_u.shape = (bs, D)
+    # sp_u_laplace.shape = (bs, 1)
+    # return shape = (bs, 1)
     def pde_residual(self, X, u, grad_u, sp_laplace_u):
-        """
-        X.shape = (bs, D)
-        u.shape = (bs, 1)
-        grad_u.shape = (bs, D)
-        sp_u_laplace.shape = (bs, 1)
-        return shape = (bs, 1)
-        """
+        u_t = grad_u[:,-1].unsqueeze(dim=1)
+        residual = u_t - self.alpha * sp_laplace_u
+        return residual
+    def pde_residual_weak_form(self, X, u, grad_u, sp_laplace_u):
         u_t = grad_u[:,-1].unsqueeze(dim=1)
         u_grad_2 = torch.sum(grad_u**2, dim=1).unsqueeze(dim=1)
         residual = u_t * u + self.alpha * u_grad_2
-        #residual = u_t - self.alpha * sp_laplace_u
         return residual
     def bc_residual(self, X, u):
-        """
-        X.shape = (bs, D)
-        u.shape = (bs, 1)
-        return shape = (bs, 1)
-        """
         return u - self.u_analytic(X)
     def ic_residual(self, X, u):
-        """
-        X.shape = (bs, D)
-        u.shape = (bs, 1)
-        return shape = (bs, 1)
-        """
         return u - self.u_IC(X[:,:-1])
 

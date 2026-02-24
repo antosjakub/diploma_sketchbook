@@ -31,6 +31,7 @@ parser.add_argument("--l2_stop_crit_lbfgs", default=0.001, type=float, help="")
 # 
 parser.add_argument("--output_dir_name", default="run_latest", type=str, help="")
 parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
+parser.add_argument("--use_weak_form", action="store_true", help="")
 
 
 class PINN(nn.Module):
@@ -120,12 +121,12 @@ def sample_hypercube_boundary(num_samples, d, device='cpu'):
     return samples
 
 
-def pde_loss(model, X_in, pde_residual):
+def pde_loss(model, X_in, pde_residual, compute_laplace=True):
     """
     X_in: (batch_size, d+1) tensor
     """
     X_in.requires_grad = True
-    u, grad_u, spatial_laplace_u = compute_derivatives(model, X_in, compute_laplace=False)
+    u, grad_u, spatial_laplace_u = compute_derivatives(model, X_in, compute_laplace=compute_laplace)
     residual = pde_residual(X_in, u, grad_u, spatial_laplace_u)
     return torch.mean(residual**2)
 
@@ -189,6 +190,7 @@ def train_pinn(
         l2_stop_crit=0.01,
         profiler_report_filename='profiler_report',
         output_dir_name='run_latest',
+        compute_laplace=True,
         device='cpu'
     ):
     """Train the PINN model"""
@@ -254,7 +256,7 @@ def train_pinn(
 
         # Compute individual losses
         with record_function("loss"):
-            loss_pde = pde_loss(model, X_interior, pde_residual)
+            loss_pde = pde_loss(model, X_interior, pde_residual, compute_laplace=compute_laplace)
             loss_bc = boundary_condition_loss(model, X_boundary, bc_residual)
             loss_ic = initial_condition_loss(model, X_initial, ic_residual)
 
@@ -322,6 +324,7 @@ def train_pinn_lbfgs(
         lambda_pde=1.0, lambda_bc=10.0, lambda_ic=10.0,
         lr=1.0,
         l2_stop_crit=0.001,
+        compute_laplace=True,
         device='cpu'
     ):
     """Fine-tune the PINN model with L-BFGS after Adam pre-training."""
@@ -349,7 +352,7 @@ def train_pinn_lbfgs(
 
     def closure():
         optimizer_lbfgs.zero_grad()
-        loss_pde = pde_loss(model, X_interior, pde_residual)
+        loss_pde = pde_loss(model, X_interior, pde_residual, compute_laplace=compute_laplace)
         loss_bc  = boundary_condition_loss(model, X_boundary, bc_residual)
         loss_ic  = initial_condition_loss(model, X_initial, ic_residual)
         loss = lambda_pde * loss_pde + lambda_bc * loss_bc + lambda_ic * loss_ic
@@ -381,7 +384,7 @@ def train_pinn_lbfgs(
                 u_bc  = model(X_boundary)
                 u_ic  = model(X_initial)
             X_log = X_interior.detach().requires_grad_(True)
-            loss_pde_log = pde_loss(model, X_log, pde_residual)
+            loss_pde_log = pde_loss(model, X_log, pde_residual, compute_laplace=compute_laplace)
             loss_bc_log  = boundary_condition_loss(model, X_boundary, bc_residual)
             loss_ic_log  = initial_condition_loss(model, X_initial, ic_residual)
 
@@ -439,11 +442,21 @@ if __name__ == "__main__":
     print(a)
     import pde_models
     pde_model = pde_models.HeatEquation(d, alpha=0.01, a=a)
+    if args.use_weak_form:
+        if pde_model.has_weak_form:
+            use_weak_form = True
+            pde_residual = pde_model.pde_residual_weak_form
+        else:
+            raise Exception("!! ISSUE: '--use_weak_form' argument was passed, but the PDE model does not have a weak form defined.")
+    else:
+        use_weak_form = False
+        pde_residual = pde_model.pde_residual
+
     
     # Train the model
     losses, l2_errs = train_pinn(
         model, optimizer, scheduler,
-        pde_model.pde_residual, pde_model.bc_residual, pde_model.ic_residual,
+        pde_residual, pde_model.bc_residual, pde_model.ic_residual,
         pde_model.u_analytic,
         d,
         n_steps=args.n_steps,
@@ -454,6 +467,7 @@ if __name__ == "__main__":
         l2_stop_crit=args.l2_stop_crit,
         profiler_report_filename=args.profiler_report_filename,
         output_dir_name=dir_name,
+        compute_laplace=not use_weak_form,
         device=device
     )
     print("\nAdam training complete!")
@@ -463,7 +477,7 @@ if __name__ == "__main__":
     if args.n_steps_lbfgs > 0:
         losses_lbfgs, l2_errs_lbfgs = train_pinn_lbfgs(
             model,
-            pde_model.pde_residual, pde_model.bc_residual, pde_model.ic_residual,
+            pde_residual, pde_model.bc_residual, pde_model.ic_residual,
             pde_model.u_analytic,
             d,
             n_steps=args.n_steps_lbfgs,
@@ -472,6 +486,7 @@ if __name__ == "__main__":
             n_points_pde=args.n_points_pde, n_points_bc=args.n_points_bc, n_points_ic=args.n_points_ic,
             lr=args.lr_lbfgs,
             l2_stop_crit=args.l2_stop_crit_lbfgs,
+            compute_laplace=not use_weak_form,
             device=device
         )
         losses    += losses_lbfgs
