@@ -95,7 +95,7 @@ if __name__ == "__main__":
         title=r"Duration of one CG run (solving $Ax=b$)",
         xlabel="d (dimension)",
         ylabel="t (time)",
-        filename="plot_time.png",
+        filename="fdm_cg_runtime.png",
     )
     # total allocation
     data = extract_data(timer_reports, report_name="init Ut", metric_name="allocated_bytes")
@@ -106,7 +106,7 @@ if __name__ == "__main__":
         title=r"Total allocation size (5 vectors of size $N = n^d$)",
         xlabel="d (dimension)",
         ylabel="allocation size",
-        filename="plot.png",
+        filename="fdm_total_alloc.png",
         weight=5
     )
 

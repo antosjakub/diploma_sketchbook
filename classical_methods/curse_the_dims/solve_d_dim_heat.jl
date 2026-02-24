@@ -2,7 +2,7 @@ using LinearAlgebra
 using LinearOperators
 using SparseArrays
 using Serialization
-include("main_2.jl")
+include("main.jl")
 include("pde_model.jl")
 
 #type = ARGS[1]
