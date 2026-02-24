@@ -53,7 +53,9 @@ class HeatEquation:
         return shape = (bs, 1)
         """
         u_t = grad_u[:,-1].unsqueeze(dim=1)
-        residual = u_t - self.alpha * sp_laplace_u
+        u_grad_2 = torch.sum(grad_u**2, dim=1).unsqueeze(dim=1)
+        residual = u_t * u + self.alpha * u_grad_2
+        #residual = u_t - self.alpha * sp_laplace_u
         return residual
     def bc_residual(self, X, u):
         """

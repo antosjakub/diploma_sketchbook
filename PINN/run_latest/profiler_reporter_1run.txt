@@ -1,0 +1,25 @@
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg       CPU Mem  Self CPU Mem    # of Calls  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                               backward         4.69%     774.295us        45.32%       7.475ms       7.475ms     -21.61 MB    -517.25 KB             1  
+                                                   loss         1.96%     323.572us        41.87%       6.906ms       6.906ms      21.65 MB    -104.68 KB             1  
+                                              laplace_u         3.84%     634.113us        25.40%       4.189ms       4.189ms      16.68 MB     -23.45 KB             1  
+                                               aten::mm        24.49%       4.039ms        24.73%       4.079ms      62.761us      14.61 MB      14.61 MB            65  
+                                              aten::mul        16.99%       2.802ms        18.74%       3.091ms      29.161us      42.53 MB      42.53 MB           106  
+       autograd::engine::evaluate_function: MmBackward0         0.58%      95.906us        17.67%       2.914ms     132.462us      -1.46 MB     -10.90 MB            22  
+autograd::engine::evaluate_function: TanhBackwardBac...         0.57%      93.416us        17.24%       2.843ms     149.635us       2.93 MB     -22.46 MB            19  
+                                            MmBackward0         0.66%     108.625us        17.05%       2.811ms     127.785us       9.44 MB           0 B            22  
+                                  TanhBackwardBackward0         0.65%     106.716us        15.68%       2.586ms     136.124us      25.39 MB     -10.74 MB            19  
+    autograd::engine::evaluate_function: AddmmBackward0         0.83%     137.359us        14.25%       2.350ms     111.904us     173.88 KB      -6.95 MB            21  
+                                         optimizer_step         0.45%      74.168us        11.85%       1.954ms       1.954ms           0 B           0 B             1  
+                               Optimizer.step#Adam.step         5.81%     957.571us        11.40%       1.880ms       1.880ms           0 B     -67.51 KB             1  
+                                         AddmmBackward0         0.53%      86.909us        11.02%       1.817ms      86.540us       5.17 MB           0 B            21  
+                                                forward         2.15%     353.934us         7.69%       1.269ms     422.953us       2.06 MB      -2.05 MB             3  
+      autograd::engine::evaluate_function: MulBackward0         0.37%      61.220us         6.34%       1.045ms      65.317us      -2.44 MB     -14.17 MB            16  
+                                    aten::tanh_backward         6.29%       1.038ms         6.29%       1.038ms      29.647us      14.75 MB      14.75 MB            35  
+                                           MulBackward0         0.26%      42.248us         5.55%     915.401us      57.213us      11.73 MB          -4 B            16  
+                                                 grad_u         1.64%     271.100us         5.49%     905.104us     905.104us       2.96 MB           0 B             1  
+                                             aten::add_         3.08%     507.253us         4.87%     803.460us      12.753us          -4 B         -68 B            63  
+                                               aten::to         0.98%     161.402us         4.85%     799.402us       9.631us         300 B           0 B            83  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 16.493ms

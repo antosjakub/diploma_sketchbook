@@ -1,8 +1,10 @@
 import torch
 import torch.nn as nn
 import argparse
-#from torch.profiler import profile, ProfilerActivity, record_function
+from torch.profiler import profile, ProfilerActivity, record_function
+from contextlib import nullcontext
 
+#python main.py --n_steps=500 --n_steps_log=100 --n_steps_lbfgs=0 --d=2
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
@@ -28,6 +30,7 @@ parser.add_argument("--l2_stop_crit", default=0.01, type=float, help="")
 parser.add_argument("--l2_stop_crit_lbfgs", default=0.001, type=float, help="")
 # 
 parser.add_argument("--output_dir_name", default="run_latest", type=str, help="")
+parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
 
 
 class PINN(nn.Module):
@@ -49,10 +52,11 @@ class PINN(nn.Module):
         )
 
     def forward(self, x):
-        return self.net(x)
+        with record_function("forward"):
+            return self.net(x)
 
     
-def compute_derivatives(model, X):
+def compute_derivatives(model, X, compute_laplace=True):
     """
     Compute u, grad u, and laplace u
     X: (batch_size, D) where D = d + 1 (spatial dims + time)
@@ -60,26 +64,32 @@ def compute_derivatives(model, X):
     u = model(X)
     bs, D = X.shape
 
-    # Gradient - spatial & temporatal
-    grad_u = torch.autograd.grad(
-        inputs=X,
-        outputs=u,
-        grad_outputs=torch.ones_like(u),
-        create_graph=True,
-        retain_graph=True,
-    )[0]
-    
-    # Laplacian - spatial only
-    spatial_laplace_u = torch.zeros_like(u)
-    for i in range(D-1):
-        hess_row = torch.autograd.grad(
+
+    with record_function("grad_u"):
+        # Gradient - spatial & temporatal
+        grad_u = torch.autograd.grad(
             inputs=X,
-            outputs=grad_u[:,i].sum(),
-            grad_outputs=torch.tensor(1.0),
+            outputs=u,
+            grad_outputs=torch.ones_like(u),
             create_graph=True,
-            retain_graph=True
+            retain_graph=True,
         )[0]
-        spatial_laplace_u += hess_row[:,i:i+1]
+
+    if compute_laplace: 
+        with record_function("laplace_u"):
+            # Laplacian - spatial only
+            spatial_laplace_u = torch.zeros_like(u)
+            for i in range(D-1):
+                hess_row = torch.autograd.grad(
+                    inputs=X,
+                    outputs=grad_u[:,i].sum(),
+                    grad_outputs=torch.tensor(1.0),
+                    create_graph=True,
+                    retain_graph=True
+                )[0]
+                spatial_laplace_u += hess_row[:,i:i+1]
+    else:
+        spatial_laplace_u = None
 
     # shapes: bs x 1, bs x D, bs x 1
     return u, grad_u, spatial_laplace_u
@@ -115,7 +125,7 @@ def pde_loss(model, X_in, pde_residual):
     X_in: (batch_size, d+1) tensor
     """
     X_in.requires_grad = True
-    u, grad_u, spatial_laplace_u = compute_derivatives(model, X_in)
+    u, grad_u, spatial_laplace_u = compute_derivatives(model, X_in, compute_laplace=False)
     residual = pde_residual(X_in, u, grad_u, spatial_laplace_u)
     return torch.mean(residual**2)
 
@@ -177,6 +187,8 @@ def train_pinn(
         n_points_pde=2000, n_points_bc=400, n_points_ic=400,
         lambda_pde=1.0, lambda_bc=10.0, lambda_ic=10.0,
         l2_stop_crit=0.01,
+        profiler_report_filename='profiler_report',
+        output_dir_name='run_latest',
         device='cpu'
     ):
     """Train the PINN model"""
@@ -191,6 +203,26 @@ def train_pinn(
     X_interior, X_boundary, X_initial = sample_collocation_points(
         d, n_points_pde, n_points_bc, n_points_ic, device
     )
+
+
+    enable_profiler=True
+    profile_step_start=100
+    profile_n_steps=10
+    profile_step_end = profile_step_start + profile_n_steps
+
+    def make_profiler():
+        if enable_profiler:
+            return profile(
+                activities=[ProfilerActivity.CPU],
+                profile_memory=True,
+                record_shapes=True,
+                with_stack=True,
+            )
+        else:
+            return nullcontext()
+
+    prof_ctx = make_profiler()
+
     
     l2_err = 1.0 + l2_stop_crit # init with some val
     for si in range(n_steps):
@@ -212,21 +244,28 @@ def train_pinn(
         #    )
         #    prof.__enter__()
 
+        if enable_profiler and si == profile_step_start:
+            prof_ctx.__enter__()
+            print(f"\n[Profiler] Started at step {si+1}")
+
         optimizer.zero_grad()
 
         # Sample the training points
 
         # Compute individual losses
-        loss_pde = pde_loss(model, X_interior, pde_residual)
-        loss_bc = boundary_condition_loss(model, X_boundary, bc_residual)
-        loss_ic = initial_condition_loss(model, X_initial, ic_residual)
+        with record_function("loss"):
+            loss_pde = pde_loss(model, X_interior, pde_residual)
+            loss_bc = boundary_condition_loss(model, X_boundary, bc_residual)
+            loss_ic = initial_condition_loss(model, X_initial, ic_residual)
 
         # Total loss with weights
         loss = lambda_pde * loss_pde + lambda_bc * loss_bc + lambda_ic * loss_ic
 
         # Backward pass
-        loss.backward()
-        optimizer.step()
+        with record_function("backward"):
+            loss.backward()
+        with record_function("optimizer_step"):
+            optimizer.step()
 
         # Step scheduler
         if (si + 1) % n_steps_decay == 0:
@@ -238,6 +277,17 @@ def train_pinn(
         #    prof.__exit__(None, None, None)
         #    print("\n=== Profiling Results (100 steps averaged) ===")
         #    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=15))
+
+        # Exit profiler context after the last profiled step
+        if enable_profiler and si == profile_step_end - 1:
+            prof_ctx.__exit__(None, None, None)
+            print(f"\n[Profiler] Stopped at step {si+1}. Results ({profile_n_steps} steps):")
+            prof_report = prof_ctx.key_averages().table(sort_by="cpu_time_total", row_limit=20)
+            print(prof_report)
+            # save profiler report
+            #prof_ctx.export_chrome_trace(f"run_latest/{profiler_report_filename}.json")
+            with open(f"{output_dir_name}/{profiler_report_filename}.txt", "w") as f:
+                f.write(prof_report)
 
         # Print progress
         if (si + 1) % n_steps_log == 0:
@@ -373,6 +423,8 @@ if __name__ == "__main__":
     
     # Initialize model
     model = PINN(D, layers).to(device)
+    #model = torch.compile(model, mode="reduce-overhead")
+    #model = torch.compile(model)
     
     # Initialize optimizer and scheduler
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
@@ -400,6 +452,8 @@ if __name__ == "__main__":
         lambda_pde=args.lambda_pde, lambda_bc=args.lambda_bc, lambda_ic=args.lambda_ic,
         n_points_pde=args.n_points_pde, n_points_bc=args.n_points_bc, n_points_ic=args.n_points_ic,
         l2_stop_crit=args.l2_stop_crit,
+        profiler_report_filename=args.profiler_report_filename,
+        output_dir_name=dir_name,
         device=device
     )
     print("\nAdam training complete!")
