@@ -24,24 +24,54 @@ nx = 100
 nt = 200
 
 
-with open('args.json') as f:
-    args = json.load(f)
-    d = args["d"]
+#with open('args.json') as f:
+#    args = json.load(f)
+#    d = args["d"]
+d = 3
 
 t_max = 1.0
 
 
-from main import PINN
-model = torch.load('model.pth', weights_only=False)
-def fun_1(X):
-    with torch.no_grad():
-        return model(X)
+#from main import PINN
+#model = torch.load('model.pth', weights_only=False)
+#def fun_1(X):
+#    with torch.no_grad():
+#        return model(X)
 
-import pde_models
-pde_model = pde_models.HeatEquation(d)
-pde_model.load_pde_params("pde_params.json")
-fun_2 = pde_model.u_analytic
+#import pde_models
+#pde_model = pde_models.HeatEquation(d)
+#pde_model.load_pde_params("pde_params.json")
+#fun_2 = pde_model.u_analytic
 
+# parameters
+alpha = 4
+beta = 0.01
+# precompute
+k = torch.tensor([3.9, 2.1, 5.0])
+k_2 = (k**2).sum()
+# define
+def fun_2(X):
+    # input
+    x = X[:,:-1]
+    t = X[:,-1]
+    # return
+    u_space = torch.prod(torch.sin(torch.pi * k * x), dim=1)
+    u_time = torch.cos(alpha*t) * torch.exp(- beta * t)
+    return (u_space * u_time).unsqueeze(dim=1)
+
+
+
+#def fun_2(X):
+#    x = X[:,:-1]
+#    t = X[:,-1]
+#    r2 = torch.zeros_like(x[:,0])
+#    for i in range(d):
+#        r2 += (x[:,i]-0.5)**2
+#    y = torch.cos(100*r2) * torch.exp(-10*r2) * torch.cos(10*t) * torch.exp(-t)
+#    return y.unsqueeze(dim=1)
+
+
+fun_1 = fun_2
 
 def eval_funs(X):
     Y1_grid = fun_1(X).reshape(nx,nx)
