@@ -13,7 +13,8 @@ def json_load(file_path):
 class HeatEquation:
     def __init__(self, d, alpha=0.01, a=None):
         self.d = d
-        self.a = torch.pi * torch.ones(d) if a is None else a
+        #self.a = torch.pi * torch.ones(d) if a is None else a
+        self.a = a
         self.a_2 = (self.a**2).sum()
         self.alpha = alpha
     def dump_pde_params(self, file_path) -> None:
@@ -26,7 +27,7 @@ class HeatEquation:
     def u_spatial(self, x):
         # x.shape = (batch size, spatial dims)
         # return shape = (batch size,)
-        return torch.prod(torch.sin(x*self.a), dim=1)
+        return torch.prod(torch.sin(self.a*x), dim=1)
     def u_analytic(self, X):
         # X.shape = (batch size, spatial+time dims)
         bs, D = X.shape

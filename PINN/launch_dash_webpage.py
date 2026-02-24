@@ -17,47 +17,47 @@ import json
 u_zminmax_const = [-1.0, 1.0]
 err_zminmax_const = [-0.1, 0.1]
 
-u_zminmax_manual = True
+u_zminmax_manual = False
 err_zminmax_manual = False
 
 nx = 100
 nt = 200
 
 
-#with open('args.json') as f:
-#    args = json.load(f)
-#    d = args["d"]
-d = 3
+with open('args.json') as f:
+    args = json.load(f)
+    d = args["d"]
+#d = 3
 
 t_max = 1.0
 
 
-#from main import PINN
-#model = torch.load('model.pth', weights_only=False)
-#def fun_1(X):
-#    with torch.no_grad():
-#        return model(X)
+from main import PINN
+model = torch.load('model.pth', weights_only=False)
+def fun_1(X):
+    with torch.no_grad():
+        return model(X)
 
-#import pde_models
-#pde_model = pde_models.HeatEquation(d)
-#pde_model.load_pde_params("pde_params.json")
-#fun_2 = pde_model.u_analytic
+import pde_models
+pde_model = pde_models.HeatEquation(d, a=torch.zeros(d))
+pde_model.load_pde_params("pde_params.json")
+fun_2 = pde_model.u_analytic
 
-# parameters
-alpha = 4
-beta = 0.01
-# precompute
-k = torch.tensor([3.9, 2.1, 5.0])
-k_2 = (k**2).sum()
-# define
-def fun_2(X):
-    # input
-    x = X[:,:-1]
-    t = X[:,-1]
-    # return
-    u_space = torch.prod(torch.sin(torch.pi * k * x), dim=1)
-    u_time = torch.cos(alpha*t) * torch.exp(- beta * t)
-    return (u_space * u_time).unsqueeze(dim=1)
+## parameters
+#alpha = 4
+#beta = 0.01
+## precompute
+#k = torch.tensor([3.9, 2.1, 5.0])
+#k_2 = (k**2).sum()
+## define
+#def fun_2(X):
+#    # input
+#    x = X[:,:-1]
+#    t = X[:,-1]
+#    # return
+#    u_space = torch.prod(torch.sin(torch.pi * k * x), dim=1)
+#    u_time = torch.cos(alpha*t) * torch.exp(- beta * t)
+#    return (u_space * u_time).unsqueeze(dim=1)
 
 
 
@@ -71,7 +71,7 @@ def fun_2(X):
 #    return y.unsqueeze(dim=1)
 
 
-fun_1 = fun_2
+#fun_1 = fun_2
 
 def eval_funs(X):
     Y1_grid = fun_1(X).reshape(nx,nx)
@@ -457,8 +457,9 @@ def update_heatmap(*args):
     for i in range(3):
         curr_figs[i]["data"][0]["z"] = Y_grids[i]
         if i != 2:
-            curr_figs[i]["data"][0]["zmin"] = u_zminmax[0]
-            curr_figs[i]["data"][0]["zmax"] = u_zminmax[1]
+            #curr_figs[i]["data"][0]["zmin"] = u_zminmax[0]
+            #curr_figs[i]["data"][0]["zmax"] = u_zminmax[1]
+            pass
         else:
             curr_figs[i]["data"][0]["zmin"] = err_zminmax[0]
             curr_figs[i]["data"][0]["zmax"] = err_zminmax[1]

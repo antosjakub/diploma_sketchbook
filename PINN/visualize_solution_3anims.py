@@ -6,18 +6,25 @@ import torch
 import matplotlib.pyplot as plt
 from main import PINN
 
+import sys
+if len(sys.argv) > 1:
+    dir_name = sys.argv[1]
+else:
+    dir_name = 'run_latest'
+print(f"Will be working in directory '{dir_name}'...")
+
 import json
-with open("args.json", "r") as f:
+with open(f"{dir_name}/args.json", "r") as f:
     metadata = json.load(f)
 d = metadata["d"]
 D = d + 1 # space + time
 
 import pde_models
-pde_model = pde_models.HeatEquation(d)
-pde_model.load_pde_params("pde_params.json")
+pde_model = pde_models.HeatEquation(d, a=torch.zeros(d))
+pde_model.load_pde_params(f"{dir_name}/pde_params.json")
 u_analytic = pde_model.u_analytic
 
-model = torch.load('model.pth', weights_only=False)
+model = torch.load(f'{dir_name}/model.pth', weights_only=False)
 
 # cuda or cpu
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -25,44 +32,61 @@ print(f"Using device: {device}")
 # seed
 torch.manual_seed(41)
 
+# config
+plot_dims = [0,1]
+N = 100
+# fixed_dims_vals = torch.rand(d)
+fixed_dims_vals = 0.2*torch.ones(d)
 
 def eval_model_on_grid(X):
     # Predicted sol
     with torch.no_grad():
         u_pred = model(X)
-        U_pred = u_pred.reshape(100, 100)
+        U_pred = u_pred.reshape(N, N)
     return U_pred
 
 def eval_analytic_on_grid(X):
     # Analytic sol
     u_true = u_analytic(X)
-    U_true = u_true.reshape(100,100)
+    U_true = u_true.reshape(N, N)
     return U_true
 
-def update_grid(t_val, x_flat, y_flat):
-    t_flat = torch.ones_like(x_flat) * t_val
-    X = torch.cat([x_flat, y_flat, t_flat], dim=1)
+
+
+# Create domain mesh
+x = torch.linspace(0, 1, N, device=device)
+y = torch.linspace(0, 1, N, device=device)
+X_grid, Y_grid = torch.meshgrid(x, y, indexing='ij')
+x_flat = X_grid.reshape(-1, 1)
+y_flat = Y_grid.reshape(-1, 1)
+
+X_flat_list = []
+for di in range(d):
+    if di == plot_dims[0]:
+        X_flat_list.append(x_flat)
+    elif di == plot_dims[1]:
+        X_flat_list.append(y_flat)
+    else:
+        fixed_flat = torch.ones_like(x_flat) * fixed_dims_vals[di]
+        X_flat_list.append(fixed_flat)
+
+t_val = 0.0
+t_flat = torch.ones_like(x_flat) * t_val
+X = torch.cat([*X_flat_list, t_flat], dim=1)
+
+def update_grid(t_val):
+    #t_flat = torch.ones_like(x_flat) * t_val
+    X[:,-1] = t_val
     U_pred = eval_model_on_grid(X)
     U_true = eval_analytic_on_grid(X)
     return U_pred, U_true
 
 
-#def visualize_solution_2d(model, t_min, t_max, device='cpu'):
-"""Visualize solution for 2D case"""
-
-# Create domain mesh
-x = torch.linspace(0, 1, 100, device=device)
-y = torch.linspace(0, 1, 100, device=device)
-X_grid, Y_grid = torch.meshgrid(x, y, indexing='ij')
-x_flat = X_grid.reshape(-1, 1)
-y_flat = Y_grid.reshape(-1, 1)
-
 
 fig, axes = plt.subplots(1, 3, figsize=(15, 4))
 
 
-t_val = 0.0
-U_pred, U_true = update_grid(t_val, x_flat, y_flat)
+U_pred, U_true = update_grid(t_val)
 
 # Predicted sol
 im1 = axes[0].contourf(X_grid, Y_grid, U_pred, levels=50, cmap='jet')
@@ -96,7 +120,7 @@ FPS = 5
 def update(frame_indx):
     # update pred, true, sol
     t_val = frame_indx/num_frames
-    U_pred, U_true = update_grid(t_val, x_flat, y_flat)
+    U_pred, U_true = update_grid(t_val)
 
     im1 = axes[0].contourf(X_grid, Y_grid, U_pred, levels=50, cmap='jet')
     axes[0].set_title(f'PINN Solution at t={t_val}')
@@ -121,5 +145,5 @@ from matplotlib.animation import FuncAnimation
 print("Saving animation...")
 ani = FuncAnimation(fig, update, frames=range(num_frames), interval=int(1000/FPS), blit=False)
 #plt.tight_layout()
-ani.save("pinn_solution_3plots_anim.gif", writer="ffmpeg", fps=FPS, dpi=100)
+ani.save(f"{dir_name}/pinn_solution_3plots_anim.gif", writer="ffmpeg", fps=FPS, dpi=100)
 print("Animation saved.")

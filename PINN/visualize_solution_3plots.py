@@ -8,18 +8,25 @@ import torch
 import matplotlib.pyplot as plt
 from main import PINN
 
+import sys
+if len(sys.argv) > 1:
+    dir_name = sys.argv[1]
+else:
+    dir_name = 'run_latest'
+print(f"Will be working in directory '{dir_name}'...")
+
 import json
-with open("args.json", "r") as f:
+with open(f"{dir_name}/args.json", "r") as f:
     metadata = json.load(f)
 d = metadata["d"]
 D = d + 1 # space + time
 
 import pde_models
-pde_model = pde_models.HeatEquation(d)
-pde_model.load_pde_params("pde_params.json")
+pde_model = pde_models.HeatEquation(d, a=torch.zeros(d))
+pde_model.load_pde_params(f"{dir_name}/pde_params.json")
 u_analytic = pde_model.u_analytic
 
-model = torch.load('model.pth', weights_only=False)
+model = torch.load(f'{dir_name}/model.pth', weights_only=False)
 
 # cuda or cpu
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -32,7 +39,8 @@ plot_dims = [0,1]
 N = 100
 # provide or will be set randomly
 t_val = torch.rand(1).item()
-fixed_dims_vals = torch.rand(d)
+#fixed_dims_vals = torch.rand(d)
+fixed_dims_vals = 0.2*torch.ones(d)
 
 # DO ONCE
 x = torch.linspace(0, 1, N, device=device)
@@ -91,7 +99,7 @@ axes[2].set_ylabel('y')
 plt.colorbar(im3, ax=axes[2])
 
 plt.tight_layout()
-plt.savefig('pinn_solution.png', dpi=150)
+plt.savefig(f'{dir_name}/pinn_solution_3plots.png', dpi=150)
 print(f'Max error: {error.max():.6f}, Mean error: {error.mean():.6f}')
 
 
