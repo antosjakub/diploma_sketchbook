@@ -433,7 +433,7 @@ $$ u_{analytic}(t,x) = \Bigl(\prod_{i=1}^d \sin{(\pi k_i x_i)}\Bigr) \cos{(at)}\
 
 %%%%%%%%%%%%%%%% Begin
 \begin{frame}
-\frametitle{PINNs - challanges}
+\frametitle{PINNs challanges}
 
 Challanges in higher dimensions
 \begin{itemize}
@@ -458,6 +458,79 @@ How to handle them
     \pause
     \item run more? 
 \end{itemize}
+
+\end{frame}
+%%%%%%%%%%%%%%%% End
+
+
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
+\frametitle{PINN results: pde vs weak form.}
+
+%
+
+\end{frame}
+%%%%%%%%%%%%%%%% End
+
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
+\frametitle{PINN results: L-BFGS for the win.}
+Two optimizers
+\begin{itemize}
+    \item Adam
+    \item L-BGFS
+\end{itemize}
+
+
+\end{frame}
+%%%%%%%%%%%%%%%% End
+
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
+\frametitle{PINN results: Sampling}
+How frequently to sample?
+\begin{itemize}
+    \pause
+    \item every step?
+    \pause
+    \item every $k$ steps?
+    \pause
+    \item once?
+\end{itemize}
+
+\end{frame}
+%%%%%%%%%%%%%%%% End
+
+%%%%%%%%%%%%%%%% Start
+\begin{frame}
+\frametitle{PINN results: Sampling}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=120mm]{img/training_loss_every_k_steps.png}
+    \label{fig:loss_every_k_steps}
+    \caption{Sample every 2000 steps.}
+\end{figure}
+\end{frame}
+%%%%%%%%%%%%%%%% End
+%%%%%%%%%%%%%%%% Start
+\begin{frame}
+\frametitle{PINN results: Sampling}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=120mm]{img/training_loss_once.png}
+    \label{fig:loss_once}
+    \caption{Sample once.}
+\end{figure}
+
+\end{frame}
+%%%%%%%%%%%%%%%% End
+
+
+
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
+\frametitle{PINN results: A picture.}
+
 
 \end{frame}
 %%%%%%%%%%%%%%%% End
