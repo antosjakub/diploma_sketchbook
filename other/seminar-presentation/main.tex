@@ -123,7 +123,7 @@ $$ u^j_i = u(t_j, x_i) $$
 \begin{frame}
 \frametitle{FDM: Towards the $A\,x=b$}
 
-implicit > explicit (explicit needs $\alpha \tau / h^2 \le 1/2$)
+implicit > explicit %\pause (explicit needs $\alpha \tau / h^2 \le 1/2$)
 
 \pause
 $$
@@ -154,7 +154,7 @@ $$
 $$
 
 \pause
-We need to solve $A\,x=b$, where $x$ and $b$ are of size $N=n^d$.
+Solve $A\,x=b$, where $x$ and $b$ are of size $N=n^d$.
 \begin{itemize}
 \item $A = (I - \frac{\alpha\,\tau}{h^2} L)$
 \item $x = U^{t+1}$
@@ -309,7 +309,7 @@ u(t,x) = u_{BC}(t,x)\quad &\text{on } (0,T)\times\partial\Omega
 \end{align*}
 
 \pause
-Moreover
+With
 $$
 f(t,x) = -\Bigl(\prod_{i=1}^d \sin{(\pi k_i x_i)}\Bigr) 
 \Bigl(a\sin{(at)} + (\beta - \alpha\,\pi^2\,|k|^2)\cos{(at)}\Bigr) e^{-\beta\,t}
@@ -452,9 +452,11 @@ How to handle them
     \pause
     \item use weak form, hutchinson trace estimation, ...
     \pause
-    \item compute in paralle
+    \item compute in parallel
     \pause
     \item adaptive sampling
+    \pause
+    \item run more? 
 \end{itemize}
 
 \end{frame}
@@ -467,8 +469,9 @@ How to handle them
 
 \begin{itemize}
     \item $u_\theta: \mathbb{R}^{(d+1)}\to\mathbb{R}$
-    \item memory efficient but significant runtime 
+    \item memory efficient, but significant runtime 
     \item flexibility
+    \item parameters, parameters, parameters, ...
 \end{itemize}
 
 \end{frame}
