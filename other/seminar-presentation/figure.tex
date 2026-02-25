@@ -35,7 +35,7 @@
 \node[hidden, below=0.4cm of g4] (g5) {};
 
 % Output
-\node[output, right=0.8cm of g3] (output) {$u(t,x)$};
+\node[output, right=0.8cm of g3] (output) {$u_\theta(t,x)$};
 
 % Arrows for NN
 \draw[arrow] (input1) -- (h1);
@@ -98,17 +98,17 @@
 % Data points
 \node[align=center, below=1cm of output] (data) {
   Sample domains:\\[0.0cm]
-  $\Omega\times(0,T),\: \Omega,$\\[0.0cm]
-  $\partial\Omega\times(0,T)$%\\[0.0cm]
+  $(0,T)\times\Omega,\: \Omega,$\\[0.0cm]
+  $(0,T)\times\partial\Omega$%\\[0.0cm]
   %$\Omega$
 };
 \draw[arrow] (data) to[bend left] (output);
 
 % Auto-diff & residual
 \node[right=0.5cm of output] (ad) {Auto-diff};
-\node[right=0.6cm of ad] (r_pde) {$\mathcal{L}_{pde} = ||\partial_t u_\theta + L\,u_\theta - f||^2_{\Omega\times(0,T)}$};
+\node[right=0.6cm of ad] (r_pde) {$\mathcal{L}_{pde} = ||\partial_t u_\theta + L\,u_\theta - f||^2_{(0,T)\times\Omega}$};
 \node[above right=0.05cm and 0.6cm of ad] (r_ic) {$\mathcal{L}_{ic} = ||u_\theta - u_{ic}||^2_{\Omega}$};
-\node[above right=0.5cm and 0.6cm of ad] (r_bc) {$\mathcal{L}_{bc} = ||u_\theta - u_{bc}||^2_{\partial\Omega\times(0,T)}$};
+\node[above right=0.5cm and 0.6cm of ad] (r_bc) {$\mathcal{L}_{bc} = ||u_\theta - u_{bc}||^2_{(0,T)\times\partial\Omega}$};
 \draw[arrow] (output) -- (ad);
 \draw[arrow] (ad) -- (r_pde);
 %\draw[arrow] (output) to[bend left] (r_ic);
@@ -131,9 +131,9 @@ $u = u_{ic}$\\[0.0cm]
 $u = u_{bc}$
 };
 \node[align=left, above right=1.5cm and 0.0cm of ad, minimum width=3cm] (pde_domains) {
-$\Omega\times(0,T)$\\[0.0cm]
+$(0,T)\times\Omega$\\[0.0cm]
 $\Omega$\\[0.0cm]
-$\partial\Omega\times(0,T)$
+$(0,T)\times\partial\Omega$
 };
 
 \end{tikzpicture}
