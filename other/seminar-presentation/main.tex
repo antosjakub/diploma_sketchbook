@@ -60,13 +60,22 @@ Where
 \frametitle{Problem statement}
 
 Now take
-$$ \vec{b}=\vec{0}, \quad c = 0, \quad u_{BC} = 0, \Omega = (0,1)^d $$
+$$ \vec{b}=\vec{0}, \quad c = 0, \quad u_{BC} = 0,\quad \Omega = (0,1)^d $$
+\pause
 and consider the system
 \begin{align*}
-\partial_t u - \alpha\,\Delta u = f \quad &\text{in } Q_T \\
+\partial_t u - \alpha\,\Delta u = f \quad &\text{in } (0,t)\times\Omega \\
 u(0,x) = u_{IC}(x)\quad &\text{on } \Omega \\
-u(t,x) = 0\quad &\text{on } (0,T)\times \Omega
+u(t,x) = 0\quad &\text{on } (0,T)\times\partial\Omega
 \end{align*}
+
+\pause
+Moreover
+$$
+f(t,x) = -\Bigl(\prod_{i=1}^d \sin{(\pi k_i x_i)}\Bigr) 
+\Bigl(a\sin{(at)} + (\beta - \alpha\,\pi^2\,|k|^2)\cos{(at)}\Bigr) e^{-\beta\,t}
+$$
+$$ u_{analytic}(t,x) = \Bigl(\prod_{i=1}^d \sin{(\pi k_i x_i)}\Bigr) \cos{(at)}\,e^{-\beta t} $$
 
 \end{frame}
 %%%%%%%%%%%%%%%% End
@@ -290,55 +299,25 @@ for loop
 \begin{frame}
 \frametitle{Problem statement}
 
-\pause
-Let
-\begin{itemize}
-\item $\Omega \subset \mathbb{R}^d$ be open and bounded
-\item $T \in (0, \infty)$
-\item $Q_T = (0,T) \times \Omega$
-\end{itemize}
-
-\pause
-Consider
-\begin{align*}
-\partial_t u + L\,u = f \quad &\text{in } Q_T \\
-u(0,x) = u_{IC}(x)\quad &\text{on } \Omega \\
-u(t,x) = u_{BC}(t,x)\quad &\text{in } Q_T 
-\end{align*}
-
-\pause
-Where
-\begin{itemize}
-\item $L\,u = -\alpha\,\Delta u + \vec{b} \cdot \nabla u + c\, u$
-\pause
-\item $u,f,c,u_{BC}: Q_T \to \mathbb{R}$
-\item $u_{IC}: \Omega \to \mathbb{R}$
-\item $b: Q_T \to \mathbb{R}^d$
-\end{itemize}
-
-\end{frame}
-%%%%%%%%%%%%%%%% End
-
-%%%%%%%%%%%%%%%% Begin
-\begin{frame}
-\frametitle{Specific problem}
-
 Consider the system
 \begin{align*}
-\partial_t u - \alpha\,\Delta u = f \quad &\text{in } Q_T \\
+\partial_t u - \alpha\,\Delta u = f \quad &\text{in } (0,t)\times\Omega \\
 u(0,x) = u_{IC}(x)\quad &\text{on } \Omega \\
-u(t,x) = u_{BC}(t,x)\quad &\text{on } Q_T
+u(t,x) = u_{BC}(t,x)\quad &\text{on } (0,T)\times\partial\Omega
 \end{align*}
 
-Looking for an analytical solution
+\pause
+Moreover
 $$
 f(t,x) = -\Bigl(\prod_{i=1}^d \sin{(\pi k_i x_i)}\Bigr) 
 \Bigl(a\sin{(at)} + (\beta - \alpha\,\pi^2\,|k|^2)\cos{(at)}\Bigr) e^{-\beta\,t}
 $$
 $$ u_{analytic}(t,x) = \Bigl(\prod_{i=1}^d \sin{(\pi k_i x_i)}\Bigr) \cos{(at)}\,e^{-\beta t} $$
 
+
 \end{frame}
 %%%%%%%%%%%%%%%% End
+
 
 % PINN ideas
 %
@@ -406,6 +385,51 @@ $$ u_{analytic}(t,x) = \Bigl(\prod_{i=1}^d \sin{(\pi k_i x_i)}\Bigr) \cos{(at)}\
 
 %%%%%%%%%%%%%%%% Begin
 \begin{frame}
+\frametitle{PINN training}
+
+\begin{algorithm}[H]
+\caption{PINN Training}
+\begin{algorithmic}[1]
+    \Require Neural network $u_\theta: \mathbb{R}^{d+1}\to\mathbb{R}$, weights $\lambda_{pde}, \lambda_{ic}, \lambda_{bc}$
+    \State \textbf{Initialize} network parameters $\theta$
+    \For{step $= 1, \dots, S$}
+        \State \textbf{Sample the 3 domains}
+        \State \textbf{Forward pass}
+                %$\hat{u}^i_{pde} = u_\theta(x_i^d)$
+                %$\hat{u}_i = \mathcal{N}_\theta(x_i^d)$
+        \State \textbf{Compute loss for each redisual:}
+               \State $\mathcal{L}_{pde} = \mathbb{E}\left[(\partial_t\,u_{\theta} - \alpha\,\Delta\,u_{\theta} - f)^2\right]_{\sim\:\mathcal{U}((0,T)\times\Omega)}$
+               \State $\mathcal{L}_{ic} = \mathbb{E}\left[(u_{\theta} - u_{ic})^2\right]_{\sim\:\mathcal{U}(\Omega)}$
+               \State $\mathcal{L}_{bc} = \mathbb{E}\left[(u_{\theta} - u_{bc})^2\right]_{\sim\:\mathcal{U}((0,T)\times\partial\Omega)}$
+               %\State $\mathcal{L}_{pde} = \mathbb{E}\left[(\partial_t\,\hat{u}_{pde} - \alpha\,\Delta\,\hat{u}_{pde} - f)^2\right]_{\sim\:\mathcal{U}((0,T)\times\Omega)}$
+               %\State $\mathcal{L}_{ic} = \mathbb{E}\left[(\hat{u}_{ic} - u_{ic})^2\right]_{\sim\:\mathcal{U}(\Omega)}$
+               %\State $\mathcal{L}_{bc} = \mathbb{E}\left[(\hat{u}_{bc} - u_{bc})^2\right]_{\sim\:\mathcal{U}((0,T)\times\partial\Omega)}$
+
+               %$\mathcal{R}^{pde} = \partial_t\,\mathcal{N}_\theta(X) - \alpha\,\Delta\,\mathcal{N}_\theta(X) - f$ \\
+        %\State $\mathcal{R}_{pde} = \partial_t\,\hat{u}_{pde} - \alpha\,\Delta\,\hat{u}_{pde} - f(X)$
+        %\State $\mathcal{R}_{bc} = \hat{u}_{pde} - u_{bc}(X)$
+        %\State $\mathcal{R}_{ic} = \hat{u}_{ic} - u_{ic}(X)$
+        %       $\mathcal{R} = \mathcal{F}\!\left[\mathcal{N}_\theta\right](x_j^c)$
+        %\State \textbf{PDE loss:}
+        %       $\mathcal{L}_{\text{data}} = \dfrac{1}{N_d}\displaystyle\sum_i \bigl(\hat{u}_i - u_i^d\bigr)^2$
+        %\State \textbf{BC loss:}
+        %       $\mathcal{L}_{\text{data}} = \dfrac{1}{N_d}\displaystyle\sum_i \bigl(\hat{u}_i - u_i^d\bigr)^2$
+        %\State \textbf{IC loss:}
+        %       $\mathcal{L}_{\text{phys}} = \dfrac{1}{N_c}\displaystyle\sum_j r_j^2$
+        \State \textbf{Total loss:}
+               $\mathcal{L} = \lambda_{pde}\mathcal{L}_{pde} + \lambda_{ic}\,\mathcal{L}_{ic} + \lambda_{bc}\,\mathcal{L}_{bc}$
+        \State \textbf{Backward pass \& update:}
+               $\theta \leftarrow \theta - \eta\,\nabla_\theta \mathcal{L}$
+    \EndFor
+    \State \Return $\theta$
+\end{algorithmic}
+\end{algorithm}
+
+\end{frame}
+%%%%%%%%%%%%%%%% End
+
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
 \frametitle{Next steps}
 
 \begin{algorithm}[H]
@@ -461,7 +485,7 @@ $$ u_{analytic}(t,x) = \Bigl(\prod_{i=1}^d \sin{(\pi k_i x_i)}\Bigr) \cos{(at)}\
 Challanges in higher dimensions
 \begin{itemize}
     \pause
-    \item complexity of the laplace operator's computational graph (vypocetny stom)
+    \item complexity of the laplace operator's computational graph (vypocetny graf)
     \pause
     \item runtime
     \pause
