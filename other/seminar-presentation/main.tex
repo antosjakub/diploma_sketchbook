@@ -8,11 +8,11 @@
 \usepackage{algpseudocode}
 
 % Presentation information
-\title{Your Presentation Title}
-\subtitle{Optional Subtitle}
-\author{Your Name}
-\institute{Your University/Institution}
-\date{\today}
+\title{Numerical approaches to solving the diffusion equation in higer dimensions}
+%\subtitle{Optional Subtitle}
+\author{Jakub Antos}
+\institute{supervisor: Michal Pavelka}
+%\date{\today}
 
 \begin{document}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -31,15 +31,15 @@ Let
 \begin{itemize}
 \item $\Omega \subset \mathbb{R}^d$ be open and bounded
 \item $T \in (0, \infty)$
-\item $Q_T = (0,T) \times \Omega$
+%\item $Q_T = (0,T) \times \Omega$
 \end{itemize}
 
 \pause
 Consider
 \begin{align*}
-\partial_t u + L\,u = f \quad &\text{in } Q_T \\
+\partial_t u + L\,u = f \quad &\text{in } (0,T)\times\Omega \\
 u(0,x) = u_{IC}(x)\quad &\text{on } \Omega \\
-u(t,x) = u_{BC}(t,x)\quad &\text{on } \partial\Omega\times(0,T)
+u(t,x) = u_{BC}(t,x)\quad &\text{on } (0,T)\times\partial\Omega
 \end{align*}
 
 \pause
@@ -57,7 +57,7 @@ Where
 
 %%%%%%%%%%%%%%%% Begin
 \begin{frame}
-\frametitle{Grid based solvers: FDM (Metoda konecnych differenci)}
+\frametitle{Problem statement}
 
 Now take
 $$ \vec{b}=\vec{0}, \quad c = 0, \quad u_{BC} = 0, \Omega = (0,1)^d $$
@@ -73,29 +73,35 @@ u(t,x) = 0\quad &\text{on } (0,T)\times \Omega
 
 %%%%%%%%%%%%%%%% Begin
 \begin{frame}
-\frametitle{FDM: discretize}
+\frametitle{FDM (Finite difference method, konecne diference)}
 
 $$ \partial_t u - \alpha\,\Delta u = f $$
 
+\pause
 Finite differences
+\begin{itemize}
 
-- Forward difference in time
+\item Forward difference in time
 
 $\partial u / \partial t \approx \frac{u(t+\tau,x) - u(t,x)}{\tau} $
 
-- Central difference in space
+\item Central difference in space
 
 $\partial u / \partial x \approx \frac{u(t,x+h/2) - u(t,x-h/2)}{h} $
 
 $\partial^2 u /\partial x^2 \approx \frac{u(t,x+h) - 2u(t,x) + u(t,x-h)}{h^2} $
 
+\end{itemize}
+
+\pause
 Create a uniform grid in time and space
 
+$$ \{t_j\}_{j=0}^{n_t} = (t_0, t_1, ..., t_n, t_{n_t}), \quad t_0 = 0.0, \quad t_{n_t} = T $$
 $$ \{x_i\}_{i=0}^{n+1} = (x_0, x_1, ..., x_n, x_{n+1}), \quad x_0 = 0.0, \quad x_{n+1} = 1.0 $$
 
+\pause
 Define
-
-$$ u^t_i = u(t^n, x_i) $$
+$$ u^j_i = u(t_j, x_i) $$
 
 
 
@@ -108,6 +114,7 @@ $$ u^t_i = u(t^n, x_i) $$
 
 implicit > explicit (explicit needs $\alpha \tau / h^2 \le 1/2$)
 
+\pause
 $$
 \frac{u_i^{t+1} - u_i^{t}}{\tau}
 - \alpha\, \frac{u_{i+1}^{t+1} - 2u_i^{t+1} + u_{i-1}^{t+1}}{h^2} = f_i^{t+1}
@@ -119,6 +126,7 @@ u_i^{t+1} -
 = u_i^{t} + \tau f_i^{t+1}
 $$
 
+\pause
 $$
 U^{t+1} -
 \frac{\alpha\,\tau}{h^2} L\,U^{t+1}
@@ -126,6 +134,7 @@ U^{t+1} -
 = U^t + \tau F^{t+1}
 $$
 
+\pause
 To get $U^{t+1}$ from $U^{t}$, we need to solve:
 
 $$
@@ -133,6 +142,7 @@ $$
 = U^t + \tau F^{t+1}
 $$
 
+\pause
 We need to solve $A\,x=b$, where $x$ and $b$ are of size $N=n^d$.
 \begin{itemize}
 \item $A = (I - \frac{\alpha\,\tau}{h^2} L)$
@@ -155,6 +165,7 @@ Solve $A\,x=b$, where $x$ and $b$ are of size $N=n^d$.
 \item $b = U^t + \tau F^{t+1}$
 \end{itemize}
 
+\pause
 Suppose $n=64$:
 %\begin{center}
 \begin{tabular}{ c c c c c c c c }
@@ -168,7 +179,7 @@ Suppose $n=64$:
  $\implies$  The Curse of Dimensionality (prokleti?) \\
 
 \pause
-\textbf{Question: Stiffness matrix A is sparse (ridka), symmetric, positive definite - will it be enough to make any computation feasible?}
+\textbf{Question: Stiffness matrix A is sparse (ridka), symmetric, positive definite - will it be enough to make any computation in higher dimensions feasible?}
 
 \pause
 \textbf{Answer: Yes!}\pause\textbf{ But not really...}
@@ -359,8 +370,7 @@ $$ u_{analytic}(t,x) = \Bigl(\prod_{i=1}^d \sin{(\pi k_i x_i)}\Bigr) \cos{(at)}\
 \begin{algorithm}[H]
 \caption{Standard NN Training (Mini-Batch Gradient Descent)}
 \begin{algorithmic}[1]
-    \Require Training data $\{(x_i, y_i)\}_{i=1}^{N}$,
-             learning rate $\eta$, epochs $E$, batch size $B$
+    \Require $\mathcal{N}:\mathbb{R}^n\to\mathbb{R}^m$, training data $\{(x_i, y_i)\}_{i=1}^{N}$
     \State \textbf{Initialize} network parameters $\theta$
     \For{epoch $= 1, \dots, E$}
         \State Shuffle training data
@@ -380,6 +390,19 @@ $$ u_{analytic}(t,x) = \Bigl(\prod_{i=1}^d \sin{(\pi k_i x_i)}\Bigr) \cos{(at)}\
 \end{frame}
 %%%%%%%%%%%%%%%% End
 
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
+\frametitle{Physics Informed Neural Networks (PINNs)}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=115mm]{figure.pdf}
+    \label{fig:pinn_arch}
+    \caption{PINN architecture}
+\end{figure}
+
+\end{frame}
+%%%%%%%%%%%%%%%% End
 
 %%%%%%%%%%%%%%%% Begin
 \begin{frame}
@@ -390,7 +413,7 @@ $$ u_{analytic}(t,x) = \Bigl(\prod_{i=1}^d \sin{(\pi k_i x_i)}\Bigr) \cos{(at)}\
 \begin{algorithmic}[1]
     %\Require Sampled points $X^{pde}=\{(x_i,t_i)\}_{i=1}^{N_{pde}}, X^{ic}=\{(x_i,0.0)\}_{i=1}^{N_{ic}}, X^{bc}=\{(x_i,t_i)\}_{i=1}^{N_{bc}}$,
     %         weights $\lambda_{pde}, \lambda_{ic}, \lambda_{bc}$, learning rate $\eta$
-    \Require Neural network $\mathcal{N}_\theta: \mathbb{R}^{d+1}\to\mathbb{R}$, learning rate $\eta$, steps $S$, weights $\lambda_{pde}, \lambda_{ic}, \lambda_{bc}$
+    \Require Neural network $\mathcal{N}_\theta: \mathbb{R}^{d+1}\to\mathbb{R}$, weights $\lambda_{pde}, \lambda_{ic}, \lambda_{bc}$
     \State \textbf{Initialize} network parameters $\theta$
     \For{step $= 1, \dots, S$}
         \State \textbf{Sample points}
