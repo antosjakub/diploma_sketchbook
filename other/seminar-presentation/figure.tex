@@ -6,7 +6,7 @@
 \begin{document}
 \begin{tikzpicture}[
   nn/.style={circle, draw, minimum width=0.5cm, minimum height=0.8cm, align=center},
-  input/.style={nn, fill=blue!20},
+  input/.style={nn, fill=white!20},
   hidden/.style={nn, fill=gray!20},
   output/.style={nn, fill=green!20},
   loss/.style={rectangle, draw, rounded corners, minimum width=2cm, minimum height=1cm, fill=yellow!20},
@@ -96,28 +96,44 @@
 %\draw[arrow] (colloc) to[bend right] (h1);
 
 % Data points
-\node[below=1cm of output] (data) {Data/BC\\$\Gamma$};
+\node[align=center, below=1cm of output] (data) {
+  Sample domains:\\[0.0cm]
+  $\Omega\times(0,T),\: \Omega,$\\[0.0cm]
+  $\partial\Omega\times(0,T)$%\\[0.0cm]
+  %$\Omega$
+};
 \draw[arrow] (data) to[bend left] (output);
 
 % Auto-diff & residual
 \node[right=0.5cm of output] (ad) {Auto-diff};
+\node[right=0.6cm of ad] (r_pde) {$\mathcal{L}_{pde} = ||\partial_t u_\theta + L\,u_\theta - f||^2_{\Omega\times(0,T)}$};
+\node[above right=0.05cm and 0.6cm of ad] (r_ic) {$\mathcal{L}_{ic} = ||u_\theta - u_{ic}||^2_{\Omega}$};
+\node[above right=0.5cm and 0.6cm of ad] (r_bc) {$\mathcal{L}_{bc} = ||u_\theta - u_{bc}||^2_{\partial\Omega\times(0,T)}$};
 \draw[arrow] (output) -- (ad);
-\node[right=1cm of ad] (f) {$f = u_t + N[u] = 0$};
-\draw[arrow] (ad) -- (f);
+\draw[arrow] (ad) -- (r_pde);
+%\draw[arrow] (output) to[bend left] (r_ic);
+%\draw[arrow] (output) to[bend left] (r_bc);
 
 % Loss
-\node[loss, below=1.5cm of f] (lossbox) {
-$L_\text{tot} = L_u + L_f$\\[0.2cm]
-$L_u = \|u - z\|_\Gamma$\\[0.2cm]
-$L_f = \|f\|_\Omega$
+\node[loss, align=center, below=1.5cm of r_pde] (lossbox) {
+$\mathcal{L} = \lambda_{pde}\mathcal{L}_{pde} + \lambda_{ic}\mathcal{L}_{ic} + \lambda_{bc}\mathcal{L}_{bc}$
+%$L_u = \|u - z\|_\Gamma$\\[0.2cm]
+%$L_f = \|f\|_\Omega$
 };
-\draw[arrow] ($(output.south east)!0.5!(f.south west)$) -- (lossbox.north west);
-\draw[arrow] (data) -- (lossbox.west);
-%\draw[arrow] (colloc) -- (lossbox.south);
+%\draw[arrow] ($(output.south east)!0.5!(r_pde.south west)$) -- (lossbox.north west);
+\draw[arrow] (r_pde) -- (lossbox.north);
+%\draw[arrow] (data) -- (lossbox.west);
 
 % PDE example
-\node[draw, rectangle, below=0.5cm of lossbox, fill=orange!20, minimum width=3cm] (pde) {
-$\frac{\partial u}{\partial t} + \mathcal{N}[u; \lambda] = 0$
+\node[draw, rectangle, align=right, above=1.5cm of ad, fill=orange!20, minimum width=2.5cm] (pde) {
+$\partial_t u + L\,u = f$\\[0.0cm]
+$u = u_{ic}$\\[0.0cm]
+$u = u_{bc}$
+};
+\node[align=left, above right=1.5cm and 0.0cm of ad, minimum width=3cm] (pde_domains) {
+$\Omega\times(0,T)$\\[0.0cm]
+$\Omega$\\[0.0cm]
+$\partial\Omega\times(0,T)$
 };
 
 \end{tikzpicture}

@@ -4,6 +4,9 @@
 \usepackage{graphicx}
 \usepackage{listings}
 
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
 % Presentation information
 \title{Your Presentation Title}
 \subtitle{Optional Subtitle}
@@ -36,7 +39,7 @@ Consider
 \begin{align*}
 \partial_t u + L\,u = f \quad &\text{in } Q_T \\
 u(0,x) = u_{IC}(x)\quad &\text{on } \Omega \\
-u(t,x) = u_{BC}(t,x)\quad &\text{on } (0,T)\times \Omega
+u(t,x) = u_{BC}(t,x)\quad &\text{on } \partial\Omega\times(0,T)
 \end{align*}
 
 \pause
@@ -154,14 +157,15 @@ Solve $A\,x=b$, where $x$ and $b$ are of size $N=n^d$.
 
 Suppose $n=64$:
 %\begin{center}
-\begin{tabular}{ c c c c c c c c c }
- $d$ & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8\\ 
- $n^d$ & 64 & 4,096 & 262,144 & 16.8e6 & 1.07e9 & 6.87e10 & 4.40e12 & 2.81e14
+\begin{tabular}{ c c c c c c c c }
+ $d$ & 1 & 2 & 3 & 4 & 5 & 6 & 7\\ 
+ $n^d$ & 64 & 4,096 & 262,144 & 16.8e6 & 1.07e9 & 6.87e10 & 4.40e12
 \end{tabular}
 %\end{center}
+\\
 
 \pause
-$\implies$  The Curse of Dimensionality (prokleti?) \\
+ $\implies$  The Curse of Dimensionality (prokleti?) \\
 
 \pause
 \textbf{Question: Stiffness matrix A is sparse (ridka), symmetric, positive definite - will it be enough to make any computation feasible?}
@@ -270,34 +274,206 @@ for loop
 %%%%%%%%%%%%%%%% End
 
 
+
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
+\frametitle{Problem statement}
+
+\pause
+Let
+\begin{itemize}
+\item $\Omega \subset \mathbb{R}^d$ be open and bounded
+\item $T \in (0, \infty)$
+\item $Q_T = (0,T) \times \Omega$
+\end{itemize}
+
+\pause
+Consider
+\begin{align*}
+\partial_t u + L\,u = f \quad &\text{in } Q_T \\
+u(0,x) = u_{IC}(x)\quad &\text{on } \Omega \\
+u(t,x) = u_{BC}(t,x)\quad &\text{in } Q_T 
+\end{align*}
+
+\pause
+Where
+\begin{itemize}
+\item $L\,u = -\alpha\,\Delta u + \vec{b} \cdot \nabla u + c\, u$
+\pause
+\item $u,f,c,u_{BC}: Q_T \to \mathbb{R}$
+\item $u_{IC}: \Omega \to \mathbb{R}$
+\item $b: Q_T \to \mathbb{R}^d$
+\end{itemize}
+
+\end{frame}
+%%%%%%%%%%%%%%%% End
+
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
+\frametitle{Specific problem}
+
+Consider the system
+\begin{align*}
+\partial_t u - \alpha\,\Delta u = f \quad &\text{in } Q_T \\
+u(0,x) = u_{IC}(x)\quad &\text{on } \Omega \\
+u(t,x) = u_{BC}(t,x)\quad &\text{on } Q_T
+\end{align*}
+
+Looking for an analytical solution
+$$
+f(t,x) = -\Bigl(\prod_{i=1}^d \sin{(\pi k_i x_i)}\Bigr) 
+\Bigl(a\sin{(at)} + (\beta - \alpha\,\pi^2\,|k|^2)\cos{(at)}\Bigr) e^{-\beta\,t}
+$$
+$$ u_{analytic}(t,x) = \Bigl(\prod_{i=1}^d \sin{(\pi k_i x_i)}\Bigr) \cos{(at)}\,e^{-\beta t} $$
+
+\end{frame}
+%%%%%%%%%%%%%%%% End
+
+% PINN ideas
+%
+% - diff num layers & dim -> growing memory
+% - use weak form -> much less memory & similar performance
+% - set l2 limit - how does each dim differ? how does it scale with dim?
+
 %%%%%%%%%%%%%%%% Begin
 \begin{frame}
 \frametitle{Physics Informed Neural Networks (PINNs)}
-Intro
-- show diagram
-- loss from NN
-- how to train?
-- sample points
 
-Challanges in high dimensions
-- laplace operator computation
+\pause
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=115mm]{figure.pdf}
+    \label{fig:pinn_arch}
+    \caption{PINN architecture}
+\end{figure}
 
-How to handle them
-- stoch laplace comp
-- domain - based on loss
-- parallel
-
-
-Advantages / Disagvantages
-\begin{itemize}
-    \item flexibility
-    \item memory efficient
-\end{itemize}
-
-Hardware requirements
-- GPU(s)
 \end{frame}
 %%%%%%%%%%%%%%%% End
+
+
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
+
+\frametitle{NN training}
+
+\begin{algorithm}[H]
+\caption{Standard NN Training (Mini-Batch Gradient Descent)}
+\begin{algorithmic}[1]
+    \Require Training data $\{(x_i, y_i)\}_{i=1}^{N}$,
+             learning rate $\eta$, epochs $E$, batch size $B$
+    \State \textbf{Initialize} network parameters $\theta$
+    \For{epoch $= 1, \dots, E$}
+        \State Shuffle training data
+        \For{each mini-batch $\mathcal{B} \subset \{1,\dots,N\}$, $|\mathcal{B}|=B$}
+            \State \textbf{Forward pass:} compute $\hat{y}_i = \mathcal{N}_\theta(x_i)$ for $i\in\mathcal{B}$
+            \State \textbf{Compute loss:}
+            $\mathcal{L}(\theta) = \dfrac{1}{B}\displaystyle\sum_{i\in\mathcal{B}}
+                \bigl(\hat{y}_i - y_i\bigr)^2$
+            \State \textbf{Backward pass:} compute $\nabla_\theta \mathcal{L}$ via backpropagation
+            \State \textbf{Update:} $\theta \leftarrow \theta - \eta\,\nabla_\theta \mathcal{L}$
+        \EndFor
+    \EndFor
+    \State \Return $\theta$
+\end{algorithmic}
+\end{algorithm}
+
+\end{frame}
+%%%%%%%%%%%%%%%% End
+
+
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
+\frametitle{Next steps}
+
+\begin{algorithm}[H]
+\caption{PINN Training}
+\begin{algorithmic}[1]
+    %\Require Sampled points $X^{pde}=\{(x_i,t_i)\}_{i=1}^{N_{pde}}, X^{ic}=\{(x_i,0.0)\}_{i=1}^{N_{ic}}, X^{bc}=\{(x_i,t_i)\}_{i=1}^{N_{bc}}$,
+    %         weights $\lambda_{pde}, \lambda_{ic}, \lambda_{bc}$, learning rate $\eta$
+    \Require Neural network $\mathcal{N}_\theta: \mathbb{R}^{d+1}\to\mathbb{R}$, learning rate $\eta$, steps $S$, weights $\lambda_{pde}, \lambda_{ic}, \lambda_{bc}$
+    \State \textbf{Initialize} network parameters $\theta$
+    \For{step $= 1, \dots, S$}
+        \State \textbf{Sample points}
+                $\{(x_{pde}^i,t_{pde}^i)\}_{i=1}^{N_{pde}}\sim\mathcal{U}(Q_T)$,
+                $\{x_{ic}^i\}\sim\mathcal{U}(\Omega)$,
+                $\{(x_{bc}^i,t_{bc}^i)\}\sim\mathcal{U}(Q_T)$
+                %$X_{ic}\in\mathbb{R}^{N_{ic}\times d}$,
+                %$X_{bc}\in\mathbb{R}^{N_{bc}\times(d+1)}$,
+ 
+        \State \textbf{Forward pass:}
+                $\hat{u}_i^{pde} = \mathcal{N}_\theta(x_i^d)$
+                $\hat{u}_i = \mathcal{N}_\theta(x_i^d)$
+        \State \textbf{Residuals:} (computed via automatic differentiation)
+               %$\mathcal{R}^{pde} = \partial_t\,\mathcal{N}_\theta(X) - \alpha\,\Delta\,\mathcal{N}_\theta(X) - f$ \\
+        \State $\mathcal{R}_{pde} = \partial_t\,\hat{u}_{pde} - \alpha\,\Delta\,\hat{u}_{pde} - f(X)$
+        \State $\mathcal{R}_{bc} = \hat{u}_{pde} - u_{bc}(X)$
+        \State $\mathcal{R}_{ic} = \hat{u}_{ic} - u_{ic}(X)$
+        %       $\mathcal{R} = \mathcal{F}\!\left[\mathcal{N}_\theta\right](x_j^c)$
+        %\State \textbf{PDE loss:}
+        %       $\mathcal{L}_{\text{data}} = \dfrac{1}{N_d}\displaystyle\sum_i \bigl(\hat{u}_i - u_i^d\bigr)^2$
+        %\State \textbf{BC loss:}
+        %       $\mathcal{L}_{\text{data}} = \dfrac{1}{N_d}\displaystyle\sum_i \bigl(\hat{u}_i - u_i^d\bigr)^2$
+        %\State \textbf{IC loss:}
+        %       $\mathcal{L}_{\text{phys}} = \dfrac{1}{N_c}\displaystyle\sum_j r_j^2$
+        \State \textbf{Compute loss for each residual:}
+            $\mathcal{L}_{k}(\theta) = \dfrac{1}{N_k}\displaystyle\sum_{i=1}^{N_k}(\mathcal{R}^i_k)^2$
+        \State \textbf{Total loss:}
+               $\mathcal{L} = \lambda_{pde}\mathcal{L}_{pde} + \lambda_{ic}\,\mathcal{L}_{ic} + \lambda_{bc}\,\mathcal{L}_{bc}$
+        \State \textbf{Backward pass \& update:}
+               $\theta \leftarrow \theta - \eta\,\nabla_\theta \mathcal{L}$
+    \EndFor
+    \State \Return $\theta$
+\end{algorithmic}
+\end{algorithm}
+
+\end{frame}
+%%%%%%%%%%%%%%%% End
+
+
+
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
+\frametitle{PINNs - challanges}
+
+Challanges in higher dimensions
+\begin{itemize}
+    \pause
+    \item complexity of the laplace operator's computational graph (vypocetny stom)
+    \pause
+    \item runtime
+    \pause
+    \item sampling
+    \pause
+    \item parameters, parameters, parameters, ...
+\end{itemize}
+\pause
+How to handle them
+\begin{itemize}
+    \pause
+    \item use weak form, hutchinson trace estimation, ...
+    \pause
+    \item compute in paralle
+    \pause
+    \item adaptive sampling
+\end{itemize}
+
+\end{frame}
+%%%%%%%%%%%%%%%% End
+
+
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
+\frametitle{PINNs recap}
+
+\begin{itemize}
+    \item $u_\theta: \mathbb{R}^{(d+1)}\to\mathbb{R}$
+    \item memory efficient but significant runtime 
+    \item flexibility
+\end{itemize}
+
+\end{frame}
+%%%%%%%%%%%%%%%% End
+
 
 
 %%%%%%%%%%%%%%%% Begin
@@ -314,6 +490,12 @@ Hardware requirements
 %%%%%%%%%%%%%%%% End
 
 
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
+\frametitle{Questions}
+
+\end{frame}
+%%%%%%%%%%%%%%%% End
 
 
 
