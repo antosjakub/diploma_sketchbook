@@ -462,26 +462,70 @@ How to handle them
 \end{frame}
 %%%%%%%%%%%%%%%% End
 
-
 %%%%%%%%%%%%%%%% Begin
 \begin{frame}
-\frametitle{PINN results: pde vs weak form.}
-
-%
+\frametitle{PINN results: Optimizers.}
+Two optimizers:
+\begin{itemize}
+    \pause
+    \item Adam
+    \pause
+    \item L-BGFS
+\end{itemize}
 
 \end{frame}
 %%%%%%%%%%%%%%%% End
 
 %%%%%%%%%%%%%%%% Begin
 \begin{frame}
+\frametitle{PINN results: Adam.}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=120mm]{img/training_no_lgbt_loss.png}
+    \label{fig:no_lgbt_loss}
+\end{figure}
+\end{frame}
+%%%%%%%%%%%%%%%% End
+
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
 \frametitle{PINN results: L-BFGS for the win.}
-Two optimizers
-\begin{itemize}
-    \item Adam
-    \item L-BGFS
-\end{itemize}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=120mm]{img/training_lgbt_loss.png}
+    \label{fig:lgbt_loss}
+\end{figure}
+\end{frame}
+%%%%%%%%%%%%%%%% End
 
 
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
+\frametitle{PINN results: pde vs weak form.}
+%
+%% show mem for pde vs weak
+%% show time for pde vs weak
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=120mm]{img/loss_mem__pde.png}
+    \label{fig:loss_mem_pde}
+\end{figure}
+%
+\end{frame}
+%%%%%%%%%%%%%%%% End
+
+%%%%%%%%%%%%%%%% Begin
+\begin{frame}
+\frametitle{PINN results: pde vs weak form.}
+%
+%% show mem for pde vs weak
+%% show time for pde vs weak
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=120mm]{img/loss_mem__weak_form.png}
+    \label{fig:loss_mem_weak_form}
+\end{figure}
+%
 \end{frame}
 %%%%%%%%%%%%%%%% End
 
@@ -530,7 +574,14 @@ How frequently to sample?
 %%%%%%%%%%%%%%%% Begin
 \begin{frame}
 \frametitle{PINN results: A picture.}
+% straneg pinn fails
 
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=100mm]{img/pinn_solution_3plots.png}
+    \label{fig:3_plots}
+    \caption{(Left) PINN solution, (Middle) analytic solution, (Right) difference between the two.}
+\end{figure}
 
 \end{frame}
 %%%%%%%%%%%%%%%% End
@@ -541,9 +592,13 @@ How frequently to sample?
 \frametitle{PINNs recap}
 
 \begin{itemize}
+    \pause
     \item $u_\theta: \mathbb{R}^{(d+1)}\to\mathbb{R}$
+    \pause
     \item memory efficient, but significant runtime 
+    \pause
     \item flexibility
+    \pause
     \item parameters, parameters, parameters, ...
 \end{itemize}
 
