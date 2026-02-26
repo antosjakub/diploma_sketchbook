@@ -28,7 +28,7 @@ def fk_advection(t_eval, x_eval, T=1.0, N_paths=100000, dt=0.01):
 def fk_multi_d_advection(t_eval, x_eval, T=1.0, d=3, a=1.0, b=1.0, v=None, N_paths=10^5, dt=0.01):
     if v is None: v = np.ones(d)
     tau = T - t_eval
-    if tau <= 0: return (2*np.pi)**(-d/2) * np.exp(-0.5 * np.sum(x_eval**2))
+    if tau <= 0: return (2*np.pi)**(-d/2) * np.exp(-0.5 * np.sum(x_eval**2)), 0.0
     
     N_steps = int(tau / dt)
     np.random.seed(42)
