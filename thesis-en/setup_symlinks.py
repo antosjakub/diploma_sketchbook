@@ -2,16 +2,18 @@
 import subprocess
 from pathlib import Path
 
-names = ["PINN"]
+names = ["PINN", "fdm"]
 fig_dir = 'figures'
 LINK_CHAPTERS = True
 LINK_FIGURES =  True
 SETUP_BIB =     True # concentrate all bib files into one
 
+chapter_separator = '%  ==========================================================================='
 
 if SETUP_BIB:
     print("===== 1. Concentrate all bibs into one")
     info = [
+        chapter_separator,
         '%',
         '%  An example of a bibliographical database in BibTeX format,',
         '%  which is used by biblatex to create the list of referenced works.',
@@ -28,9 +30,7 @@ if SETUP_BIB:
         '%    *  If a name contains a capital letter, which must be kept such,',
         '%       use curly brackets ({T}hailand, {HIV}).',
         '%',
-        '%  ===========================================================================',
-        '',
-        ''
+        chapter_separator
     ]
     all_lines = [f'{l}\n' for l in info]
     filename = "bibliography.bib"
@@ -38,7 +38,8 @@ if SETUP_BIB:
         filename_rel = f'../{name}/thesis-en/{filename}'
         with open(filename_rel, "r") as f:
             lines = f.readlines()
-            all_lines.append(f"% --- {name}")
+            all_lines.append(f"\n\n{chapter_separator}")
+            all_lines.append(f"\n% --- {name}\n")
             all_lines.extend(lines)
             all_lines.append("\n")
     #text = '\n'.join(all_lines)
