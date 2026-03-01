@@ -64,3 +64,6 @@ class HeatEquation:
     def ic_residual(self, X, u):
         return u - self.u_IC(X[:,:-1])
 
+class FokkerPlanck:
+    def __init__(self):
+        pass

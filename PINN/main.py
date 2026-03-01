@@ -32,9 +32,11 @@ parser.add_argument("--l2_stop_crit_lbfgs", default=0.001, type=float, help="")
 parser.add_argument("--output_dir_name", default="run_latest/", type=str, help="")
 parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
 parser.add_argument("--use_weak_form", action="store_true", help="")
-#
-#parser.add_argument("--starting_model", default=None, type=str, help="")
-#model = torch.load(f'{dir_name}/model.pth', weights_only=False)
+# enable transfer learning / finetuning
+parser.add_argument("--starting_model", default=None, type=str, help="")
+# load the pde mode with default parameters, optionally use the .json file to init the class
+#parser.add_argument("--pde_model_name", default=None, type=str, help="HeatEquation")
+#parser.add_argument("--pde_model_args", default=None, type=str, help="pde_model_args.json")
 
 
 class PINN(nn.Module):
@@ -427,7 +429,10 @@ if __name__ == "__main__":
     os.makedirs(dir_name, exist_ok=True)    
     
     # Initialize model
-    model = PINN(D, layers).to(device)
+    if args.starting_model:
+        model = torch.load(args.starting_model, weights_only=False)
+    else:
+        model = PINN(D, layers).to(device)
     #model = torch.compile(model, mode="reduce-overhead")
     #model = torch.compile(model)
     
@@ -441,7 +446,6 @@ if __name__ == "__main__":
     #a = 4*torch.pi * (1.67 * torch.ones(d))
     #a = torch.tensor([11.0997, 7.5390, 9.535, 11.432, 8.1, 9.6, 7.4])[:d]
     a = 2 * torch.pi * torch.ones(d)
-    print(a)
     import pde_models
     pde_model = pde_models.HeatEquation(d, alpha=0.01, a=a)
     if args.use_weak_form:
@@ -454,26 +458,32 @@ if __name__ == "__main__":
         use_weak_form = False
         pde_residual = pde_model.pde_residual
 
-    
+    # Preparation time
+    losses = [] 
+    l2_errs = [] 
+
     # Train the model
-    losses, l2_errs = train_pinn(
-        model, optimizer, scheduler,
-        pde_residual, pde_model.bc_residual, pde_model.ic_residual,
-        pde_model.u_analytic,
-        d,
-        n_steps=args.n_steps,
-        n_steps_decay=args.n_steps_decay,
-        n_steps_log=args.n_steps_log,
-        lambda_pde=args.lambda_pde, lambda_bc=args.lambda_bc, lambda_ic=args.lambda_ic,
-        n_points_pde=args.n_points_pde, n_points_bc=args.n_points_bc, n_points_ic=args.n_points_ic,
-        l2_stop_crit=args.l2_stop_crit,
-        profiler_report_filename=args.profiler_report_filename,
-        output_dir_name=dir_name,
-        compute_laplace=not use_weak_form,
-        device=device
-    )
-    print("\nAdam training complete!")
-    torch.save(model, f'{dir_name}/model_adam.pth')
+    if args.n_steps > 0:
+        losses_adam, l2_errs_adam = train_pinn(
+            model, optimizer, scheduler,
+            pde_residual, pde_model.bc_residual, pde_model.ic_residual,
+            pde_model.u_analytic,
+            d,
+            n_steps=args.n_steps,
+            n_steps_decay=args.n_steps_decay,
+            n_steps_log=args.n_steps_log,
+            lambda_pde=args.lambda_pde, lambda_bc=args.lambda_bc, lambda_ic=args.lambda_ic,
+            n_points_pde=args.n_points_pde, n_points_bc=args.n_points_bc, n_points_ic=args.n_points_ic,
+            l2_stop_crit=args.l2_stop_crit,
+            profiler_report_filename=args.profiler_report_filename,
+            output_dir_name=dir_name,
+            compute_laplace=not use_weak_form,
+            device=device
+        )
+        losses += losses_adam
+        l2_errs += l2_errs_adam
+        print("\nAdam training complete!")
+        torch.save(model, f'{dir_name}/model_adam.pth')
 
     # --- Phase 2: L-BFGS fine-tuning ---
     if args.n_steps_lbfgs > 0:
@@ -491,10 +501,12 @@ if __name__ == "__main__":
             compute_laplace=not use_weak_form,
             device=device
         )
-        losses    += losses_lbfgs
-        l2_errs   += l2_errs_lbfgs
+        losses += losses_lbfgs
+        l2_errs += l2_errs_lbfgs
         print("\nL-BFGS fine-tuning complete!")
         torch.save(model, f'{dir_name}/model_adam_lbfgs.pth')
+    
+    # Dan
     print("\nTraining complete!")
     
     import json
