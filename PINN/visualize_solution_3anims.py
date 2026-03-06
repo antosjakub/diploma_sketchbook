@@ -4,7 +4,7 @@ save as gif
 """
 import torch
 import matplotlib.pyplot as plt
-from main import PINN
+from main import PINN_SepTime
 
 import sys
 if len(sys.argv) > 1:
@@ -20,7 +20,8 @@ d = metadata["d"]
 D = d + 1 # space + time
 
 import pde_models
-pde_model = pde_models.HeatEquation(d, a=torch.zeros(d))
+pde_model = pde_models.TravellingGaussPacket_v2(d)
+#pde_model = pde_models.HeatEquation(d, a=torch.zeros(d))
 pde_model.load_pde_params(f"{dir_name}/pde_params.json")
 u_analytic = pde_model.u_analytic
 

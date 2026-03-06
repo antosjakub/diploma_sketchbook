@@ -6,7 +6,7 @@ make 3 plots:
 """
 import torch
 import matplotlib.pyplot as plt
-from main import PINN
+from main import PINN_SepTime
 
 import sys
 if len(sys.argv) > 1:
@@ -22,8 +22,9 @@ d = metadata["d"]
 D = d + 1 # space + time
 
 import pde_models
-pde_model = pde_models.HeatEquation(d, a=torch.zeros(d))
-pde_model.load_pde_params(f"{dir_name}/pde_params.json")
+#pde_model = pde_models.HeatEquation(d, a=torch.zeros(d))
+#pde_model.load_pde_params(f"{dir_name}/pde_params.json")
+pde_model = pde_models.TravellingGaussPacket_v2(d)
 u_analytic = pde_model.u_analytic
 
 model = torch.load(f'{dir_name}/model.pth', weights_only=False)

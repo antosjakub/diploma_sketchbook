@@ -13,6 +13,12 @@ from dash import Dash, dcc, html, Input, Output, State
 import json
 
 
+import sys
+if len(sys.argv) > 1:
+    dir_name = sys.argv[1]
+else:
+    dir_name = 'run_latest'
+print(f"Will be working in directory '{dir_name}'...")
 
 u_zminmax_const = [-1.0, 1.0]
 err_zminmax_const = [-0.1, 0.1]
@@ -22,26 +28,32 @@ err_zminmax_manual = False
 
 nx = 100
 nt = 200
-
-
-with open('args.json') as f:
-    args = json.load(f)
-    d = args["d"]
-#d = 3
-
 t_max = 1.0
 
+import json
+with open(f"{dir_name}/args.json", "r") as f:
+    metadata = json.load(f)
+d = metadata["d"]
+D = d + 1 # space + time
 
-from main import PINN
-model = torch.load('model.pth', weights_only=False)
+from main import PINN_SepTime
+model = torch.load(f'{dir_name}/model.pth', weights_only=False)
 def fun_1(X):
     with torch.no_grad():
         return model(X)
 
 import pde_models
-pde_model = pde_models.HeatEquation(d, a=torch.zeros(d))
-pde_model.load_pde_params("pde_params.json")
+#pde_model = pde_models.HeatEquation(d, a=torch.zeros(d))
+pde_model = pde_models.TravellingGaussPacket_v2(d)
+pde_model.load_pde_params(f"{dir_name}/pde_params.json")
 fun_2 = pde_model.u_analytic
+
+#d = 4
+#import pde_models
+#pde_model = pde_models.TravellingGaussPacket_v2(d)
+#fun_1 = pde_model.u_analytic
+#fun_2 = pde_model.u_analytic
+
 
 ## parameters
 #alpha = 4
@@ -457,8 +469,8 @@ def update_heatmap(*args):
     for i in range(3):
         curr_figs[i]["data"][0]["z"] = Y_grids[i]
         if i != 2:
-            #curr_figs[i]["data"][0]["zmin"] = u_zminmax[0]
-            #curr_figs[i]["data"][0]["zmax"] = u_zminmax[1]
+            curr_figs[i]["data"][0]["zmin"] = u_zminmax[0]
+            curr_figs[i]["data"][0]["zmax"] = u_zminmax[1]
             pass
         else:
             curr_figs[i]["data"][0]["zmin"] = err_zminmax[0]
@@ -469,4 +481,4 @@ def update_heatmap(*args):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=8080)
+    app.run(debug=True, port=8082)
