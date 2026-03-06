@@ -2,29 +2,37 @@
 
 \chapter{Phyics-Informed Neural Networks (PINNs)}
 
-
 Quite recently, solving PDEs using deep learning has emerged as a new field of scientific machine learning (SciML), leveraging the universal approximation theorem \cite{uni_approx} and high expressivity of neural networks.
 
 In general, deep neural networks could approximate any high-dimensional function given that sufficient training data are supplied. \cite{uni_approx}
 
-
-NNs
-physics-informed - PDE in the loss function
-
 Their advantage lies in the flexibility and the adaptibility to different problems.
 However, this advantege is also a burden - as there are many architectural and parametric choices at each level.
 
-
-\section{Why they might work}
-
-automatic differentiation - no numerical, but symbolic graph - also a challange
-
-motivation behind ML / deep learning / PINNS:
-
-%(wikipedia: https://en.wikipedia.org/wiki/Physics-informed_neural_networks)
+We base out PINN architecture on a few crutial publications and existing established codebases.
+Namely:
+\begin{itemize}
+    \item studies published by Karniadakis et. al, including
+    \begin{itemize}
+        \item HTE
+        \item SDGD
+    \end{itemize}
+    \item deepxde - rar
+\end{itemize}
 
 
 \section{Architecture}
+
+Automatic differentiation - builds computational graph
+
+physics-informed - PDE in the loss function
+
+\begin{figure}
+    \centering
+    \includegraphics[width=150mm]{pinn_arch.pdf}
+    \caption{}
+    \label{fig:pinn_arch}
+\end{figure}
 
 - give diagram of NN
 
@@ -36,6 +44,69 @@ motivation behind ML / deep learning / PINNS:
 - algorithm
 
 - tanh activations - smooth derivatives
+
+\subsection{Training}
+
+\begin{algorithm}[H]
+\caption{Mini-batch PINN training}
+\begin{algorithmic}[1]
+    \Require $\mathcal{N}:\mathbb{R}^n\to\mathbb{R}^m$, training data $\{(x_i, y_i)\}_{i=1}^{N}$
+    \State \textbf{Initialize} network parameters $\theta$
+    \For{epoch $= 1, \dots, E$}
+        \State Shuffle training data
+        \For{each mini-batch $\mathcal{B} \subset \{1,\dots,N\}$, $|\mathcal{B}|=B$}
+            \State \textbf{Forward pass:} compute $\hat{y}_i = \mathcal{N}_\theta(x_i)$ for $i\in\mathcal{B}$
+            \State \textbf{Compute loss:}
+            $\mathcal{L}(\theta) = \dfrac{1}{B}\displaystyle\sum_{i\in\mathcal{B}}
+                \bigl(\hat{y}_i - y_i\bigr)^2$
+            \State \textbf{Backward pass:} compute $\nabla_\theta \mathcal{L}$ via backpropagation
+            \State \textbf{Update:} $\theta \leftarrow \theta - \eta\,\nabla_\theta \mathcal{L}$
+        \EndFor
+    \EndFor
+    \State \Return $\theta$
+\end{algorithmic}
+\end{algorithm}
+
+
+\begin{algorithm}[H]
+\caption{Full-batch PINN Training}
+\begin{algorithmic}[1]
+    \Require Neural network $u_\theta: \mathbb{R}^{d+1}\to\mathbb{R}$, weights $\lambda_{pde}, \lambda_{ic}, \lambda_{bc}$
+    \State \textbf{Initialize} network parameters $\theta$
+    \For{step $= 1, \dots, S$}
+        \State \textbf{Sample the 3 domains}
+        \State \textbf{Forward pass}
+                %$\hat{u}^i_{pde} = u_\theta(x_i^d)$
+                %$\hat{u}_i = \mathcal{N}_\theta(x_i^d)$
+        \State \textbf{Compute loss for each redisual:}
+               \State $\mathcal{L}_{pde} = \mathbb{E}\left[(\partial_t\,u_{\theta} - \alpha\,\Delta\,u_{\theta} - f)^2\right]_{\sim\:\mathcal{U}((0,T)\times\Omega)}$
+               \State $\mathcal{L}_{ic} = \mathbb{E}\left[(u_{\theta} - u_{ic})^2\right]_{\sim\:\mathcal{U}(\Omega)}$
+               \State $\mathcal{L}_{bc} = \mathbb{E}\left[(u_{\theta} - u_{bc})^2\right]_{\sim\:\mathcal{U}((0,T)\times\partial\Omega)}$
+               %\State $\mathcal{L}_{pde} = \mathbb{E}\left[(\partial_t\,\hat{u}_{pde} - \alpha\,\Delta\,\hat{u}_{pde} - f)^2\right]_{\sim\:\mathcal{U}((0,T)\times\Omega)}$
+               %\State $\mathcal{L}_{ic} = \mathbb{E}\left[(\hat{u}_{ic} - u_{ic})^2\right]_{\sim\:\mathcal{U}(\Omega)}$
+               %\State $\mathcal{L}_{bc} = \mathbb{E}\left[(\hat{u}_{bc} - u_{bc})^2\right]_{\sim\:\mathcal{U}((0,T)\times\partial\Omega)}$
+
+               %$\mathcal{R}^{pde} = \partial_t\,\mathcal{N}_\theta(X) - \alpha\,\Delta\,\mathcal{N}_\theta(X) - f$ \\
+        %\State $\mathcal{R}_{pde} = \partial_t\,\hat{u}_{pde} - \alpha\,\Delta\,\hat{u}_{pde} - f(X)$
+        %\State $\mathcal{R}_{bc} = \hat{u}_{pde} - u_{bc}(X)$
+        %\State $\mathcal{R}_{ic} = \hat{u}_{ic} - u_{ic}(X)$
+        %       $\mathcal{R} = \mathcal{F}\!\left[\mathcal{N}_\theta\right](x_j^c)$
+        %\State \textbf{PDE loss:}
+        %       $\mathcal{L}_{\text{data}} = \dfrac{1}{N_d}\displaystyle\sum_i \bigl(\hat{u}_i - u_i^d\bigr)^2$
+        %\State \textbf{BC loss:}
+        %       $\mathcal{L}_{\text{data}} = \dfrac{1}{N_d}\displaystyle\sum_i \bigl(\hat{u}_i - u_i^d\bigr)^2$
+        %\State \textbf{IC loss:}
+        %       $\mathcal{L}_{\text{phys}} = \dfrac{1}{N_c}\displaystyle\sum_j r_j^2$
+        \State \textbf{Total loss:}
+               $\mathcal{L} = \lambda_{pde}\mathcal{L}_{pde} + \lambda_{ic}\,\mathcal{L}_{ic} + \lambda_{bc}\,\mathcal{L}_{bc}$
+        \State \textbf{Backward pass \& update:}
+               $\theta \leftarrow \theta - \eta\,\nabla_\theta \mathcal{L}$
+    \EndFor
+    \State \Return $\theta$
+\end{algorithmic}
+\end{algorithm}
+
+
 
 
 \section{Most important}
@@ -57,6 +128,201 @@ loss weighting
 
 
 
+\section{The curse of dimensionality}
+
+Need to throughly sample, but
+sampling in d-dimens demands $N_colloc\sim vol(\Omega)$.
+-> need to store points - memory
+
+Laplace computation - memory increases:
+- linearly as $O(d)$, for $A = \alpha$, since $\alpha\Delta u = \alpha\sum_i^d frac{\partial^2 u}{\partial x_{i}}$
+- qudratically $O(d^2)$ for $A = A(x)$ since $div(A(x)\nabla) = \sum_{ij}^d a_{ij}(x)\frac{\partial^2 u}{\partial x_{ij}}$
+actually:
+The memory scales quadratically as d increases due to
+- the growing network size at the first input layer of uθ, and
+- the increasing number of second-order derivatives
+
+The catch is that the network must be expressive enough (enough params) to represent the solution, and the optimization landscape can be very rough.
+
+\subsection{Adressing CoD}
+a) sampling - sample adaptively, random walks - Feynman-Kac
+b) approx the laplace SDGD, Hutchinson
+c) adapting weighting schemes for residual weights $\lambda$
+d) other
+
+\subsection{a) Sampling strategies}
+
+\subsubsection{Latin hypercube sampling}
+In high dimensions, uniform sampling becomes inefficient as it can leave large parts of the domain unsampled, and thus miss key regions.
+To ensure a better space coverage of the domain, a Latin hypercube sampling (LHS) can be utilized.
+In one dimension, LHC divides the range into M equally probable intervals and samples the domain such that no two points lie in the same interval.
+In multi dimensional domains, 1-dimensional samples are generated independently and then paired to form d-dimensinoal points.
+
+\subsubsection{Residual-based adaptive sampling}
+The training can be made even more efficient by concentrainng on regions where the networks struggles the most.
+Concretely, the doimain can be sampled proportianally to the residual.
+The stragegy is a follows:
+\begin{itemize}
+\item at the beggining of the trainging sample a fixed set of points $X$
+\item every K epochs:
+\item sample a large pools of candidates points $X_{cand}$
+\item evaluate the residual at $X_{cand}$
+\item pick n point from $X_{cand}$ with with probability proportial to the residual
+\item update $X$ with thus selected points
+\end{itemize}
+
+\subsubsection{Langevin dynamics - TD}
+(NeurIPS 2025)
+sample the domain
+treat point movements as langevin dynamics 
+- add noise
+- movements based on residual forces
+
+\subsubsection{TD}
+sample using LHC up front - 10,000 - 100,000, bc and ic = pde / 10
+n epochs = 10,000 - 20,000
+new sample every 500 epochs
+    - entire new LHC sample, or
+    - entire new LHC sample based on residuum (RAR / RAD-distribution)
+also can try: RAR-D (RAR + Distribution):
+    - keep top 30percent of highest-residual points, resample the rest with RAD weights.
+
+
+\subsection{b) Apprixamating the hessian computation}
+
+\subsubsection{Stochastic Dimension Gradient Descent (SDGD)}
+% https://arxiv.org/html/2307.12306v5#S3
+
+- approximates the full gradient of the physics loss by decomposing the PDE operator into dimension-wise terms
+and sampling subsets during training (enabling high-dimensional scalability)
+
+$$
+\nabla_\theta \ell(\theta) = \left( \sum_{i=1}^{N_L} \mathcal{L}_i u_\theta - R \right) \left( \sum_{i=1}^{N_L} \frac{\partial}{\partial \theta} \mathcal{L}_i u_\theta \right)
+$$
+
+Sample index set $I \subset \{1, \dots, N_L\}$ with $|I| \ll N_L$; compute detached $\mathcal{L}_i u_\theta$ for all i (forward pass), but backpropagate only for $i \in I (memory O(|I|) vs. O(N_L))$.
+
+The unbiased estimator is
+$$
+\nabla_\theta \ell_I(\theta) = \frac{N_L}{|I|} \left( \sum_{i=1}^{N_L} \mathcal{L}_i u_\theta - R \right) \left( \sum_{i \in I} \frac{\partial}{\partial \theta} \mathcal{L}_i u_\theta \right), \quad \mathbb{E}_I [\nabla_\theta \ell_I] = \nabla_\theta \ell.
+$$
+For multiple points $\{\mathbf{x}_n\}_{n=1}^{N_r}$, normalize $\frac{1}{N_r N_L^2} \sum_n (\cdot)^2$; joint batches B over points, I over terms yield $g_{B,I}(\theta) = \frac{1}{|B| |I| N_L} \sum_{n \in B} (\sum_i \mathcal{L}_i u_\theta(\mathbf{x}_n) - R) \sum_{i \in I} \partial_\theta \mathcal{L}_i u_\theta(\mathbf{x}_n)$
+
+Unbiasedness: Proven via linearity of expectation.
+
+Variance: $V_{B,I}[g_{B,I}] = \frac{C_1}{|B|} + \frac{C_2}{|I|} + \frac{C_3}{|B| |I|}$, minimized under fixed memory $|B| \times |I|$ by balancing point/term variance (e.g., equal for comparable $C_1, C_2$).
+
+Bounded variance/convergence: Under smooth activations ($|\sigma^{(k)}| \leq 1$, Lipschitz), variance $O(h^{2n} N_L R^2 / |B| |I|)$ (h: width, n: order); SGD converges as $\mathcal{O}(1/\sqrt{T})$ with stepsize decay
+
+1. Sample I, compute/detach all $\mathcal{L}_i u_\theta$.
+
+2. Backprop $i \in I$, form $\nabla_\theta \ell_I$.
+
+3. Update $\theta \leftarrow \theta - \eta \nabla_\theta \ell_I$
+
+\subsubsection{Hutchinson trace estimation (HTE)}
+% https://arxiv.org/html/2312.14499v2#S3
+Consider symetric positive semidefinite matrix $A\in\mathbb{R}^{n\times n}$.
+The trace of $A$ can be approximated as an expectation
+$$
+tr(A) = \mathbb{E}_{v\sim\rho}[v^T A v]
+$$
+where $v$ is a random vector satisfying $\mathbb{E}_{v\sim\rho}[vv^T] = I$.
+The distribution $\rho$ can be chosen as normal.
+However, Hutchinson's original paper, and now the standard choice, is a Rademacher distribution, where the entries of a vector $v$ are chosen as $\pm 1$ with probability $\frac{1}{2}$.
+The Rademacher distribution is the prefered choice as it gives an optimal variance of this estimator.
+Requires a relatively few samples (on the order of 10s 100s) to converge to within 0.1, 0.01.
+% variance
+% 1 https://claude.ai/share/4af41507-635c-43b2-8a24-df228ff808fb
+% variance odvozeni:
+% 2 https://www.ethanepperly.com/index.php/2023/01/26/stochastic-trace-estimation/#real-gaussians
+% rigorous error estimates:
+% 3 https://dl.acm.org/doi/epdf/10.1145/1944345.1944349
+% Variance for a single $v\sim\mathcal{N}(0,1)$:
+% $$
+% Var(v^T A\,v) = 2||A||_F^2
+% $$
+% Variance for a single $v\sim\rho_{Rademacher}$:
+% $$
+% Var(v^T A\,v) = 2||A||_F^2 - 2\sum_i A_{ii}^2
+% $$
+
+\subsection{c) Loss weighting}
+
+Grad Norm
+- compute grad of norms of loss
+%https://pmc.ncbi.nlm.nih.gov/articles/PMC12858974/#:~:text=The%20loss%20function%20in%20PINNs,adaptive%20loss
+
+SoftAdapt
+% https://arxiv.org/pdf/2009.04544v5
+% https://github.com/levimcclenny/SA-PINNs
+- learnable attention params
+
+
+\subsection{d) Problem specific technique - Capturing physics}
+add additional residuals capturing the physics
+- symmetries, energy conserv, ...
+
+use problem symmetries
+- separability
+- prob? do in log space
+- en conservation?
+
+transfer learning - traing on easier problem, then more to the harder one
+
+researchers (Liu and Gerstoft, 2023) have ensured that the model strictly
+adheres to specific physical laws by introducing additional physical
+constraints, such as conservation laws, temporal invariance, and spatial
+smoothing into the loss function. This approach significantly enhances
+the accuracy and stability of the model. For instance, Zhang (Zhang
+et al., 2023a) incorporated invariance conditions derived from Lie
+symmetry into the loss function, improving t
+
+exp(NN) -> u > 0 (prob)
+
+
+\subsubsection{Hard constrains}
+architectuary enforce IC and BC - nn then need to learn only the pde
+% https://arxiv.org/html/2404.16189v3#:~:text=as%20the%20IC%20data%20is,We%20consider%20the%20following%20transformation
+
+
+
+\subsection{e) Other}
+
+weight intialization (Glorot)
+
+normalize input: [-1,1] or [0,1]
+
+
+activations - tanh / silu (smooth)
+$$
+silu(x) = x \cdot \sigma(x)
+$$
+
+NNs learn low freq sol first
+- FF embedds?
+$$
+\gamma(x) = 
+$$
+
+XPINN - mulitple pinns - overlapping domains
+
+PDE separable? -> sum of product of 1d networks
+
+
+\subsection{my genious ideas TD}
+- have 3 networks - each focused on different frequency signals
+
+
+
+
+
+
+\section{Math recap}
+
+Positive semidefinite matrix $A\in\mathbb{R}^{n \times n}$ is a symmetric matrix, that satisfies:
+$$ x^T A\,x \ge 0, \quad \forall x\in\mathbb{R}^n, \: x\neq 0 $$
+
 
 
 \cite{experts_guide}
@@ -67,11 +333,5 @@ loss weighting
 
 
 
-%\begin{figure}
-%    \centering
-%    \includegraphics[width=120mm]{figures/training_loss}
-%    \caption{You lost, sir.}
-%    \label{fig:loss}
-%\end{figure}
 
 
