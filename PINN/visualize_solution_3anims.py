@@ -2,30 +2,17 @@
 visualize a specific time interval
 save as gif
 """
-import torch
-import matplotlib.pyplot as plt
-from main import PINN_SepTime
 
 import sys
 if len(sys.argv) > 1:
     dir_name = sys.argv[1]
 else:
     dir_name = 'run_latest'
-print(f"Will be working in directory '{dir_name}'...")
+import utility
+import torch
+model, u_analytic, pde_metadata, model_metadata = utility.header(dir_name)
+d = model_metadata["args"]["d"]
 
-import json
-with open(f"{dir_name}/args.json", "r") as f:
-    metadata = json.load(f)
-d = metadata["d"]
-D = d + 1 # space + time
-
-import pde_models
-pde_model = pde_models.TravellingGaussPacket_v2(d)
-#pde_model = pde_models.HeatEquation(d, a=torch.zeros(d))
-pde_model.load_pde_params(f"{dir_name}/pde_params.json")
-u_analytic = pde_model.u_analytic
-
-model = torch.load(f'{dir_name}/model.pth', weights_only=False)
 
 # cuda or cpu
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -51,7 +38,6 @@ def eval_analytic_on_grid(X):
     u_true = u_analytic(X)
     U_true = u_true.reshape(N, N)
     return U_true
-
 
 
 # Create domain mesh
@@ -84,6 +70,7 @@ def update_grid(t_val):
 
 
 
+import matplotlib.pyplot as plt
 fig, axes = plt.subplots(1, 3, figsize=(15, 4))
 
 

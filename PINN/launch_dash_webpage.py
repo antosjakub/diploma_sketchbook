@@ -4,21 +4,23 @@ Requires
 - model.pth
 - pde_params.json
 """
-
-
-import numpy as np
-import torch
 import plotly.graph_objects as go
 from dash import Dash, dcc, html, Input, Output, State
-import json
-
 
 import sys
 if len(sys.argv) > 1:
     dir_name = sys.argv[1]
 else:
     dir_name = 'run_latest'
-print(f"Will be working in directory '{dir_name}'...")
+import utility
+import torch
+model, u_analytic, pde_metadata, model_metadata = utility.header(dir_name)
+d = model_metadata["args"]["d"]
+
+def fun_1(X):
+    with torch.no_grad():
+        return model(X)
+fun_2 = u_analytic
 
 u_zminmax_const = [-1.0, 1.0]
 err_zminmax_const = [-0.1, 0.1]
@@ -30,23 +32,6 @@ nx = 100
 nt = 200
 t_max = 1.0
 
-import json
-with open(f"{dir_name}/args.json", "r") as f:
-    metadata = json.load(f)
-d = metadata["d"]
-D = d + 1 # space + time
-
-from main import PINN_SepTime
-model = torch.load(f'{dir_name}/model.pth', weights_only=False)
-def fun_1(X):
-    with torch.no_grad():
-        return model(X)
-
-import pde_models
-#pde_model = pde_models.HeatEquation(d, a=torch.zeros(d))
-pde_model = pde_models.TravellingGaussPacket_v2(d)
-pde_model.load_pde_params(f"{dir_name}/pde_params.json")
-fun_2 = pde_model.u_analytic
 
 #d = 4
 #import pde_models

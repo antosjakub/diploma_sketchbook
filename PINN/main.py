@@ -785,13 +785,13 @@ if __name__ == "__main__":
     print("\nTraining complete!")
     
     import json
-    with open(f'{dir_name}/args.json', 'w', encoding='utf-8') as f:
-        json.dump(args.__dict__, f, ensure_ascii=False, indent=4)
+    with open(f'{dir_name}/model_metadata.json', 'w', encoding='utf-8') as f:
+        json.dump({"model_class": type(model).__name__, "args": args.__dict__}, f, ensure_ascii=False, indent=4)
 
-    pde_model.dump_pde_params(f'{dir_name}/pde_params.json')
+    pde_model.dump_pde_metadata(f'{dir_name}/pde_metadata.json')
 
     # Save the results
-    torch.save(model, f'{dir_name}/model.pth')
+    torch.save(model.state_dict(), f'{dir_name}/model.pth')
     torch.save(torch.tensor(losses), f'{dir_name}/training_loss.pth')
     torch.save(torch.tensor(l2_errs), f'{dir_name}/training_l2_error.pth')
     print("\nResults saved.")

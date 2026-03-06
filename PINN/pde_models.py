@@ -1,14 +1,7 @@
 import torch
 import json
+import utility
 
-def json_dump(file_path, d):
-    with open(file_path, 'w', encoding='utf-8') as f:
-        json.dump(d, f, indent=4)
-
-def json_load(file_path):
-    with open(file_path, "r", encoding='utf-8') as f:
-        d = json.load(f)
-    return d
 
 class HeatEquation:
     def __init__(self, d, alpha=0.01, a=None):
@@ -20,9 +13,9 @@ class HeatEquation:
         self.has_weak_form = True
     def dump_pde_params(self, file_path) -> None:
         pde_params = {"alpha": self.alpha, "a": list(map(lambda x: float(x), self.a))}
-        json_dump(file_path, pde_params)
+        utility.json_dump(file_path, pde_params)
     def load_pde_params(self, file_path) -> None:
-        pde_params = json_load(file_path)
+        pde_params = utility.json_load(file_path)
         pde_params["a"] = torch.tensor(pde_params["a"])
         self.__init__(self.d, **pde_params)
     def u_spatial(self, x):
@@ -148,7 +141,7 @@ class TravellingGaussPacket_v2:
     def ic_residual(self, X, u):
         return u - self.u_IC(X[:,:-1])
 
-    def dump_pde_params(self, file_path) -> None:
+    def dump_pde_metadata(self, file_path) -> None:
         pde_params = {
             "alpha": self.alpha,
             "beta": self.beta,
@@ -157,9 +150,11 @@ class TravellingGaussPacket_v2:
             "b": list(map(lambda x: float(x), self.b)),
             "c": list(map(lambda x: float(x), self.c))
         }
-        json_dump(file_path, pde_params)
-    def load_pde_params(self, file_path) -> None:
-        pde_params = json_load(file_path)
+        utility.json_dump(file_path, {"pde_class": type(self).__name__, "params": pde_params})
+    def load_pde_metadata(self, pde_metadata) -> None:
+        pde_class = pde_metadata["pde_class"]
+        assert pde_class == type(self).__name__, f"ERROR: The given .json file specifies parameters for '{pde_class}', but this class is of type '{type(self).__name__}'."
+        pde_params = pde_metadata["params"]
         pde_params["a"] = torch.tensor(pde_params["a"])
         pde_params["b"] = torch.tensor(pde_params["b"])
         pde_params["c"] = torch.tensor(pde_params["c"])
