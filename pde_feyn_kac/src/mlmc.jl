@@ -10,13 +10,42 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 # ---------------------------------------------------------------------------
+#  Maximum batch size — prevents OOM on memory-limited machines.
+#  Each path needs roughly (6d + 4) × sizeof(FT) bytes of live arrays,
+#  so 100k paths × d=21 × Float64 ≈ 130 MB, which is safe.
+# ---------------------------------------------------------------------------
+const MLMC_MAX_BATCH = 100_000
+
+# ---------------------------------------------------------------------------
 #  Single-level Euler-Maruyama batch (used internally)
-#  Returns vector of path functionals Φ (length N)
+#  Returns (sum, sum_of_squares, count) to avoid materialising huge vectors.
 # ---------------------------------------------------------------------------
 function _em_level(ic, x_d, t_eval, n_steps, Nh,
                    drift_fn, drift_const, sigma,
                    potential, source,
                    gpu, ::Type{FT}) where FT
+
+    # Process in batches to avoid OOM
+    S = 0.0; S2 = 0.0; count = 0
+    remaining = Nh
+    while remaining > 0
+        batch = min(remaining, MLMC_MAX_BATCH)
+        vals = _em_level_batch(ic, x_d, t_eval, n_steps, batch,
+                               drift_fn, drift_const, sigma,
+                               potential, source, gpu, FT)
+        v = Array(vals)
+        S  += sum(v)
+        S2 += sum(v .^ 2)
+        count += batch
+        remaining -= batch
+    end
+    return (S, S2, count)
+end
+
+function _em_level_batch(ic, x_d, t_eval, n_steps, Nh,
+                         drift_fn, drift_const, sigma,
+                         potential, source,
+                         gpu, ::Type{FT}) where FT
     d  = size(x_d, 1)
     dt = FT(t_eval / n_steps)
     sq = FT(sqrt(t_eval / n_steps))
@@ -54,7 +83,7 @@ function _em_level(ic, x_d, t_eval, n_steps, Nh,
 end
 
 # ---------------------------------------------------------------------------
-#  Coupled fine/coarse batch — returns vector of (P_fine − P_coarse)
+#  Coupled fine/coarse batch — returns (sum, sum_of_squares, count)
 #  Fine: n_steps_fine time steps.   Coarse: n_steps_fine / M steps.
 #  Same Brownian path: sum M fine increments → one coarse increment.
 # ---------------------------------------------------------------------------
@@ -62,6 +91,27 @@ function _coupled_level(ic, x_d, t_eval, n_fine, M, Nh,
                         drift_fn, drift_const, sigma,
                         potential, source,
                         gpu, ::Type{FT}) where FT
+
+    S = 0.0; S2 = 0.0; count = 0
+    remaining = Nh
+    while remaining > 0
+        batch = min(remaining, MLMC_MAX_BATCH)
+        vals = _coupled_level_batch(ic, x_d, t_eval, n_fine, M, batch,
+                                    drift_fn, drift_const, sigma,
+                                    potential, source, gpu, FT)
+        v = Array(vals)
+        S  += sum(v)
+        S2 += sum(v .^ 2)
+        count += batch
+        remaining -= batch
+    end
+    return (S, S2, count)
+end
+
+function _coupled_level_batch(ic, x_d, t_eval, n_fine, M, Nh,
+                              drift_fn, drift_const, sigma,
+                              potential, source,
+                              gpu, ::Type{FT}) where FT
     d  = size(x_d, 1)
     n_coarse = n_fine ÷ M
     dt_f = FT(t_eval / n_fine)
@@ -80,7 +130,6 @@ function _coupled_level(ic, x_d, t_eval, n_fine, M, Nh,
     has_f = source    !== nothing
 
     for kc in 0:n_coarse-1
-        # Accumulate M fine steps, tracking the summed Brownian increment
         dW_sum = dev_zeros(FT, d, Nh; gpu)
 
         for m in 0:M-1
@@ -90,7 +139,6 @@ function _coupled_level(ic, x_d, t_eval, n_fine, M, Nh,
             dW    = dev_randn(FT, d, Nh; gpu) .* sq_f
             dW_sum .= dW_sum .+ dW
 
-            # Fine path step
             if has_f
                 fv = source(t_pde, Xf)
                 ff_acc .= ff_acc .+ fv .* exp.(.-Vf_acc) .* dt_f
@@ -107,8 +155,7 @@ function _coupled_level(ic, x_d, t_eval, n_fine, M, Nh,
             Xf .= Xf .+ μk .* dt_f .+ σ_f .* dW
         end
 
-        # Coarse path step (one big step using summed increments)
-        tk_c  = FT(kc * Float64(dt_c))
+        tk_c    = FT(kc * Float64(dt_c))
         t_pde_c = FT(t_eval) - tk_c
 
         if has_f
@@ -185,20 +232,25 @@ function solve_mlmc(ic, x::Vector{Float64}, t_eval::Float64;
         Np = N_pilot
 
         if l == 0
-            vals = Array(_em_level(ic, x_d, t_eval, n_steps_f, Np,
-                                   drift_fn, dc, sigma, potential, source, gpu, FT))
+            (S, S2, cnt) = _em_level(ic, x_d, t_eval, n_steps_f, Np,
+                                      drift_fn, dc, sigma, potential, source, gpu, FT)
         else
-            vals = Array(_coupled_level(ic, x_d, t_eval, n_steps_f, M, Np,
-                                        drift_fn, dc, sigma, potential, source, gpu, FT))
+            (S, S2, cnt) = _coupled_level(ic, x_d, t_eval, n_steps_f, M, Np,
+                                           drift_fn, dc, sigma, potential, source, gpu, FT)
         end
 
-        push!(sums,  sum(vals))
-        push!(sumsq, sum(vals .^ 2))
-        push!(Nl,    Np)
+        push!(sums,  S)
+        push!(sumsq, S2)
+        push!(Nl,    cnt)
         push!(costl, Float64(n_steps_f))
     end
 
     # ── Phase 2: iterative refinement ──────────────────────────────────
+    #  Cap per-level samples to avoid OOM.  With MLMC_MAX_BATCH = 100k and
+    #  batching, memory per batch is bounded; but we also cap the total
+    #  sample count to keep wall-time reasonable on CPU.
+    N_max_per_level = 2_000_000
+
     for iter in 1:20
         # Compute variance estimates
         Vl = [(sumsq[l+1] / Nl[l+1]) - (sums[l+1] / Nl[l+1])^2 for l in 0:L]
@@ -207,7 +259,8 @@ function solve_mlmc(ic, x::Vector{Float64}, t_eval::Float64;
         # Optimal sample counts (Giles formula)
         Cl = costl[1:L+1]
         vc_sum = sum(sqrt(Vl[l+1] * Cl[l+1]) for l in 0:L)
-        N_opt  = [max(N_pilot, ceil(Int, 2.0 * ε^(-2) * sqrt(Vl[l+1] / Cl[l+1]) * vc_sum))
+        N_opt  = [min(N_max_per_level,
+                      max(N_pilot, ceil(Int, 2.0 * ε^(-2) * sqrt(Vl[l+1] / Cl[l+1]) * vc_sum)))
                   for l in 0:L]
 
         # Run additional samples where needed
@@ -219,16 +272,16 @@ function solve_mlmc(ic, x::Vector{Float64}, t_eval::Float64;
 
             n_steps_f = M^(l + 1)
             if l == 0
-                vals = Array(_em_level(ic, x_d, t_eval, n_steps_f, ΔN,
-                                       drift_fn, dc, sigma, potential, source, gpu, FT))
+                (S, S2, cnt) = _em_level(ic, x_d, t_eval, n_steps_f, ΔN,
+                                          drift_fn, dc, sigma, potential, source, gpu, FT)
             else
-                vals = Array(_coupled_level(ic, x_d, t_eval, n_steps_f, M, ΔN,
-                                            drift_fn, dc, sigma, potential, source, gpu, FT))
+                (S, S2, cnt) = _coupled_level(ic, x_d, t_eval, n_steps_f, M, ΔN,
+                                               drift_fn, dc, sigma, potential, source, gpu, FT)
             end
 
-            sums[l+1]  += sum(vals)
-            sumsq[l+1] += sum(vals .^ 2)
-            Nl[l+1]    += ΔN
+            sums[l+1]  += S
+            sumsq[l+1] += S2
+            Nl[l+1]    += cnt
         end
 
         # Check bias: if the finest-level correction is still large, add a level
@@ -236,11 +289,11 @@ function solve_mlmc(ic, x::Vector{Float64}, t_eval::Float64;
         if L < L_max && mean_L > ε / sqrt(2.0) * (M - 1)
             L += 1
             n_steps_f = M^(L + 1)
-            vals = Array(_coupled_level(ic, x_d, t_eval, n_steps_f, M, N_pilot,
-                               drift_fn, dc, sigma, potential, source, gpu, FT))
-            push!(sums,  sum(vals))
-            push!(sumsq, sum(vals .^ 2))
-            push!(Nl,    N_pilot)
+            (S, S2, cnt) = _coupled_level(ic, x_d, t_eval, n_steps_f, M, N_pilot,
+                                           drift_fn, dc, sigma, potential, source, gpu, FT)
+            push!(sums,  S)
+            push!(sumsq, S2)
+            push!(Nl,    cnt)
             push!(costl, Float64(n_steps_f))
             continue
         end
