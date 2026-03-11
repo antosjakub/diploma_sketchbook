@@ -1,0 +1,15 @@
+name = "FeynmanKac"
+uuid = "e7a1c2b3-4d5e-6f7a-8b9c-0d1e2f3a4b5c"
+version = "0.1.0"
+
+[deps]
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+
+[compat]
+CUDA = "5.10.1"
+Printf = "1.11.0"
+Random = "1.11.0"
+Statistics = "1.11.1"
