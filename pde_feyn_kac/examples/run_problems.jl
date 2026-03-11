@@ -186,6 +186,31 @@ function run_travelling_gaussian(; d::Int=10, N::Int=10^6, n_steps::Int=200)
     @printf("  MLMC:      u = %+.8f  (exact = %+.8f,  err = %.2e,  σ = %.2e,  %.3fs)\n",
             res_mlmc.value, exact, abs(res_mlmc.value - exact), res_mlmc.std_error, res_mlmc.elapsed)
 
+    # ── Importance sampling via Girsanov ──────────────────────────────────
+    # Optimal IS drift: θ* = σ ∇log u.  Since u is known analytically:
+    #   log u = −α Σ(aᵢxᵢ − bᵢ + cᵢτ)² − βτ + log cos(γτ)
+    #   ∇ₓ log u = −2α aᵢ(aᵢxᵢ − bᵢ + cᵢτ)   (component i)
+    #   θ* = σ · ∇log u
+    # where τ = t_eval − t_sde is the PDE time.
+    println("  Running EM MC + importance sampling...")
+    function is_drift_fn(t_sde, X)
+        FT = eltype(X)
+        a_d = to_dev_like(FT.(a_vec), X)
+        b_d = to_dev_like(FT.(b_vec), X)
+        c_d = to_dev_like(FT.(c_vec), X)
+        τ = FT(t_eval) - t_sde                         # PDE time
+        z = a_d .* X .- b_d .+ c_d .* τ
+        return FT(σ_sde) .* (FT(-2α) .* a_d .* z)      # σ · ∇log u
+    end
+
+    res_is = solve_fk(ic, x, t_eval, N, n_steps;
+                      drift=μ_sde, sigma=σ_sde,
+                      potential=potential, source=source_fn,
+                      is_drift=is_drift_fn)
+    @printf("  EM MC+IS:  u = %+.8f  (exact = %+.8f,  err = %.2e,  σ = %.2e,  %.3fs)\n",
+            res_is.value, exact, abs(res_is.value - exact), res_is.std_error, res_is.elapsed)
+    @printf("  Variance reduction factor: %.1fx\n", res.std_error / max(res_is.std_error, 1e-30))
+
     return res
 end
 

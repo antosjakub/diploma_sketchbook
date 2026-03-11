@@ -22,7 +22,7 @@ const MLMC_MAX_BATCH = 100_000
 # ---------------------------------------------------------------------------
 function _em_level(ic, x_d, t_eval, n_steps, Nh,
                    drift_fn, drift_const, sigma,
-                   potential, source,
+                   potential, source, is_drift,
                    gpu, ::Type{FT}) where FT
 
     # Process in batches to avoid OOM
@@ -32,7 +32,7 @@ function _em_level(ic, x_d, t_eval, n_steps, Nh,
         batch = min(remaining, MLMC_MAX_BATCH)
         vals = _em_level_batch(ic, x_d, t_eval, n_steps, batch,
                                drift_fn, drift_const, sigma,
-                               potential, source, gpu, FT)
+                               potential, source, is_drift, gpu, FT)
         v = Array(vals)
         S  += sum(v)
         S2 += sum(v .^ 2)
@@ -44,7 +44,7 @@ end
 
 function _em_level_batch(ic, x_d, t_eval, n_steps, Nh,
                          drift_fn, drift_const, sigma,
-                         potential, source,
+                         potential, source, is_drift,
                          gpu, ::Type{FT}) where FT
     d  = size(x_d, 1)
     dt = FT(t_eval / n_steps)
@@ -55,17 +55,26 @@ function _em_level_batch(ic, x_d, t_eval, n_steps, Nh,
     V_acc = dev_zeros(FT, Nh; gpu)
     f_acc = dev_zeros(FT, Nh; gpu)
 
-    has_V = potential !== nothing
-    has_f = source    !== nothing
+    has_V  = potential !== nothing
+    has_f  = source    !== nothing
+    has_IS = is_drift  !== nothing
+
+    G_acc = has_IS ? dev_zeros(FT, Nh; gpu) : nothing
 
     for k in 0:n_steps-1
         tk    = FT(k * Float64(dt))
         t_pde = FT(t_eval) - tk
         dW    = dev_randn(FT, d, Nh; gpu) .* sq
 
+        if has_IS
+            θk = is_drift(tk, X)
+            G_acc .= G_acc .- vec(sum(θk .* dW, dims=1)) .- FT(0.5) .* vec(sum(θk .^ 2, dims=1)) .* dt
+        end
+
         if has_f
+            w_f = has_IS ? exp.(.-V_acc .+ G_acc) : exp.(.-V_acc)
             fv = source(t_pde, X)
-            f_acc .= f_acc .+ fv .* exp.(.-V_acc) .* dt
+            f_acc .= f_acc .+ fv .* w_f .* dt
         end
         if has_V
             V_acc .= V_acc .+ potential(tk, X) .* dt
@@ -76,10 +85,18 @@ function _em_level_batch(ic, x_d, t_eval, n_steps, Nh,
         else
             μk = drift_const
         end
-        X .= X .+ μk .* dt .+ σ_f .* dW
+        if has_IS
+            X .= X .+ (μk .+ σ_f .* θk) .* dt .+ σ_f .* dW
+        else
+            X .= X .+ μk .* dt .+ σ_f .* dW
+        end
     end
 
-    return vec(ic(X) .* exp.(.-V_acc) .+ f_acc)
+    if has_IS
+        return vec(ic(X) .* exp.(.-V_acc .+ G_acc) .+ f_acc)
+    else
+        return vec(ic(X) .* exp.(.-V_acc) .+ f_acc)
+    end
 end
 
 # ---------------------------------------------------------------------------
@@ -89,7 +106,7 @@ end
 # ---------------------------------------------------------------------------
 function _coupled_level(ic, x_d, t_eval, n_fine, M, Nh,
                         drift_fn, drift_const, sigma,
-                        potential, source,
+                        potential, source, is_drift,
                         gpu, ::Type{FT}) where FT
 
     S = 0.0; S2 = 0.0; count = 0
@@ -98,7 +115,7 @@ function _coupled_level(ic, x_d, t_eval, n_fine, M, Nh,
         batch = min(remaining, MLMC_MAX_BATCH)
         vals = _coupled_level_batch(ic, x_d, t_eval, n_fine, M, batch,
                                     drift_fn, drift_const, sigma,
-                                    potential, source, gpu, FT)
+                                    potential, source, is_drift, gpu, FT)
         v = Array(vals)
         S  += sum(v)
         S2 += sum(v .^ 2)
@@ -110,7 +127,7 @@ end
 
 function _coupled_level_batch(ic, x_d, t_eval, n_fine, M, Nh,
                               drift_fn, drift_const, sigma,
-                              potential, source,
+                              potential, source, is_drift,
                               gpu, ::Type{FT}) where FT
     d  = size(x_d, 1)
     n_coarse = n_fine ÷ M
@@ -126,8 +143,12 @@ function _coupled_level_batch(ic, x_d, t_eval, n_fine, M, Nh,
     ff_acc = dev_zeros(FT, Nh; gpu)
     fc_acc = dev_zeros(FT, Nh; gpu)
 
-    has_V = potential !== nothing
-    has_f = source    !== nothing
+    has_V  = potential !== nothing
+    has_f  = source    !== nothing
+    has_IS = is_drift  !== nothing
+
+    Gf_acc = has_IS ? dev_zeros(FT, Nh; gpu) : nothing
+    Gc_acc = has_IS ? dev_zeros(FT, Nh; gpu) : nothing
 
     for kc in 0:n_coarse-1
         dW_sum = dev_zeros(FT, d, Nh; gpu)
@@ -139,9 +160,15 @@ function _coupled_level_batch(ic, x_d, t_eval, n_fine, M, Nh,
             dW    = dev_randn(FT, d, Nh; gpu) .* sq_f
             dW_sum .= dW_sum .+ dW
 
+            if has_IS
+                θk = is_drift(tk_f, Xf)
+                Gf_acc .= Gf_acc .- vec(sum(θk .* dW, dims=1)) .- FT(0.5) .* vec(sum(θk .^ 2, dims=1)) .* dt_f
+            end
+
             if has_f
+                w_f = has_IS ? exp.(.-Vf_acc .+ Gf_acc) : exp.(.-Vf_acc)
                 fv = source(t_pde, Xf)
-                ff_acc .= ff_acc .+ fv .* exp.(.-Vf_acc) .* dt_f
+                ff_acc .= ff_acc .+ fv .* w_f .* dt_f
             end
             if has_V
                 Vf_acc .= Vf_acc .+ potential(tk_f, Xf) .* dt_f
@@ -152,15 +179,25 @@ function _coupled_level_batch(ic, x_d, t_eval, n_fine, M, Nh,
             else
                 μk = drift_const
             end
-            Xf .= Xf .+ μk .* dt_f .+ σ_f .* dW
+            if has_IS
+                Xf .= Xf .+ (μk .+ σ_f .* θk) .* dt_f .+ σ_f .* dW
+            else
+                Xf .= Xf .+ μk .* dt_f .+ σ_f .* dW
+            end
         end
 
         tk_c    = FT(kc * Float64(dt_c))
         t_pde_c = FT(t_eval) - tk_c
 
+        if has_IS
+            θk_c = is_drift(tk_c, Xc)
+            Gc_acc .= Gc_acc .- vec(sum(θk_c .* dW_sum, dims=1)) .- FT(0.5) .* vec(sum(θk_c .^ 2, dims=1)) .* dt_c
+        end
+
         if has_f
+            w_c = has_IS ? exp.(.-Vc_acc .+ Gc_acc) : exp.(.-Vc_acc)
             fv = source(t_pde_c, Xc)
-            fc_acc .= fc_acc .+ fv .* exp.(.-Vc_acc) .* dt_c
+            fc_acc .= fc_acc .+ fv .* w_c .* dt_c
         end
         if has_V
             Vc_acc .= Vc_acc .+ potential(tk_c, Xc) .* dt_c
@@ -171,11 +208,20 @@ function _coupled_level_batch(ic, x_d, t_eval, n_fine, M, Nh,
         else
             μk = drift_const
         end
-        Xc .= Xc .+ μk .* dt_c .+ σ_f .* dW_sum
+        if has_IS
+            Xc .= Xc .+ (μk .+ σ_f .* θk_c) .* dt_c .+ σ_f .* dW_sum
+        else
+            Xc .= Xc .+ μk .* dt_c .+ σ_f .* dW_sum
+        end
     end
 
-    Pf = vec(ic(Xf) .* exp.(.-Vf_acc) .+ ff_acc)
-    Pc = vec(ic(Xc) .* exp.(.-Vc_acc) .+ fc_acc)
+    if has_IS
+        Pf = vec(ic(Xf) .* exp.(.-Vf_acc .+ Gf_acc) .+ ff_acc)
+        Pc = vec(ic(Xc) .* exp.(.-Vc_acc .+ Gc_acc) .+ fc_acc)
+    else
+        Pf = vec(ic(Xf) .* exp.(.-Vf_acc) .+ ff_acc)
+        Pc = vec(ic(Xc) .* exp.(.-Vc_acc) .+ fc_acc)
+    end
     return Pf .- Pc
 end
 
@@ -186,13 +232,16 @@ end
 """
     solve_mlmc(ic, x, t_eval;
                drift = zeros(length(x)), drift_fn = nothing, sigma = 1.0,
-               potential = nothing, source = nothing,
+               potential = nothing, source = nothing, is_drift = nothing,
                target_rmse = 1e-3, M = 2, L_min = 2, L_max = 8,
                N_pilot = 5000, gpu = HAS_GPU[], FT = ...)
 
 Multilevel Monte Carlo Feynman-Kac solver.  Automatically selects the number
 of levels and samples per level to achieve `target_rmse` (root mean square error)
 at near-optimal cost.
+
+When `is_drift` is provided, importance sampling via Girsanov's theorem is applied
+at every level.
 
 Returns `FKResult`.
 """
@@ -202,6 +251,7 @@ function solve_mlmc(ic, x::Vector{Float64}, t_eval::Float64;
                     sigma::Float64 = 1.0,
                     potential = nothing,
                     source = nothing,
+                    is_drift = nothing,
                     target_rmse::Float64 = 1e-3,
                     M::Int = 2,
                     L_min::Int = 2,
@@ -233,10 +283,10 @@ function solve_mlmc(ic, x::Vector{Float64}, t_eval::Float64;
 
         if l == 0
             (S, S2, cnt) = _em_level(ic, x_d, t_eval, n_steps_f, Np,
-                                      drift_fn, dc, sigma, potential, source, gpu, FT)
+                                      drift_fn, dc, sigma, potential, source, is_drift, gpu, FT)
         else
             (S, S2, cnt) = _coupled_level(ic, x_d, t_eval, n_steps_f, M, Np,
-                                           drift_fn, dc, sigma, potential, source, gpu, FT)
+                                           drift_fn, dc, sigma, potential, source, is_drift, gpu, FT)
         end
 
         push!(sums,  S)
@@ -273,10 +323,10 @@ function solve_mlmc(ic, x::Vector{Float64}, t_eval::Float64;
             n_steps_f = M^(l + 1)
             if l == 0
                 (S, S2, cnt) = _em_level(ic, x_d, t_eval, n_steps_f, ΔN,
-                                          drift_fn, dc, sigma, potential, source, gpu, FT)
+                                          drift_fn, dc, sigma, potential, source, is_drift, gpu, FT)
             else
                 (S, S2, cnt) = _coupled_level(ic, x_d, t_eval, n_steps_f, M, ΔN,
-                                               drift_fn, dc, sigma, potential, source, gpu, FT)
+                                               drift_fn, dc, sigma, potential, source, is_drift, gpu, FT)
             end
 
             sums[l+1]  += S
@@ -290,7 +340,7 @@ function solve_mlmc(ic, x::Vector{Float64}, t_eval::Float64;
             L += 1
             n_steps_f = M^(L + 1)
             (S, S2, cnt) = _coupled_level(ic, x_d, t_eval, n_steps_f, M, N_pilot,
-                                           drift_fn, dc, sigma, potential, source, gpu, FT)
+                                           drift_fn, dc, sigma, potential, source, is_drift, gpu, FT)
             push!(sums,  S)
             push!(sumsq, S2)
             push!(Nl,    cnt)

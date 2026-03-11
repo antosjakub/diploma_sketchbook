@@ -434,7 +434,7 @@ $$
 
 where the constant potential $V = w$ simplifies the exponential. Since $w < 0$, the factor $e^{-w(T-t)} = e^{|w|(T-t)} > 1$ is a *growth* factor (not decay). The source term $f$ is negative and partially compensates this growth, yielding a well-behaved solution.
 
-> **Remark (variance).** When $|w|$ is large (e.g. high dimension or large $\delta\alpha$), the growth factor $e^{|w|T}$ causes exponential variance blow-up in the Monte Carlo estimator, even though the true solution remains bounded. For practical computation one should keep $|w|T$ moderate, or employ importance sampling (Girsanov-based tilting of the SDE drift).
+> **Remark (variance).** When $|w|$ is large (e.g. high dimension or large $\delta\alpha$), the growth factor $e^{|w|T}$ causes exponential variance blow-up in the Monte Carlo estimator, even though the true solution remains bounded. For practical computation one should keep $|w|T$ moderate, or employ importance sampling via Girsanov's theorem (Section 3.11) to tilt the SDE drift and dramatically reduce variance.
 
 ### 3.9 Application: Fokker-Planck and the molecular configuration problem
 
@@ -506,6 +506,80 @@ $$
 - *Antithetic variates:* for each path driven by increments $\xi_k$, also simulate the path with $-\xi_k$.
 - *Control variates:* subtract a correlated quantity with known mean.
 - *Multilevel Monte Carlo (MLMC)* [6]: compute expectations as a telescoping sum across time-discretisation levels, achieving the same accuracy at lower total cost.
+- *Importance sampling:* change the probability measure via Girsanov's theorem to tilt the SDE drift toward regions that contribute most to the expectation, reweighting paths by the likelihood ratio. This is especially effective when the survival factor $e^{-\int V}$ grows exponentially (see Section 3.11).
+
+
+### 3.11 Importance sampling via Girsanov's theorem
+
+When the potential $V$ is negative (a growth term), the survival factor $e^{-\int_0^T V\,ds}$ grows exponentially, causing extreme variance in the MC estimator even though the true solution $u$ remains bounded. Importance sampling (IS) addresses this by changing the probability measure under which paths are sampled, reweighting each path by a likelihood ratio (the *Girsanov weight*) so that the expectation is preserved but the variance is reduced.
+
+#### Girsanov's theorem
+
+**Theorem 3.2 (Girsanov).** Let $\theta\colon [0,T]\times\mathbb{R}^d \to \mathbb{R}^d$ be an adapted process satisfying Novikov's condition $\mathbb{E}[\exp(\frac{1}{2}\int_0^T|\theta_s|^2\,ds)] < \infty$. Define the *Girsanov weight*
+
+$$
+G_T := \exp\!\left(-\int_0^T \theta_s \cdot dW_s - \frac{1}{2}\int_0^T |\theta_s|^2\,ds\right).
+$$
+
+Then under the new probability measure $\mathbb{Q}$ defined by $d\mathbb{Q}/d\mathbb{P} = G_T$, the process
+
+$$
+\widetilde{W}_s := W_s + \int_0^s \theta_r\,dr
+$$
+
+is a standard Brownian motion.
+
+Equivalently: the original SDE $dX_s = \mu\,ds + \sigma\,dW_s$ becomes, under $\mathbb{Q}$,
+
+$$
+dX_s = (\mu + \sigma\theta)\,ds + \sigma\,d\widetilde{W}_s.
+$$
+
+The drift has been *tilted* by $\sigma\theta$, and $\widetilde{W}$ is the $\mathbb{Q}$-Brownian motion.
+
+#### IS formula for the Feynman-Kac representation
+
+Applying the change of measure to the FK formula (with $G_s$ denoting the Girsanov weight accumulated up to time $s$):
+
+$$
+\boxed{
+u(t,x) = \mathbb{E}_{\mathbb{Q}}\!\left[\,g(X_T)\,e^{-\int_0^T V\,ds}\,G_T + \int_0^T f(s,X_s)\,e^{-\int_0^s V\,dr}\,G_s\,ds\;\bigg|\;X_0 = x\right],
+}
+$$
+
+where $X_s$ now follows the tilted SDE with drift $\mu + \sigma\theta$ and the Girsanov log-weight is accumulated as
+
+$$
+\log G_s = -\int_0^s \theta_r \cdot d\widetilde{W}_r - \frac{1}{2}\int_0^s |\theta_r|^2\,dr.
+$$
+
+The expectation is unchanged (by Girsanov's theorem), but the *variance* depends on $\theta$.
+
+#### Optimal drift
+
+**Proposition.** The choice $\theta^*(s,x) = \sigma\,\nabla\log u(T-s,x)$ gives **zero variance** in the terminal-value estimator (when $f=0$).
+
+*Proof sketch.* With this choice, the Girsanov weight exactly cancels the variance of $g(X_T)\,e^{-\int V}$: the integrand becomes deterministic. See [9, §6.2] for a full proof.
+
+In practice $u$ is unknown (it is what we are trying to compute), so the optimal drift cannot be used directly. Practical strategies include:
+
+- **Pilot runs:** use a coarse MC estimate to approximate $\nabla\log u$, then run a refined IS estimator.
+- **Parametric fits:** approximate $\log u$ with a parametric family (e.g. quadratic) and optimise the parameters.
+- **Known solutions:** when the exact solution is available (as for the travelling Gaussian), use the exact $\nabla\log u$ as a benchmark to validate the IS implementation and measure the achievable variance reduction.
+
+#### Application to the travelling Gaussian
+
+For the travelling Gaussian (Section 3.8) with known solution $u(t,x) = \exp(-\alpha\sum(a_ix_i-b_i+c_it)^2)\,e^{-\beta t}\cos(\gamma t)$, we have
+
+$$
+\nabla_x \log u = -2\alpha\,a_i(a_ix_i - b_i + c_i\tau), \qquad \tau = t_{\mathrm{PDE}},
+$$
+
+so the optimal IS drift is $\theta^* = \sigma\,\nabla\log u = \sqrt{2\delta}\,(-2\alpha)\,a_i(a_ix_i - b_i + c_i\tau)$.
+
+With this drift, the MC estimator achieves near-zero variance regardless of the magnitude of $|w|T$, eliminating the exponential variance blow-up described in Section 3.8.
+
+> **Remark.** The optimal IS drift depends on the PDE time $\tau = T - s$ (where $s$ is SDE time), not on SDE time directly. When implementing, one must be careful to evaluate $\nabla\log u$ at the correct PDE time corresponding to each SDE step.
 
 
 ---
@@ -527,3 +601,5 @@ $$
 [7] J. Han, A. Jentzen, and W. E, "Solving high-dimensional partial differential equations using deep learning," *Proc. Natl. Acad. Sci.*, vol. 115, no. 34, pp. 8505–8510, 2018. (Deep BSDE method for high-dimensional nonlinear PDEs.)
 
 [8] D. W. Stroock and S. R. S. Varadhan, *Multidimensional Diffusion Processes*. Springer, 1979.
+
+[9] P. Glasserman, *Monte Carlo Methods in Financial Engineering*. Springer, 2003. (Importance sampling and Girsanov's theorem in §4.6–4.7.)

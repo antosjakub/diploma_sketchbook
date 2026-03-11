@@ -57,6 +57,8 @@ $$
 u(x,t) = e^{-\alpha\sum_{i=1}^d(a_i x_i - b_i + c_i t)^2}\,e^{-\beta t}\cos{\gamma t}
 $$
 
+> **Note on variance.** Since $w = -2\delta\alpha\sum a_i^2 < 0$, the Feynman-Kac survival factor $e^{-wT} = e^{|w|T}$ grows exponentially with dimension and time, causing severe MC variance blow-up. Importance sampling (Girsanov-based drift tilting using $\theta = \sigma\nabla\log u$) and MLMC are effective mitigations.
+
 
 ## Fokker-Placks: Molecule with 7 atoms
 Consider a molecule with 7 atoms. The molecule can take on many initial spatial configuraitons corresponding to different positions of the atoms.

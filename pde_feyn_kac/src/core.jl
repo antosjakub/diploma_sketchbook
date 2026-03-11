@@ -136,10 +136,15 @@ end
              sigma    = 1.0,
              potential  = nothing,    # V(t, X) → (N,)
              source     = nothing,    # f(t, X) → (N,)
+             is_drift   = nothing,    # θ(t, X) → (d, N) importance sampling drift
              antithetic = true,
              gpu = HAS_GPU[], FT = ...)
 
 Full Feynman-Kac Monte Carlo for PDEs with potential V and/or source f.
+
+When `is_drift` is provided, importance sampling via Girsanov's theorem is used:
+the SDE drift is tilted by `σ·θ` and paths are reweighted by the Girsanov factor
+`exp(-∫θ·dW - ½∫|θ|²ds)`.  The optimal `θ = σ∇log u` gives zero variance.
 """
 function solve_fk(ic, x::Vector{Float64}, t_eval::Float64, N::Int, n_steps::Int;
                   drift::Vector{Float64} = zeros(length(x)),
@@ -147,6 +152,7 @@ function solve_fk(ic, x::Vector{Float64}, t_eval::Float64, N::Int, n_steps::Int;
                   sigma::Float64 = 1.0,
                   potential = nothing,
                   source = nothing,
+                  is_drift = nothing,
                   antithetic::Bool = true,
                   gpu::Bool = HAS_GPU[],
                   FT::Type{<:AbstractFloat} = gpu ? Float32 : Float64)
@@ -168,8 +174,13 @@ function solve_fk(ic, x::Vector{Float64}, t_eval::Float64, N::Int, n_steps::Int;
     Va_acc = antithetic ? dev_zeros(FT, Nh; gpu) : nothing
     fa_acc = antithetic ? dev_zeros(FT, Nh; gpu) : nothing
 
-    has_V = potential !== nothing
-    has_f = source    !== nothing
+    has_V  = potential !== nothing
+    has_f  = source    !== nothing
+    has_IS = is_drift  !== nothing
+
+    # Girsanov log-weight accumulators: log G = -∫θ·dW - ½∫|θ|²ds
+    G_acc  = has_IS ? dev_zeros(FT, Nh; gpu) : nothing
+    Ga_acc = (has_IS && antithetic) ? dev_zeros(FT, Nh; gpu) : nothing
 
     for k in 0:n_steps-1
         tk   = FT(k * Float64(dt))
@@ -177,13 +188,27 @@ function solve_fk(ic, x::Vector{Float64}, t_eval::Float64, N::Int, n_steps::Int;
 
         dW = dev_randn(FT, d, Nh; gpu) .* sq
 
+        # ── importance sampling: compute θ and update Girsanov weight ──
+        if has_IS
+            θk  = is_drift(tk, X)                     # (d, Nh)
+            # log G -= θ·dW + ½|θ|²dt   (dW already includes √dt)
+            G_acc .= G_acc .- vec(sum(θk .* dW, dims=1)) .- FT(0.5) .* vec(sum(θk .^ 2, dims=1)) .* dt
+            if antithetic
+                θka = is_drift(tk, Xa)
+                # antithetic uses -dW, so θ·(-dW) = +θ·dW in the formula
+                Ga_acc .= Ga_acc .+ vec(sum(θka .* dW, dims=1)) .- FT(0.5) .* vec(sum(θka .^ 2, dims=1)) .* dt
+            end
+        end
+
         # ── accumulate source BEFORE stepping (left-endpoint quadrature) ──
         if has_f
+            w_f = has_IS ? exp.(.-V_acc .+ G_acc) : exp.(.-V_acc)
             fv  = source(t_pde, X)                    # f at PDE-time
-            f_acc .= f_acc .+ fv .* exp.(.-V_acc) .* dt
+            f_acc .= f_acc .+ fv .* w_f .* dt
             if antithetic
+                w_fa = has_IS ? exp.(.-Va_acc .+ Ga_acc) : exp.(.-Va_acc)
                 fva = source(t_pde, Xa)
-                fa_acc .= fa_acc .+ fva .* exp.(.-Va_acc) .* dt
+                fa_acc .= fa_acc .+ fva .* w_fa .* dt
             end
         end
 
@@ -197,13 +222,17 @@ function solve_fk(ic, x::Vector{Float64}, t_eval::Float64, N::Int, n_steps::Int;
             end
         end
 
-        # ── SDE step ──
+        # ── SDE step (with IS drift tilt) ──
         if drift_fn !== nothing
             μk = drift_fn(tk, X)
         else
             μk = to_dev(reshape(FT.(drift), d, 1), Val(gpu))
         end
-        X .= X .+ μk .* dt .+ σ_f .* dW
+        if has_IS
+            X .= X .+ (μk .+ σ_f .* θk) .* dt .+ σ_f .* dW
+        else
+            X .= X .+ μk .* dt .+ σ_f .* dW
+        end
 
         if antithetic
             if drift_fn !== nothing
@@ -211,16 +240,28 @@ function solve_fk(ic, x::Vector{Float64}, t_eval::Float64, N::Int, n_steps::Int;
             else
                 μka = μk
             end
-            Xa .= Xa .+ μka .* dt .- σ_f .* dW
+            if has_IS
+                Xa .= Xa .+ (μka .+ σ_f .* θka) .* dt .- σ_f .* dW
+            else
+                Xa .= Xa .+ μka .* dt .- σ_f .* dW
+            end
         end
     end
 
-    # Terminal contribution
-    terminal = ic(X) .* exp.(.-V_acc)
+    # Terminal contribution (include Girsanov weight when using IS)
+    if has_IS
+        terminal = ic(X) .* exp.(.-V_acc .+ G_acc)
+    else
+        terminal = ic(X) .* exp.(.-V_acc)
+    end
     result   = terminal .+ f_acc
 
     if antithetic
-        terminal_a = ic(Xa) .* exp.(.-Va_acc)
+        if has_IS
+            terminal_a = ic(Xa) .* exp.(.-Va_acc .+ Ga_acc)
+        else
+            terminal_a = ic(Xa) .* exp.(.-Va_acc)
+        end
         result_a   = terminal_a .+ fa_acc
         all_v = vcat(Array(vec(result)), Array(vec(result_a)))
     else
