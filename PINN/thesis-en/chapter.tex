@@ -50,7 +50,7 @@ physics-informed - PDE in the loss function
 \begin{algorithm}[H]
 \caption{Mini-batch PINN training}
 \begin{algorithmic}[1]
-    \Require $\mathcal{N}:\mathbb{R}^n\to\mathbb{R}^m$, training data $\{(x_i, y_i)\}_{i=1}^{N}$
+    \Require Neural network $u_\theta: \mathbb{R}^{d+1}\to\mathbb{R}$, sampled data $\mathbf{X}_{pde}, \mathbf{X}_{ic}, \mathbf{X}_{bc}$
     \State \textbf{Initialize} network parameters $\theta$
     \For{epoch $= 1, \dots, E$}
         \State Shuffle training data
@@ -62,6 +62,7 @@ physics-informed - PDE in the loss function
             \State \textbf{Backward pass:} compute $\nabla_\theta \mathcal{L}$ via backpropagation
             \State \textbf{Update:} $\theta \leftarrow \theta - \eta\,\nabla_\theta \mathcal{L}$
         \EndFor
+        \State Every $k$ epochs, regenerate training data
     \EndFor
     \State \Return $\theta$
 \end{algorithmic}
@@ -73,7 +74,7 @@ physics-informed - PDE in the loss function
 \begin{algorithmic}[1]
     \Require Neural network $u_\theta: \mathbb{R}^{d+1}\to\mathbb{R}$, weights $\lambda_{pde}, \lambda_{ic}, \lambda_{bc}$
     \State \textbf{Initialize} network parameters $\theta$
-    \For{step $= 1, \dots, S$}
+    \For{epoch $= 1, \dots, E$}
         \State \textbf{Sample the 3 domains}
         \State \textbf{Forward pass}
                 %$\hat{u}^i_{pde} = u_\theta(x_i^d)$
