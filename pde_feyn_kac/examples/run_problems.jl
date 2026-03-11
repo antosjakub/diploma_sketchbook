@@ -13,7 +13,7 @@ using Pkg; Pkg.activate(joinpath(@__DIR__, ".."))
 
 include(joinpath(@__DIR__, "..", "src", "FeynmanKac.jl"))
 using .FeynmanKac
-using Printf
+using Printf, Random
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -339,6 +339,76 @@ end
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+#  Multi-point demo — shared Brownian increments via solve_fk_multi
+#
+#  Evaluates product-of-sines at P nearby points.  Shared dW gives the same
+#  per-point accuracy as independent runs, but differences u(x₁)−u(x₂)
+#  between nearby points become much more precise because the correlated
+#  noise cancels in the subtraction.
+# ═══════════════════════════════════════════════════════════════════════════
+function run_multi_point_demo(; d::Int=5, P::Int=5, N::Int=200_000, n_steps::Int=50)
+    println("\n" * "="^70)
+    println("  Multi-point demo: shared vs independent Brownian increments  (d=$d, P=$P)")
+    println("="^70)
+
+    α = 0.1
+    t_eval = 0.5
+    σ_sde = sqrt(2α)
+
+    ic(X) = vec(prod(sin.(X), dims=1))
+    exact_at(xp) = prod(sin.(xp)) * exp(-α * d * t_eval)
+
+    # P nearby points: small perturbation around x = [1, …, 1]
+    Random.seed!(42)
+    x_center = ones(d)
+    xs = x_center .+ randn(d, P) .* 0.05      # (d, P)
+
+    # ── Shared dW (solve_fk_multi) ────────────────────────────────────────
+    results_shared = solve_fk_multi(ic, xs, t_eval, N, n_steps; sigma=σ_sde)
+
+    println("\n  Per-point estimates (shared dW):")
+    for p in 1:P
+        ex = exact_at(xs[:, p])
+        r  = results_shared[p]
+        @printf("    x%d: u=%+.8f  exact=%+.8f  err=%.2e  σ=%.2e\n",
+                p, r.value, ex, abs(r.value - ex), r.std_error)
+    end
+
+    # ── Independent dW (separate solve_fk per point) ──────────────────────
+    results_indep = [solve_fk(ic, xs[:, p], t_eval, N, n_steps; sigma=σ_sde)
+                     for p in 1:P]
+
+    println("\n  Per-point estimates (independent dW):")
+    for p in 1:P
+        ex = exact_at(xs[:, p])
+        r  = results_indep[p]
+        @printf("    x%d: u=%+.8f  exact=%+.8f  err=%.2e  σ=%.2e\n",
+                p, r.value, ex, abs(r.value - ex), r.std_error)
+    end
+
+    # ── Compare pairwise differences ──────────────────────────────────────
+    println("\n  Pairwise differences u(x₁) − u(xₚ):")
+    println("    pair  | exact diff   | shared dW    | indep dW     | shared err   | indep err")
+    println("    ------+--------------+--------------+--------------+--------------+-------------")
+    for p in 2:P
+        ex_diff    = exact_at(xs[:, 1]) - exact_at(xs[:, p])
+        diff_sh    = results_shared[1].value - results_shared[p].value
+        diff_ind   = results_indep[1].value  - results_indep[p].value
+        err_sh     = abs(diff_sh - ex_diff)
+        err_ind    = abs(diff_ind - ex_diff)
+        @printf("    1−%-3d | %+.6e | %+.6e | %+.6e | %.2e | %.2e\n",
+                p, ex_diff, diff_sh, diff_ind, err_sh, err_ind)
+    end
+
+    @printf("\n  Shared-dW time:  %.3fs for %d points\n", results_shared[1].elapsed, P)
+    @printf("  Independent time: %.3fs for %d points (sum of %d individual runs)\n",
+            sum(r.elapsed for r in results_indep), P, P)
+
+    return results_shared
+end
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 #  Main
 # ═══════════════════════════════════════════════════════════════════════════
 function main()
@@ -350,6 +420,7 @@ function main()
     run_gauss_diffusion(d=10)
     run_travelling_gaussian(d=10, n_steps=200)
     run_fokker_planck(d=21, mode=:backward_kolmogorov)
+    run_multi_point_demo(d=5, P=5)
     run_scaling_test()
 end
 

@@ -2,7 +2,7 @@ module FeynmanKac
 
 using CUDA, Statistics, Printf, Random
 
-export FKResult, solve_mc, solve_fk, solve_mlmc, estimate_fpt, to_dev_like
+export FKResult, solve_mc, solve_fk, solve_fk_multi, solve_mlmc, estimate_fpt, to_dev_like
 
 # ---------------------------------------------------------------------------
 #  Result type
