@@ -26,7 +26,8 @@ using Printf, Random
 #  IC:    u(0,x) = exp(−α Σ(aᵢxᵢ − bᵢ)²)
 #  Exact: u(t,x) = exp(−α Σ(aᵢxᵢ − bᵢ + cᵢt)²) exp(−βt) cos(γt)
 # ═══════════════════════════════════════════════════════════════════════════
-function run_travelling_gaussian(; d::Int=10, x0,t0, N::Int=10^6, n_steps::Int=200)
+function run_travelling_gaussian(; d::Int=10, x::Vector{Float64}, t_eval::Float64, N::Int=10^6, n_steps::Int=200)
+
     println("\n" * "="^70)
     println("  Problem 3: Travelling Gaussian  (d=$d)")
     println("="^70)
@@ -45,9 +46,6 @@ function run_travelling_gaussian(; d::Int=10, x0,t0, N::Int=10^6, n_steps::Int=2
     v_drift = -c_vec ./ a_vec                        # vᵢ = −cᵢ/aᵢ
     μ_sde   = -v_drift                               # SDE drift = −v
     σ_sde   = sqrt(2δ)
-
-    x = fill(x0, d)
-    t_eval = t0
 
     # IC: g(x) = exp(−α Σ (aᵢxᵢ − bᵢ)²)
     function ic(X)
@@ -129,8 +127,10 @@ end
 
 
 function main()
-
-    result = run_travelling_gaussian(d=4, x0=0.5, t0=0.3, n_steps=200, N=1000)
+    d = 4
+    x = fill(0.5, d)
+    t_eval = 0.3
+    result = run_travelling_gaussian(d=d, x=x, t_eval=t_eval, n_steps=200, N=1000)
     println(result.value)
 
 end
