@@ -33,7 +33,7 @@ class HeatEquation:
         u_time = torch.exp(- self.alpha * self.a_2 * t)
         # return shape = (batch size, 1)
         return (u_space * u_time).unsqueeze(dim=1)
-    def u_IC(self, x):
+    def u_ic(self, x):
         # x.shape = (batch size, spatial dims)
         # return shape = (batch size, 1)
         return self.u_spatial(x).unsqueeze(dim=1)
@@ -56,7 +56,7 @@ class HeatEquation:
     def bc_residual(self, X, u):
         return u - self.u_analytic(X)
     def ic_residual(self, X, u):
-        return u - self.u_IC(X[:,:-1])
+        return u - self.u_ic(X[:,:-1])
     def pde_sgsd_single_term_residual(self, X, u, grad_u, spatial_laplace_u, i: int):
         return 1/self.d * grad_u[:,-1:] - self.alpha * spatial_laplace_u[i]
 
@@ -116,7 +116,7 @@ class TravellingGaussPacket_v2:
             * torch.cos(self.gamma*X[:,-1])
         ).unsqueeze(dim=1)
     
-    def u_IC(self, X):
+    def u_ic(self, X):
         z = self.a * X - self.b
         return (
             torch.exp(-self.alpha*(z**2).sum(dim=-1))
@@ -139,7 +139,7 @@ class TravellingGaussPacket_v2:
     def bc_residual(self, X, u):
         return u - self.u_analytic(X)
     def ic_residual(self, X, u):
-        return u - self.u_IC(X[:,:-1])
+        return u - self.u_ic(X[:,:-1])
 
     def dump_pde_metadata(self, file_path) -> None:
         pde_params = {
