@@ -1,0 +1,3 @@
+[submodule "SG/external/SGpp"]
+	path = SG/external/SGpp
+	url = https://github.com/SGpp/SGpp.git
