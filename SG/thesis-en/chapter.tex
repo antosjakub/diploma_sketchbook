@@ -1,0 +1,127 @@
+
+
+\chapter{Sparse grids}
+
+o n (log n)d-1
+
+
+\subsection{The sg}
+
+1 d multilevel basis
+
+grid $\Omega_l$ of level l - $2^l$ points
+
+basis function on each grid point with 0 support
+
+space $V_l$
+
+increment spaces $W_l$
+
+$V_l = sum k<l W_k$
+
+hierarchical basis
+
+$u(x) = sum sum v_ik \phi_ik (x) $
+
+
+in high dim:
+
+interval -> rectangles
+
+$phi = \prod_{i=1}^d phis$
+
+---
+classical sg
+
+multiindex of derivatives
+sobol space $u \in L2$, 0 on bc
+
+only combine some rect grids - $\hat{V}_n$
+-> number of dog -> $n (log n)^d-1$
+
+accuracy only slightly(?) worse
+
+--- 
+sg optimized for 
+- energy norm problems
+- sobolev norms
+
+higher order polynomials
+non-smooth problem? - local adaptive refinement
+
+use FEM to discretize, sg to solve
+
+for pdes:
+combination technique
+- optimized for the particular differential operator
+
+
+----------
+
+enegy based norm - no curse
+
+
+
+
+\subsection{Algorithm}
+
+\begin{algorithm}[H]
+\caption{Mini-batch PINN training}
+\begin{algorithmic}[1]
+    \Require Neural network $u_\theta: \mathbb{R}^{d+1}\to\mathbb{R}$, sampled data $\mathbf{X}_{pde}, \mathbf{X}_{ic}, \mathbf{X}_{bc}$
+    \State \textbf{Initialize} network parameters $\theta$
+    \For{epoch $= 1, \dots, E$}
+        \State Shuffle training data
+        \For{each mini-batch $\mathcal{B} \subset \{1,\dots,N\}$, $|\mathcal{B}|=B$}
+            \State \textbf{Forward pass:} compute $\hat{y}_i = \mathcal{N}_\theta(x_i)$ for $i\in\mathcal{B}$
+            \State \textbf{Compute loss:}
+            $\mathcal{L}(\theta) = \dfrac{1}{B}\displaystyle\sum_{i\in\mathcal{B}}
+                \bigl(\hat{y}_i - y_i\bigr)^2$
+            \State \textbf{Backward pass:} compute $\nabla_\theta \mathcal{L}$ via backpropagation
+            \State \textbf{Update:} $\theta \leftarrow \theta - \eta\,\nabla_\theta \mathcal{L}$
+        \EndFor
+        \State Every $k$ epochs, regenerate training data
+    \EndFor
+    \State \Return $\theta$
+\end{algorithmic}
+\end{algorithm}
+
+
+
+\section{Most important}
+
+crutial in high dim:
+
+- parallelization
+
+
+\section{Grid search}
+
+k
+
+
+\section{The curse of dimensionality}
+
+we suppose that the solution is not heavily depended on mixed derivatives
+
+
+\section{my genious ideas TD}
+
+
+
+\section{Math recap}
+
+
+
+
+
+
+\cite{sg_123}
+
+
+
+
+
+
+
+
