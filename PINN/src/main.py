@@ -1,16 +1,14 @@
 import torch
-import torch.nn as nn
 import argparse
-from torch.profiler import profile, ProfilerActivity, record_function
-from contextlib import nullcontext
-
+from torch.profiler import record_function
+import sampling, loss, architecture, utility, pde_models
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--d", default=2, type=int, help="Number of spatial dimensions.")
-parser.add_argument("--layers", default="64,64,64", type=str, help="")
+parser.add_argument("--layers", default="128,128,128", type=str, help="")
 parser.add_argument("--n_steps", default=10_000, type=int, help="")
-parser.add_argument("--n_steps_decay", default=1000, type=int, help="Decay by 0.9 every 2000 steps.")
+parser.add_argument("--n_steps_decay", default=2000, type=int, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--gamma", default=0.9, type=float, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--n_calloc_points", default=5_000, type=int, help="")
 parser.add_argument("--n_test_calloc_points", default=5_000, type=int, help="")
@@ -30,6 +28,7 @@ parser.add_argument("--l2_stop_crit", default=0.01, type=float, help="")
 parser.add_argument("--l2_stop_crit_lbfgs", default=0.001, type=float, help="")
 # 
 parser.add_argument("--output_dir_name", default="run_latest/", type=str, help="")
+parser.add_argument("--enable_profiler", action="store_true", help="")
 parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
 parser.add_argument("--use_weak_form", action="store_true", help="")
 # enable transfer learning / finetuning
@@ -42,7 +41,7 @@ parser.add_argument("--starting_model", default=None, type=str, help="")
 
 
 class PINN_Trainer:
-    def __init__(self, model, optimizer, scheduler, pde_model, loss_weighting, device='cpu', profiler=None):
+    def __init__(self, model, optimizer, scheduler, pde_model, loss_weighting, profiler=None, device='cpu'):
         self.model = model
         self.optimizer = optimizer
         self.scheduler = scheduler
@@ -57,7 +56,7 @@ class PINN_Trainer:
         n_test_boundary = n_test_calloc_points//10
         n_test_initial = n_test_calloc_points//10
 
-        X_interior_test, X_boundary_test, X_initial_test = sample_collocation_points(
+        X_interior_test, X_boundary_test, X_initial_test = sampling.sample_collocation_points(
             self.d, n_test_interior, n_test_boundary, n_test_initial, device=self.device
         )
 
@@ -69,15 +68,6 @@ class PINN_Trainer:
         return l2_err, l1_err, rel_err
 
 
-    def resample_training_data(self):
-        X_int1 = residual_based_adaptive_sampling(d, self.pde_model.pde_residual, n_new=2*n_points_pde//3, n_candidates=5*n_points_pde, sampling_strategy="latin", picking_criterion="multinomial")
-        X_int2 = residual_based_adaptive_sampling(d, pde_residual, n_new=n_points_pde//3, n_candidates=5*n_points_pde, sampling_strategy="latin", picking_criterion="top_k")
-        X_interior = torch.cat([X_int1, X_int2], dim=0)
-        _, X_boundary, X_initial = sample_collocation_points(
-            d, 0, n_points_bc, n_points_ic, device
-        )
-        return X_interior, X_boundary, X_initial
-
 
     def train_adam_step(self, batch_pde, batch_bc, batch_ic, u_bc_target, u_ic_target):
         """
@@ -88,20 +78,53 @@ class PINN_Trainer:
         # Compute individual losses
         with record_function("loss"):
             #loss_pde = sdgd_loss(model, X_interior, pde_residual, None, 3)
-            loss_pde = pde_loss(self.model, batch_pde, self.pde_model.pde_residual)
-            loss_bc = boundary_condition_loss(self.model, batch_bc, u_bc_target)
-            loss_ic = initial_condition_loss(self.model, batch_ic, u_ic_target)
+            loss_pde = loss.pde_loss(self.model, batch_pde, self.pde_model.pde_residual)
+            loss_bc = loss.boundary_condition_loss(self.model, batch_bc, u_bc_target)
+            loss_ic = loss.initial_condition_loss(self.model, batch_ic, u_ic_target)
 
         # Weighted loss
-        loss = self.loss_weighting.weight_loss([loss_pde, loss_bc, loss_ic])
+        loss_value = self.loss_weighting.weight_loss([loss_pde, loss_bc, loss_ic])
 
         # Backward pass
         with record_function("backward"):
-            loss.backward()
+            loss_value.backward()
         with record_function("optimizer_step"):
             self.optimizer.step()
 
-        return loss, (loss_pde.item(), loss_bc.item(), loss_ic.item())
+        return loss_value, (loss_pde.item(), loss_bc.item(), loss_ic.item())
+    
+
+    def train_adam_step_v2(self, batch_iterator):
+        self.optimizer.zero_grad()
+
+        n_cycles = 0
+        loss_pde, loss_bc, loss_ic = 0.0, 0.0, 0.0
+        for (batch_pde,), (batch_bc, u_bc_target), (batch_ic, u_ic_target) in batch_iterator:
+            n_cycles += 1
+            batch_pde.requires_grad = True
+            # Compute individual losses
+            with record_function("loss"):
+                #loss_pde = sdgd_loss(model, X_interior, pde_residual, None, 3)
+                loss_pde += loss.pde_loss(self.model, batch_pde, self.pde_model.pde_residual)
+                loss_bc += loss.boundary_condition_loss(self.model, batch_bc, u_bc_target)
+                loss_ic += loss.initial_condition_loss(self.model, batch_ic, u_ic_target)
+        # Weighted loss
+        loss_pde /= n_cycles
+        loss_bc /= n_cycles
+        loss_ic /= n_cycles
+        loss_value = self.loss_weighting.weight_loss(
+            [loss_pde, loss_bc, loss_ic]
+        )
+
+        # Backward pass
+        with record_function("backward"):
+            loss_value.backward()
+        with record_function("optimizer_step"):
+            self.optimizer.step()
+        
+        return loss_value, (loss_pde.item(), loss_bc.item(), loss_ic.item())
+
+
 
     def train_adam_fullbatch(self, n_steps, n_steps_decay, n_calloc_points, n_test_calloc_points, resampling_frequency=2000, testing_frequency=100):
         """
@@ -117,9 +140,12 @@ class PINN_Trainer:
         if self.profiler: self.profiler.make()
 
         # Generate training data
-        X_interior, X_boundary, X_initial = sample_collocation_points(
+        X_interior, X_boundary, X_initial = sampling.sample_collocation_points(
             self.d, n_points_interior, n_points_boundary, n_points_initial, device=self.device
         )
+        # other:
+        #pre_precompute = 
+        #other = self.pde_model.precompute(X_interior, X_boundary, X_initial)
         u_bc_target = self.pde_model.u_bc(X_boundary)
         u_ic_target = self.pde_model.u_ic(X_initial)
 
@@ -129,7 +155,7 @@ class PINN_Trainer:
                 ## Resample training data
                 #X_interior, X_boundary, X_initial = self.resample_training_data()
                 print("New training data arrived?")
-                X_interior, X_boundary, X_initial = sample_collocation_points(
+                X_interior, X_boundary, X_initial = sampling.sample_collocation_points(
                     self.d, n_points_interior, n_points_boundary, n_points_initial, device=self.device
                 )
                 u_bc_target = self.pde_model.u_bc(X_boundary)
@@ -139,13 +165,12 @@ class PINN_Trainer:
             if self.profiler: self.profiler.start(si)
 
             X_interior = X_interior.detach().requires_grad_(True)
-            loss, (loss_pde, loss_bc, loss_ic) = self.train_adam_step(X_interior, X_boundary, X_initial, u_bc_target, u_ic_target)
+            loss_value, (loss_pde, loss_bc, loss_ic) = self.train_adam_step(X_interior, X_boundary, X_initial, u_bc_target, u_ic_target)
+            losses.append(loss_value.item())
 
             # Step scheduler
             if (si + 1) % n_steps_decay == 0:
                 self.scheduler.step()
-
-            losses.append(loss.item())
 
             # Exit profiler context after the last profiled step
             if self.profiler: self.profiler.exit(si)
@@ -154,10 +179,10 @@ class PINN_Trainer:
             if (si + 1) % testing_frequency == 0:
                 l2_err, l1_err, rel_err = self.test_model(n_test_calloc_points)
                 l2_errs.append(l2_err)
-                print(f'Step {si+1}/{n_steps}, Loss: {loss.item():.6f}, '
-                      f'PDE: {loss_pde.item():.6f}, '
-                      f'BC: {loss_bc.item():.6f}, '
-                      f'IC: {loss_ic.item():.6f}, '
+                print(f'Step {si+1}/{n_steps}, Loss: {loss_value.item():.6f}, '
+                      f'PDE: {loss_pde:.6f}, '
+                      f'BC: {loss_bc:.6f}, '
+                      f'IC: {loss_ic:.6f}, '
                       f'lr: {self.optimizer.param_groups[0]["lr"]:.6f}, '
                       f'L2: {l2_err:.6f}, '
                       f'L1: {l1_err:.6f}, '
@@ -167,23 +192,19 @@ class PINN_Trainer:
         return losses, l2_errs
 
 
-    def train_adam_minibatch(self, bs, n_steps, n_steps_decay, n_points_calloc, resampling_frequency=2000, testing_frequency=100):
+
+
+    def train_adam_minibatch(self, bs, n_steps, n_steps_decay, n_calloc_points, n_test_calloc_points, resampling_frequency=2000, testing_frequency=100):
         """
         Train the model using Adam optimizer.
         """
         losses = []
         l2_errs = []
 
-
         if self.profiler: self.profiler.make()
 
         # batches 
-        loader_interior, loader_bc, loader_ic = create_dataloaders(self.d, n_points_calloc, bs, self.pde_model.u_bc, self.pde_model.u_ic)
-
-        # Generate training data
-        #X_interior, X_boundary, X_initial = sample_collocation_points(
-        #    self.d, n_points_calloc, 0, 0, device=self.device
-        #)
+        loader_interior, loader_bc, loader_ic = sampling.create_dataloaders(self.d, n_calloc_points, bs, self.pde_model.u_bc, self.pde_model.u_ic)
 
         for si in range(n_steps):
 
@@ -191,124 +212,131 @@ class PINN_Trainer:
                 ## Resample training data
                 print("New training data arrived?")
                 #X_interior, X_boundary, X_initial = self.resample_training_data()
-                loader_interior, loader_bc, loader_ic = create_dataloaders(self.d, n_points_calloc, bs, self.pde_model.u_bc, self.pde_model.u_ic)
+                loader_interior, loader_bc, loader_ic = sampling.create_dataloaders(self.d, n_calloc_points, bs, self.pde_model.u_bc, self.pde_model.u_ic)
     
             # Start profiler context
             if self.profiler: self.profiler.start(si)
         
             # batches
             batch_iterator = zip(loader_interior, loader_bc, loader_ic)
-            for (batch_pde,), (batch_bc, u_bc_target), (batch_ic, u_ic_target) in batch_iterator:
-                batch_pde.requires_grad = True
-                loss = self.train_adam_step(batch_pde, batch_bc, batch_ic)
+            if True:
+                for (batch_pde,), (batch_bc, u_bc_target), (batch_ic, u_ic_target) in batch_iterator:
+                    batch_pde.requires_grad = True
+                    loss_value, (loss_pde, loss_bc, loss_ic) = self.train_adam_step(batch_pde, batch_bc, batch_ic, u_bc_target, u_ic_target)
+            else:
+                loss_value, (loss_pde, loss_bc, loss_ic) = self.train_adam_step_v2(batch_iterator)  # v2 is faster
+            losses.append(loss_value.item())
+
 
             # Step scheduler
             if (si + 1) % n_steps_decay == 0:
-                scheduler.step()
-
-            losses.append(loss.item())
+                self.scheduler.step()
 
             # Exit profiler context after the last profiled step
             if self.profiler: self.profiler.exit(si)
 
             # Print progress
             if (si + 1) % testing_frequency == 0:
-                test_model(model, X_interior_test, X_boundary_test, X_initial_test)
+                l2_err, l1_err, rel_err = self.test_model(n_test_calloc_points)
+                l2_errs.append(l2_err)
+                print(f'Step {si+1}/{n_steps}, Loss: {loss_value.item():.6f}, '
+                      f'PDE: {loss_pde:.6f}, '
+                      f'BC: {loss_bc:.6f}, '
+                      f'IC: {loss_ic:.6f}, '
+                      f'lr: {self.optimizer.param_groups[0]["lr"]:.6f}, '
+                      f'L2: {l2_err:.6f}, '
+                      f'L1: {l1_err:.6f}, '
+                      f'rel_max: {rel_err:.6f}'
+                )
 
-    
-    return losses, l2_errs
-
-    def train_lbfgs():
+        return losses, l2_errs
 
 
 
 
-
-
-
-def train_pinn_lbfgs(
-        model,
-        pde_residual, bc_residual, ic_residual,
-        u_analytic,
-        d,
-        n_steps=500,
-        n_steps_log=100,
-        n_points_pde=2000, n_points_bc=400, n_points_ic=400,
-        lambda_pde=1.0, lambda_bc=10.0, lambda_ic=10.0,
-        lr=1.0,
-        l2_stop_crit=0.001,
-        compute_laplace=True,
-        device='cpu'
-    ):
-    """Fine-tune the PINN model with L-BFGS after Adam pre-training."""
-
-    # Sample fixed collocation points (L-BFGS works best with a fixed dataset)
-    X_interior, X_boundary, X_initial = sample_collocation_points(
-        d, n_points_pde, n_points_bc, n_points_ic, device
-    )
-    X_interior.requires_grad = True
-
-    optimizer_lbfgs = torch.optim.LBFGS(
-        model.parameters(),
-        lr=lr,
-        max_iter=20,           # inner CG iterations per step
-        max_eval=25,
-        history_size=50,
-        tolerance_grad=1e-7,
-        tolerance_change=1e-9,
-        line_search_fn='strong_wolfe'
-    )
-
-    losses = []
-    l2_errs = []
-    step_counter = [0]  # mutable counter accessible inside closure
-
-    def closure():
-        optimizer_lbfgs.zero_grad()
-        loss_pde = pde_loss(model, X_interior, pde_residual, compute_laplace=compute_laplace)
-        loss_bc  = boundary_condition_loss(model, X_boundary, bc_residual)
-        loss_ic  = initial_condition_loss(model, X_initial, ic_residual)
-        loss = lambda_pde * loss_pde + lambda_bc * loss_bc + lambda_ic * loss_ic
-        loss.backward()
-        return loss
-
-    print(f"\n{'='*60}")
-    print(f"Starting L-BFGS fine-tuning ({n_steps} steps)")
-    print(f"{'='*60}\n")
-
-    l2_err = 1.0 + l2_stop_crit # init with some val
-    for si in range(n_steps):
-        loss = optimizer_lbfgs.step(closure)
-        losses.append(loss.item())
-        step_counter[0] += 1
-
-        if (si + 1) % n_steps_log == 0:
-            X_interior_test, _, _ = sample_collocation_points(
-                d, n_points_pde, n_points_bc, n_points_ic, device=device
-            )
-            with torch.no_grad():
-                u_pred = model(X_interior_test)
-                u_true = u_analytic(X_interior_test)
-            l2_err = torch.sqrt(torch.mean((u_pred - u_true) ** 2)).item()
-            l2_errs.append(l2_err)
-
-            # Recompute individual losses for logging (no grad needed)
-            with torch.no_grad():
-                u_bc  = model(X_boundary)
-                u_ic  = model(X_initial)
-            X_log = X_interior.detach().requires_grad_(True)
-            loss_pde_log = pde_loss(model, X_log, pde_residual, compute_laplace=compute_laplace)
-            loss_bc_log  = boundary_condition_loss(model, X_boundary, bc_residual)
-            loss_ic_log  = initial_condition_loss(model, X_initial, ic_residual)
-
-            print(f'[L-BFGS] Step {si+1}/{n_steps}, Loss: {loss.item():.6f}, '
-                  f'PDE: {loss_pde_log.item():.6f}, BC: {loss_bc_log.item():.6f}, '
-                  f'IC: {loss_ic_log.item():.6f}, L2: {l2_err:.6f}')
-
-        if l2_err < l2_stop_crit:
-            break
-
-    return losses, l2_errs
+#def train_pinn_lbfgs(
+#        model,
+#        pde_residual, bc_residual, ic_residual,
+#        u_analytic,
+#        d,
+#        n_steps=500,
+#        n_steps_log=100,
+#        n_points_pde=2000, n_points_bc=400, n_points_ic=400,
+#        lambda_pde=1.0, lambda_bc=10.0, lambda_ic=10.0,
+#        lr=1.0,
+#        l2_stop_crit=0.001,
+#        compute_laplace=True,
+#        device='cpu'
+#    ):
+#    """Fine-tune the PINN model with L-BFGS after Adam pre-training."""
+#
+#    # Sample fixed collocation points (L-BFGS works best with a fixed dataset)
+#    X_interior, X_boundary, X_initial = sample_collocation_points(
+#        d, n_points_pde, n_points_bc, n_points_ic, device
+#    )
+#    X_interior.requires_grad = True
+#
+#    optimizer_lbfgs = torch.optim.LBFGS(
+#        model.parameters(),
+#        lr=lr,
+#        max_iter=20,           # inner CG iterations per step
+#        max_eval=25,
+#        history_size=50,
+#        tolerance_grad=1e-7,
+#        tolerance_change=1e-9,
+#        line_search_fn='strong_wolfe'
+#    )
+#
+#    losses = []
+#    l2_errs = []
+#    step_counter = [0]  # mutable counter accessible inside closure
+#
+#    def closure():
+#        optimizer_lbfgs.zero_grad()
+#        loss_pde = pde_loss(model, X_interior, pde_residual, compute_laplace=compute_laplace)
+#        loss_bc  = boundary_condition_loss(model, X_boundary, bc_residual)
+#        loss_ic  = initial_condition_loss(model, X_initial, ic_residual)
+#        loss = lambda_pde * loss_pde + lambda_bc * loss_bc + lambda_ic * loss_ic
+#        loss.backward()
+#        return loss
+#
+#    print(f"\n{'='*60}")
+#    print(f"Starting L-BFGS fine-tuning ({n_steps} steps)")
+#    print(f"{'='*60}\n")
+#
+#    l2_err = 1.0 + l2_stop_crit # init with some val
+#    for si in range(n_steps):
+#        loss = optimizer_lbfgs.step(closure)
+#        losses.append(loss.item())
+#        step_counter[0] += 1
+#
+#        if (si + 1) % n_steps_log == 0:
+#            X_interior_test, _, _ = sample_collocation_points(
+#                d, n_points_pde, n_points_bc, n_points_ic, device=device
+#            )
+#            with torch.no_grad():
+#                u_pred = model(X_interior_test)
+#                u_true = u_analytic(X_interior_test)
+#            l2_err = torch.sqrt(torch.mean((u_pred - u_true) ** 2)).item()
+#            l2_errs.append(l2_err)
+#
+#            # Recompute individual losses for logging (no grad needed)
+#            with torch.no_grad():
+#                u_bc  = model(X_boundary)
+#                u_ic  = model(X_initial)
+#            X_log = X_interior.detach().requires_grad_(True)
+#            loss_pde_log = pde_loss(model, X_log, pde_residual, compute_laplace=compute_laplace)
+#            loss_bc_log  = boundary_condition_loss(model, X_boundary, bc_residual)
+#            loss_ic_log  = initial_condition_loss(model, X_initial, ic_residual)
+#
+#            print(f'[L-BFGS] Step {si+1}/{n_steps}, Loss: {loss.item():.6f}, '
+#                  f'PDE: {loss_pde_log.item():.6f}, BC: {loss_bc_log.item():.6f}, '
+#                  f'IC: {loss_ic_log.item():.6f}, L2: {l2_err:.6f}')
+#
+#        if l2_err < l2_stop_crit:
+#            break
+#
+#    return losses, l2_errs
 
 
 # Main execution
@@ -323,7 +351,7 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     d = args.d # space dims
     D = d + 1 # space + time dims
-    layers = list(map(lambda x: int(x), args.layers.split(",")))
+    layers = utility.layers_from_string(args.layers)
     print(f"\n{'='*60}")
     print(f"Training PINN for {d}D PDE")
     print(f"Domain: [0,1]^{d} x [0,1]")
@@ -343,7 +371,7 @@ if __name__ == "__main__":
     if args.starting_model:
         model = torch.load(args.starting_model, weights_only=False)
     else:
-        model = PINN(D, layers).to(device)
+        model = architecture.PINN(D, layers).to(device)
         #model = PINN_SeparableTimes(D, layers).to(device)
         #model = PINN_SepTime(D, layers).to(device)
     #model = torch.compile(model, mode="reduce-overhead")
@@ -351,9 +379,9 @@ if __name__ == "__main__":
     
 
     # PDE equation
-    import pde_models
     #pde_model = pde_models.HeatEquation(d, alpha=0.01, a=2*torch.pi*torch.ones(d))
     pde_model = pde_models.TravellingGaussPacket_v2(d)
+    print(pde_model.get_pde_metadata())
     if args.use_weak_form:
         if pde_model.has_weak_form:
             use_weak_form = True
@@ -376,17 +404,20 @@ if __name__ == "__main__":
         # Option 1: ExponentialLR
         scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma)
         # Initialize loss weighting and profiler
-        loss_weighting = ConstantWeights(weights=[args.lambda_pde, args.lambda_bc, args.lambda_ic])
-        profiler = Profiler(report_filename=f"{dir_name}/{args.profiler_report_filename}.txt", start_step=100, end_step=110) if args.enable_profiler else None
+        loss_weighting = loss.ConstantWeights(weights=[args.lambda_pde, args.lambda_bc, args.lambda_ic])
+        profiler = utility.Profiler(report_filename=f"{dir_name}/{args.profiler_report_filename}.txt", start_step=100, end_step=110) if args.enable_profiler else None
 
         trainer = PINN_Trainer(model, optimizer, scheduler, pde_model, loss_weighting, profiler, device)
+        #losses_adam, l2_errs_adam = trainer.train_adam_fullbatch(
+        #losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
         losses_adam, l2_errs_adam = trainer.train_adam_fullbatch(
             n_steps=args.n_steps,
             n_steps_decay=args.n_steps_decay,
             n_calloc_points=args.n_calloc_points,
             n_test_calloc_points=args.n_test_calloc_points,
             resampling_frequency=args.resampling_frequency,
-            testing_frequency=args.testing_frequency
+            testing_frequency=args.testing_frequency,
+            #bs=1024
         )
         losses += losses_adam
         l2_errs += l2_errs_adam

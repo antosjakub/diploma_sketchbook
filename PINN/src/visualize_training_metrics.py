@@ -17,10 +17,9 @@ l2_error = torch.load(f'{l2_error_name}.pth')
 print(f"Loading: {loss_name}.pth")
 loss = torch.load(f'{loss_name}.pth')
 
-import json
-with open(f"{dir_name}/args.json", "r") as f:
-    metadata = json.load(f)
-n_steps_log = metadata["n_steps_log"]
+import utility
+model_metadata = utility.json_load(f"{dir_name}/model_metadata.json")
+n_steps_log = model_metadata["args"]["testing_frequency"]
 n_logged_pnts = len(l2_error)
 steps = n_steps_log*torch.linspace(1,n_logged_pnts,n_logged_pnts, dtype=torch.int)
 

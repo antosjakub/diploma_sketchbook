@@ -1,7 +1,15 @@
 import torch
-import json
 import utility
 
+class PDEModel:
+    def __init__(self):
+        pass
+    def dump_pde_params(self, file_path) -> None:
+        pass
+    def load_pde_params(self, file_path) -> None:
+        pass
+    def pde_residual(self, X, u, grad_u, sp_laplace_u, other=None):
+        pass
 
 class HeatEquation:
     def __init__(self, d, alpha=0.01, a=None):
@@ -60,10 +68,6 @@ class HeatEquation:
     def pde_sgsd_single_term_residual(self, X, u, grad_u, spatial_laplace_u, i: int):
         return 1/self.d * grad_u[:,-1:] - self.alpha * spatial_laplace_u[i]
 
-class FokkerPlanck:
-    def __init__(self):
-        pass
-
 
 class TravellingGaussPacket:
     def __init__(self, d):
@@ -92,6 +96,7 @@ class TravellingGaussPacket:
         z = self.a * X[:-1] - self.b + self.c * X[-1:]
         return self.__f_inner(z)
 
+
 class TravellingGaussPacket_v2:
     def __init__(self, d, alpha=None, beta=None, gamma=None, a=None, b=None, c=None):
         self.d = d
@@ -115,9 +120,10 @@ class TravellingGaussPacket_v2:
             torch.exp(-self.alpha*(z**2).sum(dim=-1) - self.beta*X[:,-1])
             * torch.cos(self.gamma*X[:,-1])
         ).unsqueeze(dim=1)
-    
+    def u_bc(self, X):
+        return self.u_analytic(X)
     def u_ic(self, X):
-        z = self.a * X - self.b
+        z = self.a * X[:,:-1] - self.b
         return (
             torch.exp(-self.alpha*(z**2).sum(dim=-1))
         ).unsqueeze(dim=1)
@@ -141,8 +147,8 @@ class TravellingGaussPacket_v2:
     def ic_residual(self, X, u):
         return u - self.u_ic(X[:,:-1])
 
-    def dump_pde_metadata(self, file_path) -> None:
-        pde_params = {
+    def get_pde_metadata(self):
+        return {
             "alpha": self.alpha,
             "beta": self.beta,
             "gamma": self.gamma,
@@ -150,6 +156,8 @@ class TravellingGaussPacket_v2:
             "b": list(map(lambda x: float(x), self.b)),
             "c": list(map(lambda x: float(x), self.c))
         }
+    def dump_pde_metadata(self, file_path) -> None:
+        pde_params = self.get_pde_metadata()
         utility.json_dump(file_path, {"pde_class": type(self).__name__, "params": pde_params})
     def load_pde_metadata(self, pde_metadata) -> None:
         pde_class = pde_metadata["pde_class"]
@@ -159,3 +167,73 @@ class TravellingGaussPacket_v2:
         pde_params["b"] = torch.tensor(pde_params["b"])
         pde_params["c"] = torch.tensor(pde_params["c"])
         self.__init__(self.d, **pde_params)
+
+
+class FokkerPlanckLJ:
+    def __init__(self, n_atoms, d, r0=None, epsilon=None, xi=None, D=None):
+        self.n_atoms = n_atoms
+        self.d = d
+        self.r0 =           r0 if r0      is not None else 1.0
+        self.epsilon = epsilon if epsilon is not None else 1.0
+        self.xi =           xi if xi      is not None else 1.0
+        self.D =             D if D       is not None else 0.1
+
+    def pde_residual(self, X, u, grad_u, sp_laplace_u, other):
+        u_t = grad_u[:,-1].unsqueeze(dim=1)
+        laplace = sp_laplace_u.sum(dim=1).unsqueeze(dim=1)
+        lj_grad, lj_laplace = other["lj_grad"], other["lj_laplace"]
+        residual = u_t - self.D * laplace + (lj_grad * grad_u[:,:-1]).sum(dim=1).unsqueeze(dim=1)/self.xi + u * lj_laplace/self.xi
+        return residual
+    
+    def precompute_grad_and_laplace(self, Y):
+        """
+        Y: (B, n_atoms * d)
+        returns:
+            grad:    (B, n_atoms, d)
+            laplace: (B, n_atoms, d)
+        """
+        B = Y.shape[0]
+        X = Y.view(B, self.n_atoms, self.d)                      # (B, n_atoms, d)
+
+        # pairwise differences: dX[b, k, j, c] = X[b, k, c] - X[b, j, c]
+        dX = X[:, :, None, :] - X[:, None, :, :]      # (B, n_atoms, n_atoms, d)
+
+        # pairwise distances r[b, k, j]
+        r = torch.linalg.vector_norm(dX, dim=-1)      # (B, n_atoms, n_atoms)
+
+        # mask self-interactions (k == j)
+        eye = torch.eye(self.n_atoms, dtype=torch.bool, device=X.device).expand(B, self.n_atoms, self.n_atoms)
+        r = r.masked_fill(eye, float('inf'))          # (B, n_atoms, n_atoms)
+
+        # shared powers of r
+        r_inv8  = r**(-8)                             # (B, n_atoms, n_atoms)
+        r_inv14 = r**(-14)                            # (B, n_atoms, n_atoms)
+
+        # ---------------------------
+        # Gradient of LJ potential
+        # ---------------------------
+        coeff_grad = -12 * self.r0**12 * r_inv14 + 6 * self.r0**6 * r_inv8     # (B, n_atoms, n_atoms)
+
+        grad_pair = coeff_grad[..., None] * dX                       # (B, n_atoms, n_atoms, d)
+        grad = grad_pair.sum(dim=2)                                  # (B, n_atoms, d)
+        grad = 4 * self.epsilon * grad                                    # (B, n_atoms, d)
+
+        # ---------------------------
+        # Laplacian of LJ potential
+        # ---------------------------
+        coeff1 =  12 * 13 * self.r0**12 * r_inv14 - 6 * 7 * self.r0**6 * r_inv8   # (B, n_atoms, n_atoms)
+        coeff2 = -12      * self.r0**12 * r_inv14 + 6     * self.r0**6 * r_inv8   # (B, n_atoms, n_atoms)
+
+        ratio    = dX / r[..., None]                    # (B, n_atoms, n_atoms, d)
+        ratio_sq = ratio**2                             # (B, n_atoms, n_atoms, d)
+
+        term1   = coeff1[..., None] * ratio_sq                      # (B, n_atoms, n_atoms, d)
+        term2   = coeff2[..., None] * (1.0 - ratio_sq)              # (B, n_atoms, n_atoms, d)
+        lap_pair = term1 + term2                                   # (B, n_atoms, n_atoms, d)
+
+        laplace = lap_pair.sum(dim=2)                               # (B, n_atoms, d)
+        laplace = 4 * self.epsilon * laplace                             # (B, n_atoms, d)
+
+        grad_flat    = grad.view(B, self.n_atoms * self.d)
+        laplace_flat = laplace.view(B, self.n_atoms * self.d)
+        return grad_flat, laplace_flat

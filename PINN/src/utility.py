@@ -15,8 +15,8 @@ def json_load(file_path):
 from torch.profiler import profile, ProfilerActivity
 from contextlib import nullcontext
 
-class Profiler()
-    def __init__(report_filename, start_step, end_step):
+class Profiler():
+    def __init__(self,report_filename, start_step, end_step):
         self.report_filename = report_filename
         self.start_step = start_step
         self.end_step = end_step
@@ -31,7 +31,7 @@ class Profiler()
 
     def start(self, si):
         if si == self.start_step:
-            prof_ctx.__enter__()
+            self.prof_ctx.__enter__()
             print(f"\n[Profiler] Started at step {si+1}")
 
     def exit(self, si):
@@ -56,6 +56,9 @@ class Profiler()
 #        pass
 
 
+def layers_from_string(layers_string):
+    return list(map(lambda x: int(x), layers_string.split(",")))
+
 
 
 import inspect
@@ -69,7 +72,7 @@ def get_module_classes(module):
 
 def header(dir_name):
     import torch
-    import main
+    import architecture
     import pde_models
     print(f"Will be working in directory '{dir_name}'...")
 
@@ -80,7 +83,7 @@ def header(dir_name):
     D = d+1
     model_class_name = model_metadata["model_class"]
     print(model_class_name)
-    model = get_module_classes(main)[model_class_name](D)
+    model = get_module_classes(architecture)[model_class_name](D, layers_from_string(model_metadata["args"]["layers"]))
     model.load_state_dict(torch.load(f'{dir_name}/model.pth'))
     model.eval()
 

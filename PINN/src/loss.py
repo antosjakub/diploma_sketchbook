@@ -1,8 +1,5 @@
 import torch
-import torch.nn as nn
-import argparse
-from torch.profiler import profile, ProfilerActivity, record_function
-from contextlib import nullcontext
+import derivatives
 
 
 def sdgd_loss(model, X, pde_residual, pde_sgsd_single_term_residual, num_dims_to_use: int):
@@ -11,7 +8,7 @@ def sdgd_loss(model, X, pde_residual, pde_sgsd_single_term_residual, num_dims_to
     d = D-1
     I = torch.randperm(d)[:num_dims_to_use]
     X.requires_grad = True
-    u, grad_u, spatial_laplace_u = compute_derivatives(model, X)
+    u, grad_u, spatial_laplace_u = derivatives.compute_derivatives(model, X)
     R = pde_loss(model, X, pde_residual, compute_laplace=True).detach()
     R_stoch = torch.zeros((bs,1))
     for i in I:
@@ -29,7 +26,7 @@ def pde_loss(model, X_in, pde_residual, compute_laplace=True):
     X_in: (batch_size, d+1) tensor
     """
     #X_in.requires_grad = True
-    u, grad_u, spatial_laplace_u = compute_derivatives(model, X_in, compute_laplace=compute_laplace)
+    u, grad_u, spatial_laplace_u = derivatives.compute_derivatives(model, X_in, compute_laplace=compute_laplace)
     residual = pde_residual(X_in, u, grad_u, spatial_laplace_u)
     return torch.mean(residual**2)
 

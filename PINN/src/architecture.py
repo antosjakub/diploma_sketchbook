@@ -29,6 +29,7 @@ class PINN(nn.Module):
         with record_function("forward"):
             return self.net(x)
 
+
 class PINN_SepTime(nn.Module):
     def __init__(self, D, layers=[64], activation_fn=nn.Tanh):
         """

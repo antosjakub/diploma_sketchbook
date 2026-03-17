@@ -11,9 +11,8 @@ parser.add_argument("--layers", default="64,64,64", type=str, help="")
 parser.add_argument("--n_steps", default=10_000, type=int, help="")
 parser.add_argument("--n_steps_decay", default=1000, type=int, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--gamma", default=0.9, type=float, help="Decay by 0.9 every 2000 steps.")
-parser.add_argument("--n_points_pde", default=5_000, type=int, help="")
-parser.add_argument("--n_points_bc", default=500, type=int, help="")
-parser.add_argument("--n_points_ic", default=500, type=int, help="")
+parser.add_argument("--n_points_calloc", default=5_000, type=int, help="")
+parser.add_argument("--bs", default=512, type=int, help="")
 parser.add_argument("--lambda_pde", default=1.0, type=float, help="")
 parser.add_argument("--lambda_bc", default=10.0, type=float, help="")
 parser.add_argument("--lambda_ic", default=10.0, type=float, help="")
@@ -398,23 +397,19 @@ def pde_loss(model, X_in, pde_residual, compute_laplace=True):
     residual = pde_residual(X_in, u, grad_u, spatial_laplace_u)
     return torch.mean(residual**2)
 
-def initial_condition_loss(model, X_ic, ic_residual):
+def initial_condition_loss(model, X_ic, u_target):
     """
     X_ic: (batch_size, d+1) tensor with t = 0
     IC: u(x,0) = u_IC(x)
     """
-    u = model(X_ic)
-    residual = ic_residual(X_ic, u)
-    return torch.mean(residual**2)
+    return torch.mean((model(X_ic)-u_target)**2)
 
-def boundary_condition_loss(model, X_bc, bc_residual):
+def boundary_condition_loss(model, X_bc, u_target):
     """
     X_bc: (batch_size, d+1) tensor with points on boundary
     BC: u(x,t) = u_BC(x,t)
     """
-    u = model(X_bc)
-    residual = bc_residual(X_bc, u)
-    return torch.mean(residual**2)
+    return torch.mean((model(X_bc)-u_target)**2)
 
 
 def sample_collocation_points(
@@ -429,32 +424,76 @@ def sample_collocation_points(
     - device: 'cuda' or 'cpu'
     """
     # Interior points (for PDE): [x1, ..., xd, t]
-    #X_interior = sample_uniform(n_interior, d+1, device=device)
-    X_interior = sample_lhs(n_interior, d+1, device=device)
+    if n_interior > 0:
+        #X_interior = sample_uniform(n_interior, d+1, device=device)
+        X_interior = sample_lhs(n_interior, d+1, device=device)
+    else:
+        X_interior = None
     
-    # Boundary points: spatial coords on boundary, t random in [0,1]
-    x_boundary = sample_hypercube_boundary(n_boundary, d, device=device)
-    t_boundary = torch.rand(n_boundary, 1, device=device)
-    X_boundary = torch.cat([x_boundary, t_boundary], dim=1)
+    if n_boundary > 0:
+        # Boundary points: spatial coords on boundary, t random in [0,1]
+        x_boundary = sample_hypercube_boundary(n_boundary, d, device=device)
+        t_boundary = torch.rand(n_boundary, 1, device=device)
+        X_boundary = torch.cat([x_boundary, t_boundary], dim=1)
+    else:
+        X_boundary = None
     
-    # Initial condition points: spatial coords random in [0,1]^d, t=0
-    x_initial = torch.rand(n_initial, d, device=device)
-    t_initial = torch.zeros(n_initial, 1, device=device)
-    X_initial = torch.cat([x_initial, t_initial], dim=1)
+    if n_initial > 0:
+        # Initial condition points: spatial coords random in [0,1]^d, t=0
+        x_initial = torch.rand(n_initial, d, device=device)
+        t_initial = torch.zeros(n_initial, 1, device=device)
+        X_initial = torch.cat([x_initial, t_initial], dim=1)
+    else:
+        X_initial = None
     
     return X_interior, X_boundary, X_initial
+
+
+from torch.utils.data import TensorDataset, DataLoader
+def create_dataloaders(d, num_colloc, bs, u_bc_fun, u_ic_fun):
+    # bs = 1024...
+    n_cycles = num_colloc // bs
+    #num_colloc = bs * n_cycles
+    bs_segment_size = bs // 16
+    bs_pde = bs_segment_size * 14
+    bs_bc  = bs_segment_size
+    bs_ic  = bs_segment_size
+    num_pde = bs_pde * n_cycles
+    num_bc  =  bs_bc * n_cycles
+    num_ic  =  bs_ic * n_cycles
+
+    X_pde, X_bc, X_ic = sample_collocation_points(d, num_pde, num_bc, num_ic)
+    
+    loader_pde =      DataLoader(TensorDataset(X_pde), batch_size=bs_pde, shuffle=True)
+    loader_bc =       DataLoader(TensorDataset(X_bc, u_bc_fun(X_bc)), batch_size=bs_bc, shuffle=True)
+    loader_ic =       DataLoader(TensorDataset(X_ic, u_ic_fun(X_ic[:,:-1])), batch_size=bs_ic, shuffle=True)
+    
+    return loader_pde, loader_bc, loader_ic
+
+
+def make_profiler(enable_profiler):
+    if enable_profiler:
+        return profile(
+            activities=[ProfilerActivity.CPU],
+            profile_memory=True,
+            record_shapes=True,
+            with_stack=True,
+        )
+    else:
+        return nullcontext()
 
 
 def train_pinn(
         model,
         optimizer, scheduler,
-        pde_residual, bc_residual, ic_residual,
+        pde_residual, u_bc_target_fun, u_ic_target_fun,
         u_analytic,
         d,
         n_steps=10_000, 
         n_steps_decay=2000,
         n_steps_log=500,
-        n_points_pde=2000, n_points_bc=400, n_points_ic=400,
+        n_points_calloc=2000,
+        bs=512,
         lambda_pde=1.0, lambda_bc=10.0, lambda_ic=10.0,
         l2_stop_crit=0.01,
         profiler_report_filename='profiler_report',
@@ -467,94 +506,69 @@ def train_pinn(
     losses = []
     l2_errs = []
     
-    #profile_start = 1067
-    #profile_end = profile_start + 100
+    loader_interior, loader_bc, loader_ic = create_dataloaders(d, n_points_calloc, bs, u_bc_target_fun, u_ic_target_fun)
 
     # Generate training data
-    X_interior, X_boundary, X_initial = sample_collocation_points(
-        d, n_points_pde, n_points_bc, n_points_ic, device
-    )
+    #X_interior, X_boundary, X_initial = sample_collocation_points(
+    #    d, n_points_pde, n_points_bc, n_points_ic, device
+    #)
 
-
-    enable_profiler=True
+    enable_profiler=False
     profile_step_start=100
     profile_n_steps=10
     profile_step_end = profile_step_start + profile_n_steps
-
-    def make_profiler():
-        if enable_profiler:
-            return profile(
-                activities=[ProfilerActivity.CPU],
-                profile_memory=True,
-                record_shapes=True,
-                with_stack=True,
-            )
-        else:
-            return nullcontext()
-
-    prof_ctx = make_profiler()
-
+    prof_ctx = make_profiler(enable_profiler)
     
     l2_err = 1.0 + l2_stop_crit # init with some val
     for si in range(n_steps):
 
         if (si + 1) % 2000 == 0:
-        ## Generate training data
-            print("New training data arrived!")
-            X_interior, X_boundary, X_initial = sample_collocation_points(
-                d, n_points_pde, n_points_bc, n_points_ic, device
-            )
+        ## Resample training data
+            print("New training data arrived?")
+            #loader_interior, loader_bc, loader_ic = create_dataloaders(d, n_points_calloc, bs, u_bc_target_fun, u_ic_target_fun)
+            #X_interior, X_boundary, X_initial = sample_collocation_points(
+            #    d, n_points_pde, n_points_bc, n_points_ic, device
+            #)
             #X_int1 = residual_based_adaptive_sampling(d, pde_residual, n_new=2*n_points_pde//3, n_candidates=5*n_points_pde, sampling_strategy="latin", picking_criterion="multinomial")
             #X_int2 = residual_based_adaptive_sampling(d, pde_residual, n_new=n_points_pde//3, n_candidates=5*n_points_pde, sampling_strategy="latin", picking_criterion="top_k")
             #X_interior = torch.cat([X_int1, X_int2], dim=0)
             #_, X_boundary, X_initial = sample_collocation_points(
-            #    d, 10, n_points_bc, n_points_ic, device
+            #    d, 0, n_points_bc, n_points_ic, device
             #)
     
-
-        ## Turn on profiling
-        #if si == profile_start:
-        #    prof = profile(
-        #        activities=[ProfilerActivity.CPU],
-        #        profile_memory=True,
-        #        record_shapes=True
-        #    )
-        #    prof.__enter__()
 
         if enable_profiler and si == profile_step_start:
             prof_ctx.__enter__()
             print(f"\n[Profiler] Started at step {si+1}")
+        
+        batch_iterator = zip(loader_interior, loader_bc, loader_ic)
+        for (batch_pde,), (batch_bc, u_bc_target), (batch_ic, u_ic_target) in batch_iterator:
 
-        optimizer.zero_grad()
+            batch_pde.requires_grad = True
 
-        # Sample the training points
+            optimizer.zero_grad()
 
-        # Compute individual losses
-        with record_function("loss"):
-            #loss_pde = sdgd_loss(model, X_interior, pde_residual, None, 3)
-            loss_pde = pde_loss(model, X_interior.detach().requires_grad_(True), pde_residual, compute_laplace=compute_laplace)
-            loss_bc = boundary_condition_loss(model, X_boundary.detach(), bc_residual)
-            loss_ic = initial_condition_loss(model, X_initial.detach(), ic_residual)
+            # Compute individual losses
+            with record_function("loss"):
+                #loss_pde = sdgd_loss(model, X_interior, pde_residual, None, 3)
+                loss_pde = pde_loss(model, batch_pde, pde_residual, compute_laplace=compute_laplace)
+                loss_bc = boundary_condition_loss(model, batch_bc, u_bc_target)
+                loss_ic = initial_condition_loss(model, batch_ic, u_ic_target)
 
-        # Total loss with weights
-        loss = lambda_pde * loss_pde + lambda_bc * loss_bc + lambda_ic * loss_ic
+            # Total loss with weights
+            loss = lambda_pde * loss_pde + lambda_bc * loss_bc + lambda_ic * loss_ic
 
-        # Backward pass
-        with record_function("backward"):
-            loss.backward()
-        with record_function("optimizer_step"):
-            optimizer.step()
+            # Backward pass
+            with record_function("backward"):
+                loss.backward()
+            with record_function("optimizer_step"):
+                optimizer.step()
 
         # Step scheduler
         if (si + 1) % n_steps_decay == 0:
             scheduler.step()
 
         losses.append(loss.item())
-
-        #if si == profile_end:
-        #    prof.__exit__(None, None, None)
-        #    print("\n=== Profiling Results (100 steps averaged) ===")
-        #    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=15))
 
         # Exit profiler context after the last profiled step
         if enable_profiler and si == profile_step_end - 1:
@@ -568,27 +582,27 @@ def train_pinn(
                 f.write(prof_report)
 
         # Print progress
-        if (si + 1) % n_steps_log == 0:
-            X_interior_test, X_boundary_test, X_initial_test = sample_collocation_points(
-                d, n_points_pde, n_points_bc, n_points_ic, device=device
-            )
-            u_pred = model(X_interior_test)
-            u_true = u_analytic(X_interior_test)
-            l2_err = torch.sqrt(torch.mean((u_pred - u_true) ** 2)).item()
-            l1_err = torch.mean((u_pred - u_true).abs()).item()
-            rel_err = torch.max( ((u_pred - u_true-1e-7)/(u_true+1e-7)).abs() ).item()
-            l2_errs.append(l2_err)
-            print(f'Step {si+1}/{n_steps}, Loss: {loss.item():.6f}, '
-                  f'PDE: {loss_pde.item():.6f}, '
-                  f'BC: {loss_bc.item():.6f}, '
-                  f'IC: {loss_ic.item():.6f}, '
-                  f'lr: {optimizer.param_groups[0]["lr"]:.6f}, '
-                  f'L2: {l2_err:.6f}, '
-                  f'L1: {l1_err:.6f}, '
-                  f'rel_max: {rel_err:.6f}'
-            )
-        if l2_err < l2_stop_crit:
-            break
+        #if (si + 1) % n_steps_log == 0:
+        #    X_interior_test, X_boundary_test, X_initial_test = sample_collocation_points(
+        #        d, n_points_calloc, n_points_bc, n_points_ic, device=device
+        #    )
+        #    u_pred = model(X_interior_test)
+        #    u_true = u_analytic(X_interior_test)
+        #    l2_err = torch.sqrt(torch.mean((u_pred - u_true) ** 2)).item()
+        #    l1_err = torch.mean((u_pred - u_true).abs()).item()
+        #    rel_err = torch.max( ((u_pred - u_true-1e-7)/(u_true+1e-7)).abs() ).item()
+        #    l2_errs.append(l2_err)
+        #    print(f'Step {si+1}/{n_steps}, Loss: {loss.item():.6f}, '
+        #          f'PDE: {loss_pde.item():.6f}, '
+        #          f'BC: {loss_bc.item():.6f}, '
+        #          f'IC: {loss_ic.item():.6f}, '
+        #          f'lr: {optimizer.param_groups[0]["lr"]:.6f}, '
+        #          f'L2: {l2_err:.6f}, '
+        #          f'L1: {l1_err:.6f}, '
+        #          f'rel_max: {rel_err:.6f}'
+        #    )
+        #if l2_err < l2_stop_crit:
+        #    break
     
     return losses, l2_errs
 
@@ -741,14 +755,14 @@ if __name__ == "__main__":
     if args.n_steps > 0:
         losses_adam, l2_errs_adam = train_pinn(
             model, optimizer, scheduler,
-            pde_residual, pde_model.bc_residual, pde_model.ic_residual,
+            pde_residual, pde_model.u_analytic, pde_model.u_IC,
             pde_model.u_analytic,
             d,
             n_steps=args.n_steps,
             n_steps_decay=args.n_steps_decay,
             n_steps_log=args.n_steps_log,
             lambda_pde=args.lambda_pde, lambda_bc=args.lambda_bc, lambda_ic=args.lambda_ic,
-            n_points_pde=args.n_points_pde, n_points_bc=args.n_points_bc, n_points_ic=args.n_points_ic,
+            n_points_calloc=args.n_points_calloc, bs=args.bs,
             l2_stop_crit=args.l2_stop_crit,
             profiler_report_filename=args.profiler_report_filename,
             output_dir_name=dir_name,
