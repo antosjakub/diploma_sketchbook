@@ -1,0 +1,576 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{geometry}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{booktabs}
+
+\geometry{margin=2.5cm}
+
+\lstdefinestyle{py}{
+  language=Python,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue!60!black}\bfseries,
+  commentstyle=\color{green!40!black},
+  stringstyle=\color{orange!50!black},
+  showstringspaces=false,
+  frame=single,
+  breaklines=true,
+  columns=fullflexible
+}
+
+\title{SG++ in Python: a Cookbook for Sparse-Grid Workflows}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\tableofcontents
+
+\section{Purpose and mental model}
+
+This note is a practical cookbook for writing Python code with SG++, assuming the Python bindings already work on your machine. [web:8][web:9]  
+The official Python examples show two main usage styles: a \emph{hierarchical sparse-grid/base} style centered around \texttt{pysgpp.Grid}, \texttt{DataVector}, hierarchisation, and refinement, and a more separate \emph{combigrid} style centered around \texttt{MultiFunction}, \texttt{CombigridOperation}, and \texttt{LevelManager}. [web:8][web:9]  
+The combigrid documentation explicitly says that the combigrid module is quite separated from the other modules and only refers to the base module for objects such as \texttt{DataVector} and \texttt{DataMatrix}. [web:9]  
+For high-dimensional diffusion-type PDEs, these are the two families you should think about first: direct sparse-grid/hierarchical representations on the one hand, and combination-technique or full-grid-callback workflows on the other hand. [web:8][web:9][web:15]  
+
+\section{Module map: what is relevant}
+
+A useful first map of the Python-facing SG++ pieces is the following. [web:8][web:9][web:12][web:15]
+
+\subsection*{1. Core entry point: \texttt{pysgpp}}
+The refinement example imports SG++ simply by writing \texttt{import pysgpp}. [web:8]  
+In practice, this is the main namespace you start from when you want grids, vectors, generators, hierarchisation, and refinement. [web:8]  
+
+\subsection*{2. Core containers: \texttt{DataVector}, \texttt{DataMatrix}}
+The combigrid examples repeatedly use \texttt{DataVector} and \texttt{DataMatrix}, and the documentation states that combigrid depends on the base module for precisely these basic types. [web:9]  
+Use \texttt{DataVector} for coefficient vectors, parameter vectors, and point coordinates; use \texttt{DataMatrix} when an operation expects multiple points at once. [web:8][web:9][web:12]  
+
+\subsection*{3. Grid objects: \texttt{Grid}, \texttt{GridStorage}, \texttt{GridGenerator}}
+The refinement example creates a linear grid with \texttt{pysgpp.Grid.createLinearGrid(dim)}, retrieves its storage by \texttt{grid.getStorage()}, and retrieves the generator by \texttt{grid.getGenerator()}. [web:8]  
+These three objects are the minimal building blocks for classical hierarchical sparse-grid work in Python. [web:8]  
+
+\subsection*{4. Operations}
+The examples use \texttt{createOperationHierarchisation(grid)} for hierarchical transforms, and the combigrid examples use \texttt{CombigridOperation}, \texttt{CombigridMultiOperation}, and \texttt{CombigridTensorOperation}. [web:8][web:12]  
+So the word ``operation'' in SG++ really means ``an algorithm object acting on a grid representation'', not just a mathematical abstraction. [web:8][web:12]  
+
+\subsection*{5. Adaptivity and refinement}
+The official refinement example uses \texttt{SurplusRefinementFunctor(alpha, 1)} to refine the grid point with the largest absolute surplus. [web:8]  
+This is the module family you touch when you move from regular sparse grids to adaptive sparse grids. [web:8]  
+
+\subsection*{6. Combigrid-specific objects}
+The combigrid tutorial introduces \texttt{MultiFunction}, \texttt{CombigridOperation}, \texttt{CombigridMultiOperation}, \texttt{LevelManager}, \texttt{FunctionLookupTable}, \texttt{TreeStorage}, \texttt{CombiHierarchies}, and \texttt{CombiEvaluators}. [web:9]  
+This is the main SG++ toolkit if you want to think in terms of anisotropic full grids, combination technique, repeated evaluation, caching, and PDE-style full-grid callbacks. [web:9][web:15]  
+
+\subsection*{7. Optional plotting and extension modules}
+A convergence example imports plotting helpers from \texttt{pysgpp.extensions.datadriven.uq.plot.plot1d}. [web:12]  
+That tells you that some visualization and uncertainty-quantification helpers live under \texttt{pysgpp.extensions}, which is useful but not the first module family to learn for PDE work. [web:12]  
+
+\section{Import patterns}
+
+There are two import patterns you should expect to see. [web:8][web:12]
+
+\subsection{The normal high-level import}
+The simplest and most common pattern in the official examples is:
+\begin{lstlisting}[style=py]
+import pysgpp
+\end{lstlisting}
+This is the pattern used in the refinement example and is the right default if you are exploring interactively. [web:8]  
+
+\subsection{Direct SWIG-symbol import}
+Another example imports symbols directly from \texttt{pysgpp.pysgpp\_swig}:
+\begin{lstlisting}[style=py]
+from pysgpp.pysgpp_swig import (
+    DataVector,
+    CombigridOperation,
+    CombigridMultiOperation,
+    CombigridTensorOperation,
+)
+\end{lstlisting}
+This pattern is useful when you want shorter names and know exactly which bound symbols you need. [web:12]  
+
+\subsection{Practical rule}
+If you are writing short scripts, start with \texttt{import pysgpp}. [web:8]  
+If you are building a larger notebook or package and want explicit symbol lists, use direct imports for the few classes you touch heavily. [web:12]  
+
+\section{Core containers: \texttt{DataVector} and \texttt{DataMatrix}}
+
+The base data structures that appear again and again are \texttt{DataVector} and \texttt{DataMatrix}. [web:8][web:9][web:12]  
+
+\subsection{Why \texttt{DataVector} matters}
+In the refinement example, the coefficient vector \texttt{alpha} is created as
+\begin{lstlisting}[style=py]
+alpha = pysgpp.DataVector(gridStorage.getSize())
+\end{lstlisting}
+and then indexed entrywise in Python. [web:8]  
+In the combigrid examples, the function input parameter is also described as a \texttt{pysgpp.DataVector}, and the documentation explicitly warns not to treat it like a plain Python list. [web:9]  
+
+\subsection{Typical uses}
+Use \texttt{DataVector} for:
+\begin{itemize}[leftmargin=1.5em]
+\item hierarchical coefficients \texttt{alpha}, [web:8]
+\item a single point \(x\in[0,1]^d\), [web:9]
+\item parameter vectors passed into wrapped SG++ callback objects. [web:9]
+\end{itemize}
+
+\subsection{Minimal examples}
+\begin{lstlisting}[style=py]
+import pysgpp
+
+# vector of coefficients
+alpha = pysgpp.DataVector(10)
+
+# set values
+for i in range(alpha.getSize()):
+    alpha[i] = 0.0
+
+# a single point in dimension 3
+x = pysgpp.DataVector([0.2, 0.5, 0.8])
+\end{lstlisting}
+
+\subsection{Why \texttt{DataMatrix} matters}
+The combigrid tutorial says that in Python one can pass interpolation points via a \texttt{DataMatrix}, and it explicitly notes that for Python the parameters matrix needs to be transposed. [web:9]  
+That is the first thing to remember when you move from single-point evaluation to batch evaluation. [web:9]  
+
+\begin{lstlisting}[style=py]
+import pysgpp
+
+# two 3D points, arranged as a DataMatrix for a multi-evaluation call
+points = pysgpp.DataMatrix(3, 2)
+# fill carefully according to the orientation expected by the API
+\end{lstlisting}
+
+\section{Classical hierarchical sparse grids: \texttt{Grid}, \texttt{GridStorage}, \texttt{GridGenerator}}
+
+The refinement tutorial gives the standard minimal pattern for constructing a classical sparse grid in Python. [web:8]
+
+\subsection{Creating a grid}
+A piecewise linear \(d\)-dimensional grid is created by:
+\begin{lstlisting}[style=py]
+import pysgpp
+
+dim = 2
+grid = pysgpp.Grid.createLinearGrid(dim)
+\end{lstlisting}
+This example constructs a two-dimensional piecewise bilinear sparse grid. [web:8]  
+
+\subsection{Storage and generator}
+The same example immediately pulls out:
+\begin{lstlisting}[style=py]
+gridStorage = grid.getStorage()
+gridGen = grid.getGenerator()
+\end{lstlisting}
+The intended division of labor is clear from the example: the \texttt{Grid} owns the structure, the \texttt{GridStorage} stores the grid points, and the \texttt{GridGenerator} creates or refines them. [web:8]  
+
+\subsection{Regular sparse-grid generation}
+A regular sparse grid of level \(l\) is generated by:
+\begin{lstlisting}[style=py]
+level = 3
+gridGen.regular(level)
+\end{lstlisting}
+The refinement example uses this to generate the initial sparse grid before any adaptive refinement is applied. [web:8]  
+
+\subsection{Inspecting the number of points}
+The grid size is queried by:
+\begin{lstlisting}[style=py]
+print(gridStorage.getSize())
+\end{lstlisting}
+This is the number you usually use to size coefficient vectors and to monitor refinement growth. [web:8]  
+
+\subsection{Accessing individual grid points}
+The refinement example loops over all grid points by index and fetches each point via:
+\begin{lstlisting}[style=py]
+for i in range(gridStorage.getSize()):
+    gp = gridStorage.getPoint(i)
+\end{lstlisting}
+Coordinates are then read with \texttt{gp.getStandardCoordinate(j)}. [web:8]  
+That is the standard low-level pattern when you want to evaluate a function on the current sparse-grid points yourself. [web:8]  
+
+\begin{lstlisting}[style=py]
+import pysgpp
+
+dim = 3
+grid = pysgpp.Grid.createLinearGrid(dim)
+storage = grid.getStorage()
+gen = grid.getGenerator()
+
+gen.regular(2)
+
+for i in range(storage.getSize()):
+    gp = storage.getPoint(i)
+    coords = [gp.getStandardCoordinate(j) for j in range(dim)]
+    print(i, coords)
+\end{lstlisting}
+
+\section{Coefficients and hierarchisation}
+
+Once you have a grid, the next core SG++ concept is the coefficient vector \(\alpha\). [web:8]  
+In the refinement example, \(\alpha\) first stores nodal values, and then SG++ hierarchizes those values in place. [web:8]  
+
+\subsection{Building the value vector}
+The official example uses a scalar test function \(f(x_0,x_1)\) and fills \(\alpha\) pointwise:
+\begin{lstlisting}[style=py]
+f = lambda x0, x1: 16.0 * (x0-1)*x0 * (x1-1)*x1*x1
+
+alpha = pysgpp.DataVector(gridStorage.getSize())
+
+for i in range(gridStorage.getSize()):
+    gp = gridStorage.getPoint(i)
+    alpha[i] = f(gp.getStandardCoordinate(0),
+                 gp.getStandardCoordinate(1))
+\end{lstlisting}
+This is the basic pattern for interpolation from point values onto the grid. [web:8]  
+
+\subsection{Hierarchisation}
+The hierarchical transform is performed by:
+\begin{lstlisting}[style=py]
+pysgpp.createOperationHierarchisation(grid).doHierarchisation(alpha)
+\end{lstlisting}
+This converts the point-value representation into hierarchical surpluses on the current grid. [web:8]  
+
+\subsection{Minimal reusable function}
+\begin{lstlisting}[style=py]
+import pysgpp
+
+def interpolate_on_current_grid(grid, f):
+    storage = grid.getStorage()
+    alpha = pysgpp.DataVector(storage.getSize())
+
+    for i in range(storage.getSize()):
+        gp = storage.getPoint(i)
+        x = [gp.getStandardCoordinate(j) for j in range(gp.getDimension())]
+        alpha[i] = f(*x)
+
+    pysgpp.createOperationHierarchisation(grid).doHierarchisation(alpha)
+    return alpha
+\end{lstlisting}
+
+\subsection{Why this section matters}
+If you remember only one classical SG++ pattern, remember this one: build a grid, sample a function at grid points, store the values in \texttt{DataVector}, then hierarchize. [web:8]  
+That is the shortest path from ``I have a function'' to ``I have a hierarchical sparse-grid representation''. [web:8]  
+
+\section{Adaptive refinement}
+
+The refinement example is the canonical entry point for adaptive sparse grids in Python. [web:8]
+
+\subsection{Refinement functor}
+The example refines using:
+\begin{lstlisting}[style=py]
+gridGen.refine(pysgpp.SurplusRefinementFunctor(alpha, 1))
+\end{lstlisting}
+According to the documentation, this refinement functor chooses the grid point with the largest absolute entry in the provided vector and refines that point. [web:8]  
+The same text states that refining a point adds children if they are missing and recursively inserts missing parents. [web:8]  
+
+\subsection{Resizing the coefficient vector}
+After refinement, the grid has more points, so the coefficient vector must be enlarged:
+\begin{lstlisting}[style=py]
+alpha.resizeZero(gridStorage.getSize())
+\end{lstlisting}
+The documentation notes that the new entries are then present with zero values until you recompute or refill the coefficients. [web:8]  
+
+\subsection{A clean refinement loop}
+\begin{lstlisting}[style=py]
+import pysgpp
+
+dim = 2
+level = 3
+
+grid = pysgpp.Grid.createLinearGrid(dim)
+storage = grid.getStorage()
+gen = grid.getGenerator()
+gen.regular(level)
+
+def f(x0, x1):
+    return 16.0 * (x0 - 1.0) * x0 * (x1 - 1.0) * x1 * x1
+
+alpha = pysgpp.DataVector(storage.getSize())
+
+for refnum in range(5):
+    for i in range(storage.getSize()):
+        gp = storage.getPoint(i)
+        alpha[i] = f(gp.getStandardCoordinate(0),
+                     gp.getStandardCoordinate(1))
+
+    pysgpp.createOperationHierarchisation(grid).doHierarchisation(alpha)
+    gen.refine(pysgpp.SurplusRefinementFunctor(alpha, 1))
+    alpha.resizeZero(storage.getSize())
+
+    print("step", refnum + 1, "grid size", storage.getSize())
+\end{lstlisting}
+
+\subsection{What to learn from this}
+The official example itself remarks that recomputing all point values and hierarchizing from scratch at every refinement step is not always the most efficient approach, but it is simple and robust enough for demonstration purposes. [web:8]  
+That makes it a very good first implementation strategy even for research prototypes. [web:8]  
+
+\section{The combigrid module}
+
+The getting-started tutorial says explicitly that the combigrid module is rather separate from the other modules. [web:9]  
+This is important conceptually: if you enter SG++ through combigrid, you are not starting from the same mental model as in the classical hierarchical-grid example. [web:9]  
+
+\subsection{What combigrid is for}
+The tutorial uses combigrid for quadrature, interpolation at one point, interpolation at multiple points, adaptive level generation, custom per-dimension operators, caching, and a full-grid callback mode suited to PDE-like workflows. [web:9]  
+So if your long-term goal is high-dimensional PDE solvers or combination-technique experiments, combigrid is not optional reading. [web:9]  
+
+\subsection{Wrapping a function}
+The tutorial says the function to be evaluated has domain \([0,1]^d\), takes a \texttt{pysgpp.DataVector} as input, and must be wrapped in a \texttt{pysgpp.MultiFunction} object. [web:9]  
+
+\begin{lstlisting}[style=py]
+import pysgpp
+
+def f(x):
+    # x is a pysgpp.DataVector
+    val = 1.0
+    for j in range(x.getSize()):
+        val *= x[j] * (1.0 - x[j])
+    return val
+
+# In the official examples, f is wrapped in a pysgpp.MultiFunction object.
+# The exact wrapper construction depends on the installed binding version.
+\end{lstlisting}
+
+\subsection{Operations you will meet}
+The examples mention:
+\begin{itemize}[leftmargin=1.5em]
+\item \texttt{CombigridOperation} for a single-point or single-task workflow, [web:9][web:12]
+\item \texttt{CombigridMultiOperation} for efficient evaluation at multiple points, [web:9][web:12]
+\item \texttt{CombigridTensorOperation} as another combigrid-side operation object imported in the examples. [web:12]
+\end{itemize}
+
+\subsection{Level control}
+The tutorial explains that one can use a level bound based on the \(1\)-norm of the level multi-index, and it explicitly lists the active multi-indices in a 3D example when the bound is \(2\). [web:9]  
+This is directly the sparse-grid/Smolyak viewpoint: admissible anisotropic full-grid levels are selected by a total-level condition rather than a full tensor box. [web:9]  
+
+\subsection{Single-point evaluation workflow}
+A minimal combigrid pattern is:
+\begin{enumerate}[leftmargin=1.5em]
+\item define a function \(f\) on \([0,1]^d\), [web:9]
+\item wrap it as a \texttt{MultiFunction}, [web:9]
+\item choose a point distribution and growth rule such as Leja or Clenshaw--Curtis, [web:9]
+\item create a \texttt{CombigridOperation}, [web:9][web:12]
+\item evaluate at a chosen total level. [web:9]
+\end{enumerate}
+
+\subsection{Multi-point evaluation}
+The tutorial then recommends \texttt{CombigridMultiOperation} when you want interpolation at multiple evaluation points efficiently. [web:9][web:12]  
+The same tutorial says that in Python the parameters matrix for this call needs to be transposed. [web:9]  
+
+\section{Level managers, adaptivity, and custom level generation}
+
+The combigrid getting-started example says that the \texttt{LevelManager} provides more options for combigrid evaluation. [web:9]  
+It also says that you can add regular levels, add more points subject to a budget in terms of new function evaluations, and use adaptive level generation. [web:9]  
+
+\subsection{Why \texttt{LevelManager} matters}
+In classical hierarchical SG++, adaptation usually means refining grid points. [web:8]  
+In combigrid, the tutorial emphasizes adaptation on the \emph{level structure}, meaning the set of anisotropic full-grid levels that enter the combination. [web:9]  
+
+\subsection{Practical interpretation}
+If your expensive ingredient is a PDE solve on a full anisotropic grid, then level adaptivity is often the more natural control knob than pointwise local refinement. [web:9]  
+That is one reason the combigrid module is attractive for higher-dimensional PDE experiments. [web:9]  
+
+\subsection{Pseudo-code skeleton}
+\begin{lstlisting}[style=py]
+# Conceptual combigrid workflow from the official tutorial:
+#
+# 1. wrap function/solver in a MultiFunction-like object
+# 2. create a CombigridOperation
+# 3. obtain or set a LevelManager
+# 4. add regular levels
+# 5. optionally add more levels under a work budget
+# 6. optionally switch to adaptive level generation
+# 7. evaluate the result
+\end{lstlisting}
+
+\section{Caching and data reuse: \texttt{FunctionLookupTable} and storage}
+
+The getting-started tutorial contains a full example on storing and reusing computed function values. [web:9]  
+This is very relevant for expensive models because sparse-grid and combigrid workflows often revisit the same points or levels. [web:9]  
+
+\subsection{Function lookup}
+The tutorial says that after wrapping a function into a \texttt{pysgpp.MultiFunction}, one can create a \texttt{FunctionLookupTable} that caches values keyed by the \texttt{DataVector} argument. [web:9]  
+It also warns that even slightly differing \texttt{DataVector} arguments lead to separate evaluations. [web:9]  
+
+\subsection{Serialization}
+The same tutorial states that the lookup table can be serialized, that the serialization is not compressed, and that it uses roughly 60 bytes per entry. [web:9]  
+It also says that one can store which levels have already been evaluated. [web:9]  
+
+\subsection{Practical lesson}
+If your callback is cheap, ignore this machinery at first. [web:9]  
+If your callback is an expensive PDE solve, caching and storage should enter the design from the beginning. [web:9]  
+
+\section{Custom per-dimension configurations: \texttt{CombiHierarchies} and \texttt{CombiEvaluators}}
+
+One of the combigrid examples explains how to apply different grid-point families and different operators in different dimensions. [web:9]  
+This is a strong feature for mixed problems where not every dimension should be treated identically. [web:9]  
+
+\subsection{What the tutorial shows}
+The example uses Chebyshev points in one dimension, Leja points in another, and equidistant points with boundary in a third dimension. [web:9]  
+It then combines polynomial interpolation in one direction, quadrature in another, and linear interpolation in the last. [web:9]  
+The documentation says that \texttt{CombiHierarchies} provides matching configurations for point distributions and that \texttt{CombiEvaluators} provides the operator side. [web:9]  
+
+\subsection{Why this matters for PDE people}
+This is exactly the kind of interface you want when the semantics of the coordinates differ, for example when one variable should be integrated out while others are interpolated. [web:9]  
+It is also the bridge from ``plain sparse-grid approximation'' to ``problem-adapted tensorized operators''. [web:9]  
+
+\section{PDE-style full-grid callbacks and \texttt{TreeStorage}}
+
+The combigrid tutorial explicitly says that some applications do not want a callback evaluated at single points but rather on a full grid, and it names solving PDEs as one of these applications. [web:9]  
+This is the most important SG++ documentation remark for your use case. [web:9]  
+
+\subsection{The documented idea}
+The example describes a core function that computes grid values on a full grid and stores results for each grid point encoded by a \texttt{MultiIndex} in a \texttt{TreeStorage}. [web:9]  
+It then says that one can build a \texttt{CombigridOperation} around this mechanism and evaluate the resulting interpolation as usual. [web:9]  
+
+\subsection{Interpretation}
+This means SG++ is not only about pointwise black-box sampling. [web:9]  
+It also supports a workflow where the expensive primitive is ``solve or evaluate on a whole anisotropic tensor grid'', which is precisely the combination-technique viewpoint common in sparse-grid PDE work. [web:9][web:15]  
+
+\subsection{Cookbook pattern}
+For a PDE-oriented prototype, think in these steps:
+\begin{enumerate}[leftmargin=1.5em]
+\item given a level multi-index \(l\), generate or identify the corresponding anisotropic full grid, [web:9]
+\item run your PDE solver on that full grid, [web:9]
+\item store the resulting nodal values in a \texttt{TreeStorage} keyed by the grid-point multi-index, [web:9]
+\item let the combigrid machinery combine these full-grid results. [web:9][web:15]
+\end{enumerate}
+
+\subsection{Pseudo-code sketch}
+\begin{lstlisting}[style=py]
+# Conceptual PDE callback workflow inspired by the official combigrid tutorial
+
+class MyPDESolverOnFullGrid:
+    def __call__(self, level_multiindex):
+        # 1. build the anisotropic tensor grid for this level
+        # 2. solve the PDE on that full grid
+        # 3. store nodal values in a TreeStorage-like object
+        # 4. return the storage/result object expected by the combigrid layer
+        pass
+\end{lstlisting}
+
+\section{Grid conversion and the combination-technique bridge}
+
+The grid-converter tutorial says that it shows how to convert sparse grids with a hierarchical basis to sparse grids defined on combinations of anisotropic full grids, and it distinguishes conversion in both directions. [web:15]  
+It also states that the example just includes grids without boundary points. [web:15]  
+
+\subsection{Why this module matters}
+For theory, we often switch freely between ``hierarchical sparse grid'' language and ``combination of anisotropic full grids'' language. [web:15]  
+This tutorial exists exactly because SG++ also treats that bridge as an implementable object, not merely a theoretical equivalence. [web:15]  
+
+\subsection{When to look at it}
+Read the grid-converter example if:
+\begin{itemize}[leftmargin=1.5em]
+\item you start from a hierarchical sparse-grid representation and want combination-style execution, or [web:15]
+\item you already have anisotropic full-grid solves and want to understand how they map back to a sparse-grid object. [web:15]
+\end{itemize}
+
+\section{Optional plotting and extension modules}
+
+A convergence example imports
+\begin{lstlisting}[style=py]
+from pysgpp.extensions.datadriven.uq.plot.plot1d import plotFunction1d
+\end{lstlisting}
+and also imports combigrid classes from the SWIG layer. [web:12]  
+So the extension namespace can be useful for quick inspection and plotting, but it is not the central module family for building your solver. [web:12]  
+
+\subsection{Recommendation}
+Treat \texttt{pysgpp.extensions.*} as optional convenience code. [web:12]  
+Learn the base and combigrid objects first. [web:8][web:9][web:12]  
+
+\section{A minimal practical progression for new SG++ scripts}
+
+If you want a sane order in which to learn the API, use this progression. [web:8][web:9]
+
+\subsection*{Stage 1: classical sparse-grid interpolation}
+Learn:
+\begin{itemize}[leftmargin=1.5em]
+\item \texttt{import pysgpp}, [web:8]
+\item \texttt{Grid.createLinearGrid(dim)}, [web:8]
+\item \texttt{grid.getStorage()}, [web:8]
+\item \texttt{grid.getGenerator()}, [web:8]
+\item \texttt{generator.regular(level)}, [web:8]
+\item \texttt{DataVector}, [web:8]
+\item \texttt{createOperationHierarchisation(grid)}. [web:8]
+\end{itemize}
+
+\subsection*{Stage 2: adaptive refinement}
+Add:
+\begin{itemize}[leftmargin=1.5em]
+\item \texttt{SurplusRefinementFunctor}, [web:8]
+\item \texttt{alpha.resizeZero(...)}, [web:8]
+\item repeated sampling--hierarchisation--refinement loops. [web:8]
+\end{itemize}
+
+\subsection*{Stage 3: combigrid}
+Learn:
+\begin{itemize}[leftmargin=1.5em]
+\item \texttt{MultiFunction}, [web:9]
+\item \texttt{CombigridOperation}, [web:9][web:12]
+\item \texttt{CombigridMultiOperation}, [web:9][web:12]
+\item \texttt{LevelManager}, [web:9]
+\item \texttt{DataMatrix} for multi-point calls. [web:9]
+\end{itemize}
+
+\subsection*{Stage 4: expensive models / PDEs}
+Then add:
+\begin{itemize}[leftmargin=1.5em]
+\item \texttt{FunctionLookupTable} for caching, [web:9]
+\item \texttt{TreeStorage} for full-grid result storage, [web:9]
+\item the grid-converter tools if you need to move between hierarchical and combination representations. [web:15]
+\end{itemize}
+
+\section{A compact PDE-oriented recommendation}
+
+For your diffusion / Fokker--Planck / Schr\"odinger-style experiments, I would separate SG++ code into three layers. [web:8][web:9][web:15]
+
+\subsection*{Layer A: base sparse-grid experiments}
+Use \texttt{pysgpp.Grid}, \texttt{GridStorage}, \texttt{GridGenerator}, \texttt{DataVector}, hierarchisation, and refinement when you want to understand hierarchical surpluses, interpolation quality, or adaptive point refinement directly. [web:8]  
+
+\subsection*{Layer B: combigrid experiments}
+Use \texttt{MultiFunction}, \texttt{CombigridOperation}, \texttt{CombigridMultiOperation}, and \texttt{LevelManager} when your abstraction is ``combine anisotropic full-grid computations up to a total-level bound''. [web:9][web:12]  
+
+\subsection*{Layer C: bridge utilities}
+Use \texttt{FunctionLookupTable}, \texttt{TreeStorage}, and the grid-converter examples when the expensive ingredient is a PDE solve and you need reuse, serialization, or movement between hierarchical and combination views. [web:9][web:15]  
+
+\section{One-page cheat sheet}
+
+\begin{center}
+\begin{tabular}{@{}p{3.2cm}p{9.5cm}@{}}
+\toprule
+\textbf{Object/module} & \textbf{What you use it for} \\
+\midrule
+\texttt{pysgpp} & Main Python entry point used by the official sparse-grid examples. [web:8] \\
+\texttt{DataVector} & Coefficients, single points, parameter vectors. [web:8][web:9] \\
+\texttt{DataMatrix} & Multiple evaluation points in combigrid workflows. [web:9] \\
+\texttt{Grid} & Construct a sparse grid, e.g.\ linear grids via \texttt{createLinearGrid}. [web:8] \\
+\texttt{GridStorage} & Access stored grid points and current grid size. [web:8] \\
+\texttt{GridGenerator} & Create regular sparse grids and apply refinement. [web:8] \\
+\texttt{createOperationHierarchisation} & Transform nodal values into hierarchical surpluses. [web:8] \\
+\texttt{SurplusRefinementFunctor} & Refine points with largest absolute surplus entries. [web:8] \\
+\texttt{MultiFunction} & Wrap a function for combigrid evaluation. [web:9] \\
+\texttt{CombigridOperation} & Single-task combigrid evaluation/interpolation/quadrature. [web:9][web:12] \\
+\texttt{CombigridMultiOperation} & Efficient evaluation at multiple points. [web:9][web:12] \\
+\texttt{CombigridTensorOperation} & Tensor-style combigrid operation imported in examples. [web:12] \\
+\texttt{LevelManager} & Manage level sets and adaptive level generation. [web:9] \\
+\texttt{FunctionLookupTable} & Cache computed function values and serialize them. [web:9] \\
+\texttt{TreeStorage} & Store full-grid results keyed by multi-index. [web:9] \\
+\texttt{CombiHierarchies} & Choose point distributions / growth rules per dimension. [web:9] \\
+\texttt{CombiEvaluators} & Choose operators per dimension. [web:9] \\
+\texttt{gridConverter} example & Convert between hierarchical sparse grids and combined anisotropic full grids. [web:15] \\
+\texttt{pysgpp.extensions.*} & Optional helpers such as plotting utilities. [web:12] \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Final advice}
+
+If you only have a weekend to get productive, start with the refinement example and reproduce it line by line, because it teaches the classical SG++ base workflow in the smallest possible setting. [web:8]  
+Then read the combigrid getting-started example carefully, because it is where SG++ documents level management, multi-point evaluation, caching, custom per-dimension configurations, and the full-grid callback pattern that is explicitly described as suitable for PDE solving. [web:9]  
+Finally, look at the grid-converter example once you start mixing hierarchical sparse-grid thinking with combination-technique execution. [web:15]  
+
+\end{document}

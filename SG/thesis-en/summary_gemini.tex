@@ -1,0 +1,234 @@
+\documentclass[12pt, a4paper]{article}
+
+% Required packages for math symbols and environments
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+% Required packages for formatting the algorithm
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+% Optional: Page layout and hyperlinking
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+\usepackage{hyperref}
+
+\title{Numerical Solution of PDEs: The Sparse Grid Method}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Chapter 1: Conceptual Summary}
+
+The numerical solution of partial differential equations (PDEs), such as the heat equation, classical diffusion, Fokker-Planck, and Schrödinger equations, becomes computationally intractable in higher dimensions. This is due to the phenomenon coined by Bellman as the \textit{curse of dimensionality}: if one discretizes a $d$-dimensional domain with $N$ grid points in each coordinate direction, a conventional full grid requires $O(N^d)$ degrees of freedom. For high-dimensional problems (e.g., $d \ge 5$), the exponential growth in storage and computational complexity severely limits classical finite element and finite difference methods. 
+
+Sparse grids provide a highly efficient approach to overcome or significantly weaken this curse. Introduced by Zenger, the sparse grid method is based on a hierarchical multiscale basis derived via a tensor product construction from a one-dimensional multilevel basis. By exploiting the assumption that the target functions belong to spaces with bounded mixed derivatives, sparse grids optimize the cost-benefit ratio of the basis functions. They systematically omit degrees of freedom that have a high cost but contribute minimally to the overall interpolation accuracy.
+
+As a result, a discretization on a sparse grid uses only $O(N \cdot (\log N)^{d-1})$ degrees of freedom. Remarkably, the accuracy of the piecewise linear sparse grid approximation remains $O(N^{-2} \cdot (\log N)^{d-1})$ in the $L_2$ and $L_\infty$ norms, comparable to the $O(N^{-2})$ accuracy of the full grid. For energy norm considerations, specific energy-based sparse grids can reduce the complexity to $O(N)$ degrees of freedom while maintaining $O(N^{-1})$ accuracy, effectively breaking the curse of dimensionality. Thus, sparse grids are exceptionally well-suited for higher-dimensional diffusion-like PDEs.
+
+\section{Chapter 2: Technical Foundations of the Sparse Grid Method}
+
+To understand how sparse grids achieve such remarkable compression of the degrees of freedom without severely deteriorating the approximation error, we must rigorously define the hierarchical subspace splitting and the optimization process that leads to the sparse grid space.
+
+\subsection{Hierarchical Subspace Splitting}
+We consider multivariate functions $u(x)$ defined on the $d$-dimensional unit domain $\overline{\Omega} := [0,1]^d$. We assume these functions reside in a space of bounded weak mixed derivatives $X_0^{q,r}(\overline{\Omega})$:
+\begin{equation}
+X_0^{q,r}(\overline{\Omega}) := \{u : \overline{\Omega} \rightarrow \mathbb{R} : D^\alpha u \in L_q(\Omega), |\alpha|_\infty \le r, u|_{\partial\Omega} = 0\}
+\end{equation}
+where $\alpha \in \mathbb{N}_0^d$ is a multi-index, $|\alpha|_\infty = \max_j \alpha_j$, and $r=2$ is required for piecewise linear approximations. 
+
+We define a family of grids $\Omega_l$ indicated by the level multi-index $l = (l_1, \dots, l_d) \in \mathbb{N}^d$. The mesh size in each coordinate direction $j$ is given by $h_{l_j} = 2^{-l_j}$. The grid points are defined as:
+\begin{equation}
+x_{l,i} := (i_1 \cdot h_{l_1}, \dots, i_d \cdot h_{l_d})
+\end{equation}
+where $i$ denotes the location multi-index $0 \le i \le 2^l$.
+
+For our functional basis, we begin with the 1D standard piecewise linear hat function:
+\begin{equation}
+\phi(x) := \begin{cases} 1 - |x|, & \text{if } x \in [-1,1], \\ 0, & \text{otherwise.} \end{cases}
+\end{equation}
+By translation and dilation, we obtain the 1D hierarchical basis functions $\phi_{l_j, i_j}(x_j) := \phi\left( \frac{x_j - i_j \cdot h_{l_j}}{h_{l_j}} \right)$. We then employ a tensor product approach to construct the $d$-dimensional basis function for each grid point:
+\begin{equation}
+\phi_{l,i}(x) := \prod_{j=1}^d \phi_{l_j, i_j}(x_j)
+\end{equation}
+
+We organize these basis functions into hierarchical difference spaces $W_l$. The space $W_l$ contains all basis functions at level $l$ that do not exist at any coarser level:
+\begin{equation}
+W_l := \text{span}\{ \phi_{l,i} : 1 \le i \le 2^l - 1, \, i_j \text{ odd for all } 1 \le j \le d \}
+\end{equation}
+The full space of piecewise linear functions on a uniform grid of level $n$ in all directions is given by the direct sum $V_n^{(\infty)} := \bigoplus_{|l|_\infty \le n} W_l$. Any function $u$ can be uniquely represented as $u(x) = \sum_{l} u_l(x)$, where $u_l(x) \in W_l$ is a linear combination of the basis functions with coefficients called the \textit{hierarchical surplus}.
+
+\subsection{Cost-Benefit Optimization and the Sparse Grid Space}
+The traditional full grid $V_n^{(\infty)}$ suffers from the curse of dimensionality because its dimension is $|V_n^{(\infty)}| = O(2^{d \cdot n})$. To improve this, we formulate an optimization problem: we seek a finite subspace collection $U = \bigoplus_{l \in I} W_l$ that maximizes the approximation benefit for a prescribed cost $w$.
+
+The local cost of including a subspace $W_l$ is its dimension (the number of degrees of freedom):
+\begin{equation}
+c(l) := |W_l| = 2^{|l-1|_1}
+\end{equation}
+The local benefit is bounded by the squared norm of the contribution $u_l$. Under the bounded mixed derivatives assumption ($|u|_{2,\infty} < \infty$), the bounds decay rapidly. Specifically, $||u_l||_\infty \le 2^{-d} 2^{-2|l|_1} |u|_{2,\infty}$.
+
+Defining the cost-benefit ratio $cbr(l) = b(l)/c(l)$, an optimal grid contains all subspaces $W_l$ where the cost-benefit ratio is above a certain threshold. For both the $L_2$ and $L_\infty$ norms, this logic results in selecting subspaces that satisfy the condition:
+\begin{equation}
+|l|_1 \le n + d - 1
+\end{equation}
+This explicitly defines the standard sparse grid space $V_n^{(1)}$:
+\begin{equation}
+V_n^{(1)} := \bigoplus_{|l|_1 \le n + d - 1} W_l
+\end{equation}
+
+\subsection{Properties: Dimension and Accuracy}
+The reduction in degrees of freedom is profound. By summing the dimensions of the selected subspaces, the total number of degrees of freedom in $V_n^{(1)}$ is bounded by:
+\begin{equation}
+|V_n^{(1)}| = O(2^n \cdot n^{d-1}) = O(h_n^{-1} \cdot |\log_2 h_n|^{d-1})
+\end{equation}
+Despite discarding a massive number of grid points, the interpolation error $||u - u_n^{(1)}||$ remains exceptional. For $u \in X_0^{q,2}(\overline{\Omega})$, the error bounds are:
+\begin{align}
+||u - u_n^{(1)}||_\infty &= O(h_n^2 \cdot n^{d-1}) \\
+||u - u_n^{(1)}||_2 &= O(h_n^2 \cdot n^{d-1})
+\end{align}
+This proves that the sparse grid significantly curtails the exponential growth of unknowns while preserving nearly the exact second-order accuracy of the full grid. 
+
+\subsection{Algorithmic Implementation for PDEs}
+When utilizing sparse grids to solve diffusion-like parabolic PDEs, one generally constructs a weak formulation and employs the Galerkin method. However, directly assembling a stiffness matrix is ill-advised because its fill-in and condition number can degrade, and full matrix construction forfeits the complexity advantages. 
+
+Instead, iterative solvers (like Conjugate Gradient or Multigrid) are combined with a \textit{unidirectional principle}. This principle separates the $d$-dimensional operator into 1D evaluations along the tensor product axes, enabling matrix-vector multiplications $A\vec{v}$ on the fly in $O(N (\log N)^{d-1})$ operations.
+
+\begin{algorithm}
+\caption{Solving Parabolic PDE on a Sparse Grid}
+\begin{algorithmic}[1]
+\State \textbf{Input:} Level $n$, dimension $d$, right-hand side $f$, initial guess $\vec{v}_0$.
+\State \textbf{Initialize} index set $I = \{ l \in \mathbb{N}^d : |l|_1 \le n + d - 1 \}$.
+\State \textbf{Allocate} memory for hierarchical coefficients $\vec{v}_{l,i}$ for $l \in I$.
+\State \textbf{Assemble} RHS vector $\vec{b}$ by hierarchical projection of $f(x)$.
+\While{residual $> \epsilon$}
+    \State Compute $\vec{w} = A \vec{v}_k$ using the Unidirectional Principle:
+    \For{each dimension $j = 1 \dots d$}
+        \State Apply 1D hierarchical operator along dimension $j$.
+    \EndFor
+    \State Update $\vec{v}_{k+1}$ using Conjugate Gradient method steps.
+\EndWhile
+\State \textbf{Return} Solution field $u(x) = \sum_{l \in I} \sum_{i} v_{l,i} \phi_{l,i}(x)$.
+\end{algorithmic}
+\end{algorithm}
+
+\section{Chapter 3: Issues in High Dimensions and Resolutions}
+
+While the standard sparse grid space $V_n^{(1)}$ successfully lessens the curse of dimensionality, it does not overcome it completely. The complexity $O(2^n \cdot n^{d-1})$ contains a logarithmic term $n^{d-1}$ that grows exponentially with the ambient dimension $d$. Furthermore, the hidden constants within the asymptotic $O$-notation still depend exponentially on $d$. For highly multi-dimensional problems, such as the Fokker-Planck or Schrödinger equations in 20 or 30 dimensions, evaluating polynomials with an exponent of 29 leads to severe computational bottlenecks.
+
+\subsection{Energy-Based Sparse Grids}
+The solution to fully breaking the curse of dimensionality lies in redefining the optimization objective. The standard sparse grid is optimized with respect to the $L_2$ and $L_\infty$ norms. However, for solving second-order PDEs (like diffusion and heat equations), the natural measure is the \textit{energy norm} $|| \cdot ||_E$, which corresponds to the $H^1$ Sobolev norm.
+
+When we evaluate the local cost-benefit ratio using the bounds of the energy norm instead, the benefit of a subspace $W_l$ scales differently. The modified cost-benefit ratio dictates that an optimal energy-based grid $I^{(opt)}$ must satisfy the condition:
+\begin{equation}
+|l|_1 - \frac{1}{5} \log_2\left(\sum_{j=1}^d 4^{l_j}\right) \le (n+d-1) - \frac{1}{5} \log_2(4^n + 4d - 4)
+\end{equation}
+
+This defines the energy-based sparse grid space $V_n^{(E)}$. The resulting space demonstrates truly remarkable asymptotic properties. The total dimension (degrees of freedom) is bounded by:
+\begin{equation}
+|V_n^{(E)}| \le 2^n \cdot \frac{d}{2} \cdot e^d = O(h_n^{-1})
+\end{equation}
+Simultaneously, the interpolation error with respect to the energy norm satisfies:
+\begin{equation}
+||u - u_n^{(E)}||_E = O(h_n)
+\end{equation}
+
+\subsection{Resolution of the Curse}
+The crucial result of the energy-based sparse grid space $V_n^{(E)}$ is that the curse of dimensionality is entirely broken. In both the dimension bounds and the error estimates, the $n$-dependent terms are completely free of any $d$-dependencies. The exponential term $n^{d-1}$ is eliminated, yielding an $\epsilon$-complexity of $O(\epsilon^{-1})$ regardless of $d$. While the constants still depend on $d$, the scaling is drastically more tractable, pushing the boundary of feasible numerical simulations to previously unreachable dimensions.
+
+\section{Chapter 4: Application Example - A 7D Convection-Diffusion-Reaction Equation}
+
+To bridge the gap between the theoretical framework and practical implementation, this chapter walks through the application of the sparse grid method to a specific, high-dimensional, time-dependent partial differential equation. 
+
+\subsection{Problem Statement}
+Consider a $d$-dimensional convection-diffusion-reaction equation. We set the dimension to $d=7$, a regime where classical full-grid methods are already computationally prohibitive. The governing equation is:
+\begin{equation}
+\partial_t u - \delta \Delta u + \vec{v} \cdot \nabla u + w\, u = f
+\end{equation}
+where $\delta > 0$ is the diffusion coefficient, $\vec{v} = (v_1, \dots, v_d)^T$ is the convection velocity vector, $w$ is the reaction coefficient, and $f(x,t)$ is the source term.
+
+We prescribe a scenario where the exact analytical solution is a traveling, decaying Gaussian wave packet:
+\begin{equation}
+u(x,t) = e^{-\alpha\sum_{i=1}^d(a_i x_i - b_i + c_i t)^2}\,e^{-\beta t}
+\end{equation}
+By inserting this exact solution into the PDE, we can derive the corresponding coefficients and source term:
+\begin{align}
+v_i &= -\frac{c_i}{a_i} \\
+w &= -2\delta\alpha\sum_{i=1}^d a_i^2 \\
+f(x,t) &= - \left[ 4\alpha^2\delta \sum_{i=1}^d a_i^2(a_ix_i-b_i+c_it)^2 \right] e^{-\alpha\sum_{i=1}^d(a_i x_i - b_i + c_i t)^2 -\beta t}
+\end{align}
+This setup is widely used for benchmarking numerical solvers because the Gaussian packet exhibits strong local features that move through the domain, severely testing the discretization scheme's stability and accuracy.
+
+\subsection{Method of Lines: Spatial Discretization via Sparse Grids}
+The standard approach to solving this time-dependent PDE is the \textit{Method of Lines}. We first discretize the spatial dimensions using sparse grids, reducing the PDE to a system of ordinary differential equations (ODEs) in time, which we then solve using a standard time-stepping scheme.
+
+We seek a spatial approximation $u_h(x,t)$ in the sparse grid space $V_n^{(1)} = \text{span}\{\phi_{l,i}(x)\}$. We express the numerical solution as a time-dependent linear combination of the hierarchical basis functions:
+\begin{equation}
+u_h(x,t) = \sum_{(l,i) \in I} \gamma_{l,i}(t) \phi_{l,i}(x)
+\end{equation}
+where $I$ is the sparse grid index set and $\gamma_{l,i}(t)$ are the time-dependent hierarchical surplus coefficients.
+
+Using the Galerkin formulation, we multiply the PDE by a test function $\phi_{k,j} \in V_n^{(1)}$ and integrate over the spatial domain $\Omega$. Applying integration by parts to the diffusion term yields the semi-discrete system:
+\begin{equation}
+M \frac{\partial \vec{\gamma}(t)}{\partial t} + (\delta S + C + R) \vec{\gamma}(t) = \vec{f}(t)
+\end{equation}
+Here, $\vec{\gamma}(t)$ is the vector of unknown coefficients. The matrices are defined by their entries:
+\begin{itemize}
+    \item \textbf{Mass matrix} $M$: $M_{(l,i),(k,j)} = \int_\Omega \phi_{l,i} \phi_{k,j} \, dx$
+    \item \textbf{Stiffness matrix} $S$: $S_{(l,i),(k,j)} = \int_\Omega \nabla\phi_{l,i} \cdot \nabla\phi_{k,j} \, dx$
+    \item \textbf{Convection matrix} $C$: $C_{(l,i),(k,j)} = \int_\Omega (\vec{v} \cdot \nabla\phi_{l,i}) \phi_{k,j} \, dx$
+    \item \textbf{Reaction matrix} $R$: $R_{(l,i),(k,j)} = \int_\Omega w \, \phi_{l,i} \phi_{k,j} \, dx$
+    \item \textbf{Load vector} $\vec{f}$: $f_{(k,j)}(t) = \int_\Omega f(x,t) \phi_{k,j} \, dx$
+\end{itemize}
+Let $L = \delta S + C + R$ represent the combined spatial differential operator matrix.
+
+\subsection{Temporal Discretization}
+With the spatial dimensions discretized, we apply a time-stepping scheme to handle $\partial_t u$. Given the presence of diffusion and the fine mesh spacings at higher levels of the sparse grid, explicit time integration (like Forward Euler) would suffer from severely restrictive CFL stability limits ($\Delta t \propto h_{min}^2$).
+
+Therefore, an implicit scheme is highly recommended. Using the unconditionally stable $\theta$-scheme (where $\theta=1$ is Implicit Euler and $\theta=1/2$ is Crank-Nicolson), we discretize time into steps $t_m = m \Delta t$:
+\begin{equation}
+M \frac{\vec{\gamma}^{(m+1)} - \vec{\gamma}^{(m)}}{\Delta t} + L \left( \theta \vec{\gamma}^{(m+1)} + (1-\theta) \vec{\gamma}^{(m)} \right) = \theta \vec{f}^{(m+1)} + (1-\theta) \vec{f}^{(m)}
+\end{equation}
+Rearranging for the unknown coefficients at the next time step $\vec{\gamma}^{(m+1)}$, we obtain the linear system that must be solved at each time step:
+\begin{equation}
+(M + \theta \Delta t L) \vec{\gamma}^{(m+1)} = \left[ M - (1-\theta) \Delta t L \right] \vec{\gamma}^{(m)} + \Delta t \left( \theta \vec{f}^{(m+1)} + (1-\theta) \vec{f}^{(m)} \right)
+\end{equation}
+
+\subsection{Practical Implementation and Libraries}
+In practice, one does \textit{not} explicitly assemble the matrix $\mathcal{A} = (M + \theta \Delta t L)$. Due to the hierarchical nature of sparse grids, explicit assembly would result in a dense matrix, destroying the $O(N (\log N)^{d-1})$ memory and complexity advantages. 
+
+Instead, the system is solved matrix-free. How is this achieved?
+\begin{enumerate}
+    \item \textbf{Existing Libraries:} Modern implementations rely on specialized sparse grid libraries, the most prominent being \texttt{SG++} (developed by the groups of Bungartz and Pflüger) or \texttt{SPINTERP}. These libraries handle the complex hierarchical data structures, neighbor searches, and memory management in $d=7$ transparently.
+    \item \textbf{Tensor Product Factorization:} The operation $\vec{w} = \mathcal{A} \vec{\gamma}$ is computed on-the-fly. Because the basis functions are tensor products $\phi_{l,i}(x) = \prod \phi_{l_j, i_j}(x_j)$, multi-dimensional integrals separate into products of 1D integrals. The libraries apply a \textit{unidirectional algorithm}, evaluating the 1D operator along each of the 7 dimensions sequentially. 
+    \item \textbf{Iterative Solvers:} Because the convection term ($\vec{v} \cdot \nabla u$) makes the spatial operator non-symmetric, the standard Conjugate Gradient (CG) method will fail. Instead, Krylov subspace methods designed for non-symmetric systems, such as GMRES (Generalized Minimal Residual method) or BiCGStab (Bi-Conjugate Gradient Stabilized), are employed. The library feeds the matrix-free evaluation $\vec{w} = \mathcal{A} \vec{\gamma}$ directly into the GMRES solver.
+    \item \textbf{Adaptivity (Optional but powerful):} A moving Gaussian wave packet is highly localized. A static sparse grid would need a uniformly high level $n$ to capture the packet everywhere. Advanced libraries like \texttt{SG++} allow for \textit{spatially adaptive sparse grids}. As the packet moves, the algorithm evaluates the hierarchical surplus coefficients $\gamma_{l,i}$. If $|\gamma_{l,i}|$ is larger than a threshold $\epsilon$, the grid is dynamically refined in that region; as the wave passes, nodes with coefficients below $\epsilon$ are coarsened. This effectively "tracks" the Gaussian through the 7D domain, further compressing the required degrees of freedom.
+\end{enumerate}
+
+By following this pipeline—using a library like \texttt{SG++} to construct the grid, applying the matrix-free 1D tensor-product evaluations, and stepping through time with GMRES and an implicit solver—the 7-dimensional PDE can be solved efficiently, successfully bypassing the curse of dimensionality.
+
+\subsection{Implementation with the SG++ Library}
+
+To transition from the mathematical formulation to a concrete computational model, we rely on the open-source library \texttt{SG++}. \texttt{SG++} is specifically designed for spatially adaptive sparse grid methods and provides the necessary data structures and algorithms to handle hierarchical bases in high dimensions.
+
+Formally, solving the semi-discrete system requires mapping the abstract operators $M$ (Mass) and $L$ (Spatial Differential Operator) to concrete algorithmic actions. In \texttt{SG++}, this is achieved through the following core components:
+
+\begin{enumerate}
+    \item \textbf{Grid Management (\texttt{sgpp::base::Grid}):} 
+    The abstract sparse grid space $V_n^{(1)}$ is instantiated using a grid object. For piecewise linear basis functions without boundary degrees of freedom, we use \texttt{Grid::createLinearGrid(d)}. The grid is then populated up to level $n$ using \texttt{GridGenerator::regular(n)}.
+    
+    \item \textbf{Hierarchical Surplus Storage (\texttt{sgpp::base::DataVector}):} 
+    The time-dependent coefficient vector $\vec{\gamma}(t)$ is stored as a \texttt{DataVector}. Its size corresponds to the number of grid points (degrees of freedom), $|V_n^{(1)}|$. 
+    
+    \item \textbf{Matrix-Free Operators (\texttt{sgpp::base::OperationMatrix}):} 
+    Because assembling the dense system matrix $\mathcal{A} = M + \theta \Delta t L$ would result in $O(N^2)$ memory complexity, \texttt{SG++} requires operators to inherit from the abstract class \texttt{OperationMatrix}. The user must implement the \texttt{mult(const DataVector\& x, DataVector\& y)} method, which performs the operation $\vec{y} = \mathcal{A} \vec{x}$ on the fly using the unidirectional tensor-product principle. \texttt{SG++} provides factory methods like \texttt{createOperationLaplace} and \texttt{createOperationIdentity} to handle standard differential operators efficiently.
+
+    \item \textbf{Krylov Subspace Solvers (\texttt{sgpp::solver::SLESolver}):} 
+    To solve the linear system $(M + \theta \Delta t L) \vec{\gamma}^{(m+1)} = \vec{b}$ at each time step, \texttt{SG++} provides iterative solvers. Since the convection term $\vec{v} \cdot \nabla u$ introduces asymmetry, the standard Conjugate Gradient method is theoretically unjustified. Instead, the Bi-Conjugate Gradient Stabilized method (\texttt{sgpp::solver::BiCGStab}) is utilized.
+\end{enumerate}
+
+\end{document}

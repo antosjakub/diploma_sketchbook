@@ -2,10 +2,150 @@
 
 \chapter{Sparse grids}
 
-o n (log n)d-1
+bounded mixed derivatives
+
+\subsection{The core setup}
+
+Consider a PDE defined on a d-dimensional unit cube
+$$
+\Omega := (0,1)^d,
+$$
+
+
+As the basic building block, we take standard linear hat functions
+
+$$
+\phi(x)=
+\begin{cases}
+1-|x|, & |x|\le 1,\\
+0, & |x|>1.
+\end{cases}
+$$
+
+We then create a set of equidistant grids $\Omega_l$ of level $l\in\mathbb{N}$ on the one dimensional unit interval $\bar{\Omega}=\left[0,1\right]$.
+
+$$
+\Omega_l := \{x_{l,i}=i\cdot h_l : 0\le i\le 2^l\}
+$$
+
+Where, for each level $l$, we define the mesh width
+$$
+h_l := 2^{-l}
+$$
+
+The standard hat funciton $\phi$ is then taken to generate a set of basis functions $\phi_{l,i}$ with the support $\left[ x_{l,i}-h_l, x_{l,i}+h_l \right]$.
+
+
+$$
+\phi_{l,i}(x)
+=
+\phi\!\left(\frac{x-i h_l}{h_l}\right),
+\qquad 1\le i\le 2^l-1.
+$$
+The corresponding finite element space is
+$$
+V_l := \mathrm{span}\{\phi_{l,i} : 1\le i\le 2^l-1\}
+$$
+
+
+Instead of working with the nested spaces
+$$
+V_1 \subset V_2 \subset \cdots,
+$$
+we decompose them into intertwining increments. Define the hierarchical index sets
+$$
+I_l := \{\, i\in\mathbb{N} : 1\le i\le 2^l-1,\ i\ \text{odd}\,\}
+$$
+The \textit{hierarchical increment spaces} are then given as
+$$
+W_l := \mathrm{span}\{\phi_{l,i}: i\in I_l\}.
+$$
+
+A visual representation of the definitions given so far is provided in the figure below:
+
+\vspace{1em}
+\begin{center}
+\begin{tikzpicture}[xscale=0.85, yscale=0.85, transform shape]
+
+    % Level 1
+    \def\y{7.5}
+    \node[left] at (-0.5, \y+0.5) {$l=1$};
+    \node[right] at (8.5, \y+0.5) {$W_1=\{\phi_{1,1}\}$};
+    %\node[left] at (10, \y) {$\Omega_1=\{x_{1,0}, x_{1,1}, x_{1,2}\}$};
+    %\node[left] at (10, \y+0.5) {$I_1=\{1\}$};
+    %\node[left] at (10, \y+1.5) {$W_1=\{\phi_{1,1}\}$};
+    \draw (0,\y) -- (8,\y); % Domain line
+    \draw (0,\y) -- (4,\y+1) -- (8,\y); % Basis function
+    \node[above] at (4,\y+1) {$\phi_{1,1}$};
+    
+    % Grid points for l=1
+    \fill (0,\y) circle (1.5pt) node[below, yshift=-2pt] {$x_{1,0}$};
+    \fill (4,\y) circle (3pt)   node[below, yshift=-2pt] {$x_{1,1}$}; % Larger/bolder point
+    \fill (8,\y) circle (1.5pt) node[below, yshift=-2pt] {$x_{1,2}$};
+
+    % Level 2
+    \def\y{5.0}
+    \node[left] at (-0.5, \y+0.5) {$l=2$};
+    \node[right] at (8.5, \y+0.5) {$W_2=\{\phi_{2,1},\,\phi_{2,3}\}$};
+    \draw (0,\y) -- (8,\y);
+    \draw (0,\y) -- (2,\y+1) -- (4,\y);
+    \draw (4,\y) -- (6,\y+1) -- (8,\y);
+    \node[above] at (2,\y+1) {$\phi_{2,1}$};
+    \node[above] at (6,\y+1) {$\phi_{2,3}$};
+    
+    % Grid points for l=2
+    \foreach \i in {0,2,4} {
+        \pgfmathsetmacro{\x}{\i*2}
+        \fill (\x,\y) circle (1.5pt) node[below, yshift=-2pt] {$x_{2,\i}$};
+    }
+    \foreach \i in {1,3} {
+        \pgfmathsetmacro{\x}{\i*2}
+        \fill (\x,\y) circle (3pt) node[below, yshift=-2pt] {$x_{2,\i}$}; % Bolder points
+    }
+
+    % Level 3
+    \def\y{2.5}
+    \node[left] at (-0.5, \y+0.5) {$l=3$};
+    \node[right] at (8.5, \y+0.5) {$W_3=\{\phi_{3,1},\,\phi_{3,3},\,\phi_{3,5}\}$};
+    \draw (0,\y) -- (8,\y);
+    
+    % Basis functions and active points for l=3
+    \foreach \i in {1,3,5,7} {
+        \draw (\i-1,\y) -- (\i,\y+1) -- (\i+1,\y);
+        \node[above] at (\i,\y+1) {$\phi_{3,\i}$};
+        \fill (\i,\y) circle (3pt) node[below, yshift=-2pt] {$x_{3,\i}$};
+    }
+    % Inactive points for l=3
+    \foreach \i in {0,2,4,6,8} {
+        \fill (\i,\y) circle (1.5pt) node[below, yshift=-2pt] {$x_{3,\i}$};
+    }
+
+\end{tikzpicture}
+\end{center}
+\vspace{1em}
+
+
+Then, comparing the definition of $V_l$ and $W_l$, one gets the direct-sum decomposition
+$$
+V_l = \bigoplus_{k=1}^l W_k.
+$$
+
+
+Every $u\in V_l$ then admites a unique hierarchical representation
+$$
+u(x)=\sum_{k=1}^l \sum_{i\in I_k} v_{k,i}\,\phi_{k,i}(x),
+$$
+where $v_{k,i}$ are called \textit{hierarchical surpluses}.
+
+
+\subsection{Moving into higher dimensions}
+
+
 
 
 \subsection{The sg}
+
+o n (log n)d-1
 
 1 d multilevel basis
 
