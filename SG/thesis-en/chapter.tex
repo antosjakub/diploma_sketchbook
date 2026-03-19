@@ -4,7 +4,7 @@
 
 bounded mixed derivatives
 
-\subsection{The core setup}
+\subsection{1-dimensional hierarchical basis}
 
 Consider a PDE defined on a d-dimensional unit cube
 $$
@@ -138,7 +138,191 @@ $$
 where $v_{k,i}$ are called \textit{hierarchical surpluses}.
 
 
-\subsection{Moving into higher dimensions}
+\subsection{Tensor product construction in higher dimensions}
+
+
+We now move to a d-dimensional unit cube $\bar{\Omega}=\left[0,1\right]^d$, where the the hierarchical basis in obtained as a tensor product of the indivisual 1-dimensional bases.
+
+Let $\mathbf{l}=(l_1,\dots,l_d)\in\mathbb{N}^d$ be a multi-index.
+We then equivalently define the mesh spacing at the individual levels $h_\mathbf{l}\in\mathbb{R}^d$ and a grid point $x_{\mathbf{l},\mathbf{i}}\in\mathbb{R}^d$ as
+$$
+h_\mathbf{l} :=  2^{-\mathbf{l}} = (2^{-l_1},\dots,2^{-l_d}),
+$$
+$$
+x_{\mathbf{l},\mathbf{i}}
+%:= (x_{l_1,i_1},\dots,x_{l_d,i_d})
+:= (i_1\,2^{-l_1},\dots,i_d\,2^{-l_d})
+$$
+
+The tensor-product basis functions are then given as a product of one-dimensional functions
+$$
+\phi_{\mathbf{l},\mathbf{i}}(\mathbf{x})
+=
+\prod_{j=1}^d \phi_{l_j,i_j}(x_j),
+\qquad \mathbf{x}=(x_1,\dots,x_d).
+$$
+
+The corresponding tensor-product finite element space is
+$$
+V_\mathbf{l} := \mathrm{span}\{\phi_{\mathbf{l},\mathbf{i}}: 1\le \mathbf{i} \le 2^\mathbf{l}-1\},
+$$
+and the multivariate hierarchical increment space is
+$$
+W_\mathbf{l} := \mathrm{span}\{\phi_{\mathbf{l},\mathbf{i}}: \mathbf{i}\in I_\mathbf{l}\},
+$$
+
+where
+$$
+I_\mathbf{l}
+=
+\left\{
+i\in\mathbb{N}^d:\ 1\le \mathbf{i} \le 2^\mathbf{l}-1,\ \text{and each } i_j \text{ is odd}
+\right\}.
+$$
+Again,
+$$
+V_\mathbf{l} = \bigoplus_{\mathbf{k}\le \mathbf{l}} W_\mathbf{k},
+$$
+with componentwise ordering.
+
+Each grid is equidistant with respect to each individual coordinate direction, but, in general, has varying mesh sizes in the different directions. 
+
+Hence any sufficiently regular function admits a multilevel expansion
+$$
+u(\mathbf{x})
+=
+\sum_{\mathbf{l}\in\mathbb{N}^d} \sum_{\mathbf{i}\in I_\mathbf{l}}
+v_{
+    \mathbf{l},
+    \mathbf{i}
+}\,\phi_{
+    \mathbf{l},
+    \mathbf{i}
+}(\mathbf{x})
+$$
+
+with hierarchical coefficients $v_{\mathbf{l},\mathbf{i}}\in\mathbb{R}$.
+
+
+\subsection{From full grids to sparse grids}
+
+\subsection{Full-grid space}
+
+
+
+
+
+
+
+If one fixes a maximal one-dimensional level $n$ in each coordinate, one obtains the classical full tensor-product space
+$$
+V_n^{\left(\infty\right)}
+=
+\bigoplus_{|l|_\infty\le n} W_l.
+$$
+Its dimension behaves like
+$$
+\dim V_n^{\left(\infty\right)} = O(2^{nd}).
+$$
+This is the usual curse of dimensionality.
+
+
+\subsection{Classical sparse-grid space}
+
+To improve this, we formulate an optimization problem: we seek a finite a collection of subspaces $W_l$ that maximizes the approximation benefit for a corresponding prescribed cost.
+
+The local cost of including a subspace $W_l$ is its dimension (the number of degrees of freedom):
+\begin{equation}
+c(l) := |W_l| = 2^{|l|_1-d}
+\end{equation}
+
+The local benefit is bounded by the squared norm of the contribution $u_l$.
+
+For this purpose, let us define the space of functions with bounded mixed derivatives:
+
+$$
+D^\alpha u := \frac{ \partial^{|\mathbf{\alpha}|_1} u }{ \partial x_1^{\alpha_1} \cdots \partial x_d^{\alpha_d} }
+$$
+
+We then consider the space of functions with bounded mixed derivatives:
+
+$$
+X^{q,r}(\overline{\Omega}) := \{u : \overline{\Omega} \rightarrow \mathbb{R} : D^\alpha u \in L_q(\Omega), |\alpha|_\infty \le r \}
+$$
+$$
+X_0^{q,r}(\overline{\Omega}) := \{u \in X^{q,r}(\overline{\Omega}): u|_{\partial\Omega} = 0\}
+$$
+
+
+Under the bounded mixed derivatives assumption ($|u|_{2,\infty} < \infty$), the bounds decay rapidly. Specifically, $||u_l||_\infty \le 2^{-d} 2^{-2|l|_1} |u|_{2,\infty}$.
+
+Defining the cost-benefit ratio $cbr(l) = b(l)/c(l)$, an optimal grid contains all subspaces $W_l$ where the cost-benefit ratio is above a certain threshold. For both the $L_2$ and $L_\infty$ norms, this logic results in selecting subspaces that satisfy the condition:
+\begin{equation}
+|l|_1 \le n + d - 1
+\end{equation}
+This explicitly defines the standard sparse grid space $V_n^{(1)}$:
+\begin{equation}
+V_n^{(1)} := \bigoplus_{|l|_1 \le n + d - 1} W_l
+\end{equation}
+which is Linf and L2-optimal with respect to our cost-benefit setting
+
+
+Hence, The classical sparse-grid space keeps only the subspaces satisfying
+$$
+|l|_1 \le n+d-1.
+$$
+Thus one defines
+$$
+\widehat V_n
+:=
+\bigoplus_{|l|_1\le n+d-1} W_l.
+$$
+This is the canonical Smolyak-type sparse space for piecewise multilinear approximation.
+
+Its dimension satisfies
+$$
+\dim \widehat V_n
+=
+\sum_{i=0}^{n-1} 2^i \binom{d-1+i}{d-1}
+=
+O(2^n n^{d-1}).
+$$
+
+
+For $u\in X^{q,2}_0(\Omega)$, the interpolation error of the sparse-grid interpolant $\widehat u_n\in\widehat V_n$ satisfies
+$$
+\|u-\widehat u_n\|_{L^2(\Omega)}
+=
+O(h_n^2\:n^{d-1}),
+\qquad
+\|u-\widehat u_n\|_{L^\infty(\Omega)}
+=
+O(h_n^2\:n^{d-1}).
+$$
+Thus, compared with the full-grid error $O(h_n^2)$, one loses only a logarithmic factor.
+
+
+Here is the table summarizing the main results:
+
+\renewcommand{\arraystretch}{1.5}
+\begin{center}
+\begin{tabular}{c c c}
+    \hline
+    \textbf{grid space} & \textbf{dimension} & \textbf{$L^2$ and $L^\infty$ error} \\
+    \hline
+    $V_n^{\left(\infty\right)}=\bigoplus_{|l|_\infty\le n} W_l$ & $\dim(V_n^{\left(\infty\right)})=O(2^{nd})$ & $\|u-u_n\|_{L^p(\Omega)}=O(h_n^2)$ \\
+    $\widehat V_n=\bigoplus_{|l|_1\le n+d-1} W_l$ & $\dim(\widehat V_n)=O(2^n n^{d-1})$ & $\|u-\widehat u_n\|_{L^p(\Omega)}=O(h_n^2\:n^{d-1})$ \\
+\end{tabular}
+\end{center}
+\vspace{1em}
+
+
+\subsection{Energy norm}
+error
+
+
+\subsection{Combination technique}
+parallelize
 
 
 
@@ -251,7 +435,10 @@ we suppose that the solution is not heavily depended on mixed derivatives
 
 \section{Math recap}
 
-
+$$
+|\mathbf{\alpha}|_\infty = \max_{j=1,\dots,d} \alpha_j \quad \text{and} \quad
+|\mathbf{\alpha}|_1 = \sum_{j=1,\dots,d} \alpha_j
+$$
 
 
 
