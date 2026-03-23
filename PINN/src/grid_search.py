@@ -20,12 +20,12 @@ fixed = [
     "--n_steps", "10000",
 ]
 params = {
-    "use_rbas": [True, False],
-    "use_adaptive_weights": [True, False],
+    "use_rbas": [True],
+    "use_adaptive_weights": [True],
 
     "resampling_frequency": [750],
     "layers": ["128,128,128"],
-    "n_calloc_points": [5000],
+    "n_calloc_points": [10_000],
     "bs": [512],
     "seed": [42],
 }
