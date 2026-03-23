@@ -7,6 +7,18 @@ N_options=("5" "10" "15")
 k_options=("2" "4" "8")
 sd_options=("0.0" "0.2" "0.4")
 
+d=6
+
+use_rbas
+use_adaptive_weights
+layers
+bs
+gamma
+seed
+
+time the run
+output_dir_name
+
 # best result:
 # --batch_size=16 --epochs=25 --N=5 --k=8 --stochastic_depth=0.0
 

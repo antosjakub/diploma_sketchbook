@@ -101,17 +101,15 @@ def residual_based_adaptive_sampling(d, residual_fn, model, type="pde", n_new=10
     """
 
     if type == 'pde':
+        #sample_collocation_points(d, n_candidates, 0,0, sampling_strategy=sampling_strategy, )
         X_cand = sample_domain(n_candidates, d+1, sampling_strategy=sampling_strategy, device=device)
-        X_cand.requires_grad_(True) # needed for grad and laplace computatation
-        u, grad_u, spatial_laplace_u = derivatives.compute_derivatives(model, X_cand)
-        res = residual_fn(X_cand, u, grad_u, spatial_laplace_u).detach()
+        X_cand = X_cand.requires_grad_(True)
     elif type == 'bc':
         X_cand = sample_bc(n_candidates, d, sampling_strategy=sampling_strategy, device=device)
-        res = residual_fn(X_cand).detach()
     elif type == 'ic':
         X_cand = sample_ic(n_candidates, d, sampling_strategy=sampling_strategy, device=device)
-        res = residual_fn(X_cand).detach()
 
+    res = residual_fn(X_cand, model).detach()
     abs_res = res.abs().squeeze()
     
     if picking_criterion == "top_k":
@@ -143,27 +141,27 @@ def create_dataloaders(d, num_colloc, bs, model, pde_model, use_rbas=False, samp
     bs_bc  = bs_segment_size
     bs_ic  = bs_segment_size
     n_interior = bs_pde * n_cycles
-    n_boundary  =  bs_bc * n_cycles
+    n_boundary =  bs_bc * n_cycles
     n_initial  =  bs_ic * n_cycles
 
     if use_rbas:
-        X_interior = torch.cat([
-            residual_based_adaptive_sampling(d, pde_model.pde_residual, model, n_new=2*n_interior//3, n_candidates=4*n_interior, sampling_strategy=sampling_strategy, picking_criterion="multinomial", device=device),
-            residual_based_adaptive_sampling(d, pde_model.pde_residual, model, n_new=n_interior//3, n_candidates=2*n_interior, sampling_strategy=sampling_strategy, picking_criterion="top_k", device=device)
-        ], dim=0).shuffle(dim=0)
+        X_pde = torch.cat([
+            residual_based_adaptive_sampling(d, pde_model.pde_residual, model, type='pde', n_new=2*n_interior//3, n_candidates=4*n_interior, sampling_strategy=sampling_strategy, picking_criterion="multinomial", device=device),
+            residual_based_adaptive_sampling(d, pde_model.pde_residual, model, type='pde', n_new=n_interior//3, n_candidates=2*n_interior, sampling_strategy=sampling_strategy, picking_criterion="top_k", device=device)
+        ], dim=0)
         X_bc = torch.cat([
-            residual_based_adaptive_sampling(d, pde_model.u_bc_residual, model, n_new=2*n_boundary//3, n_candidates=4*n_boundary, sampling_strategy=sampling_strategy, picking_criterion="multinomial", device=device),
-            residual_based_adaptive_sampling(d, pde_model.u_bc_residual, model, n_new=n_boundary//3, n_candidates=2*n_boundary, sampling_strategy=sampling_strategy, picking_criterion="top_k", device=device)
-        ], dim=0).shuffle(dim=0)
+            residual_based_adaptive_sampling(d, pde_model.bc_residual, model, type='bc', n_new=2*n_boundary//3, n_candidates=4*n_boundary, sampling_strategy=sampling_strategy, picking_criterion="multinomial", device=device),
+            residual_based_adaptive_sampling(d, pde_model.bc_residual, model, type='bc', n_new=n_boundary//3, n_candidates=2*n_boundary, sampling_strategy=sampling_strategy, picking_criterion="top_k", device=device)
+        ], dim=0)
         X_ic = torch.cat([
-            residual_based_adaptive_sampling(d, pde_model.u_ic_residual, model, n_new=2*n_initial//3, n_candidates=4*n_initial, sampling_strategy=sampling_strategy, picking_criterion="multinomial", device=device),
-            residual_based_adaptive_sampling(d, pde_model.u_ic_residual, model, n_new=n_initial//3, n_candidates=2*n_initial, sampling_strategy=sampling_strategy, picking_criterion="top_k", device=device)
-        ], dim=0).shuffle(dim=0)
+            residual_based_adaptive_sampling(d, pde_model.ic_residual, model, type='ic', n_new=2*n_initial//3, n_candidates=4*n_initial, sampling_strategy=sampling_strategy, picking_criterion="multinomial", device=device),
+            residual_based_adaptive_sampling(d, pde_model.ic_residual, model, type='ic', n_new=n_initial//3, n_candidates=2*n_initial, sampling_strategy=sampling_strategy, picking_criterion="top_k", device=device)
+        ], dim=0)
     else:
-        X_pde, X_bc, X_ic = sample_collocation_points(d, num_pde, num_bc, num_ic, sampling_strategy=sampling_strategy, device=device)
+        X_pde, X_bc, X_ic = sample_collocation_points(d, n_interior, n_boundary, n_initial, sampling_strategy=sampling_strategy, device=device)
     
-    loader_pde =      DataLoader(TensorDataset(X_pde), batch_size=bs_pde, shuffle=True)
-    loader_bc =       DataLoader(TensorDataset(X_bc, pde_model.u_bc(X_bc)), batch_size=bs_bc, shuffle=True)
-    loader_ic =       DataLoader(TensorDataset(X_ic, pde_model.u_ic(X_ic[:,:-1])), batch_size=bs_ic, shuffle=True)
+    loader_pde = DataLoader(TensorDataset(X_pde), batch_size=bs_pde, shuffle=True)
+    loader_bc  = DataLoader(TensorDataset(X_bc, pde_model.u_bc(X_bc)), batch_size=bs_bc, shuffle=True)
+    loader_ic  = DataLoader(TensorDataset(X_ic, pde_model.u_ic(X_ic[:,:-1])), batch_size=bs_ic, shuffle=True)
     
     return loader_pde, loader_bc, loader_ic

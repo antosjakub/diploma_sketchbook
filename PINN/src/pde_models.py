@@ -1,49 +1,63 @@
 import torch
 import utility
+import derivatives
+
 
 class PDEModel:
     def __init__(self):
         pass
-    def dump_pde_params(self, file_path) -> None:
+    def get_pde_metadata(self):
         pass
-    def load_pde_params(self, file_path) -> None:
+    def dump_pde_metadata(self, file_path) -> None:
         pass
-    def pde_residual(self, X, u, grad_u, sp_laplace_u, other=None):
+    def load_pde_metadata(self, pde_metadata) -> None:
         pass
+    def pde_residual(self, X, model):
+        pass
+    def bc_residual(self, X, model):
+        pass
+    def ic_residual(self, X, model):
+        pass
+    def pde_loss(self, X, model):
+        return torch.mean(self.pde_residual(X,model)**2)
+    def bc_loss(self, X, model):
+        return torch.mean(self.bc_residual(X,model)**2)
+    def ic_loss(self, X, model):
+        return torch.mean(self.ic_residual(X,model)**2)
 
-class HeatEquation:
-    def __init__(self, d, alpha=0.01, a=None):
+
+class HeatEquation(PDEModel):
+    def __init__(self, d, alpha=None, k=None):
         self.d = d
         #self.a = torch.pi * torch.ones(d) if a is None else a
-        self.a = a
-        self.a_2 = (self.a**2).sum()
-        self.alpha = alpha
-        self.has_weak_form = True
-    def dump_pde_params(self, file_path) -> None:
-        pde_params = {"alpha": self.alpha, "a": list(map(lambda x: float(x), self.a))}
-        utility.json_dump(file_path, pde_params)
-    def load_pde_params(self, file_path) -> None:
-        pde_params = utility.json_load(file_path)
-        pde_params["a"] = torch.tensor(pde_params["a"])
+        self.k     = k     if k     is not None else torch.pi * torch.ones(d)
+        self.alpha = alpha if alpha is not None else 0.01
+        self.k_2 = (self.k**2).sum()
+    def get_pde_metadata(self):
+        return {
+            "alpha": self.alpha,
+            "k": list(map(lambda x: float(x), self.k)),
+        }
+    def dump_pde_metadata(self, file_path) -> None:
+        pde_params = self.get_pde_metadata()
+        utility.json_dump(file_path, {"pde_class": type(self).__name__, "params": pde_params})
+    def load_pde_metadata(self, pde_metadata) -> None:
+        pde_class = pde_metadata["pde_class"]
+        assert pde_class == type(self).__name__, f"ERROR: The given .json file specifies parameters for '{pde_class}', but this class is of type '{type(self).__name__}'."
+        pde_params = pde_metadata["params"]
+        pde_params["k"] = torch.tensor(pde_params["k"])
         self.__init__(self.d, **pde_params)
     def u_spatial(self, x):
-        # x.shape = (batch size, spatial dims)
-        # return shape = (batch size,)
-        return torch.prod(torch.sin(self.a*x), dim=1)
+        return torch.prod(torch.sin(self.k*x), dim=1)
     def u_analytic(self, X):
         # X.shape = (batch size, spatial+time dims)
-        bs, D = X.shape
-        d = D-1
-        x = X[:,:-1]
-        t = X[:,-1]
-        # u = sin(a1 x1) ... sin(an xn) * e^(-alpha*(a1^2+...+an^2) t)
-        u_space = self.u_spatial(x)
-        u_time = torch.exp(- self.alpha * self.a_2 * t)
-        # return shape = (batch size, 1)
-        return (u_space * u_time).unsqueeze(dim=1)
+        # u = sin(k1 x1) ... sin(kn xn) * e^(-alpha*(k1^2+...+kn^2) t)
+        return (
+            self.u_spatial(X[:,:-1]) * torch.exp(- self.alpha * self.k_2 * X[:,-1])
+        ).unsqueeze(dim=1)
+    def u_bc(self, x):
+        return self.u_analytic(x)
     def u_ic(self, x):
-        # x.shape = (batch size, spatial dims)
-        # return shape = (batch size, 1)
         return self.u_spatial(x).unsqueeze(dim=1)
     # --- RESIDUALS ---
     # X.shape = (bs, D)
@@ -51,23 +65,99 @@ class HeatEquation:
     # grad_u.shape = (bs, D)
     # sp_u_laplace.shape = (bs, 1)
     # return shape = (bs, 1)
-    def pde_residual(self, X, u, grad_u, sp_laplace_u):
-        u_t = grad_u[:,-1].unsqueeze(dim=1)
-        laplace = sp_laplace_u.sum(dim=1).unsqueeze(dim=1)
-        residual = u_t - self.alpha * laplace 
-        return residual
-    def pde_residual_weak_form(self, X, u, grad_u, sp_laplace_u):
-        u_t = grad_u[:,-1].unsqueeze(dim=1)
+    def pde_residual(self, X, model):
+        X = X.detach().requires_grad_(True)
+        _, grad_u, spatial_laplace_u = derivatives.compute_derivatives(model, X)
+        return grad_u[:,-1:] - self.alpha * spatial_laplace_u.sum(dim=1).unsqueeze(dim=1)
+    def pde_residual_weak_form(self, X, model):
+        X = X.detach().requires_grad_(True)
+        u, grad_u, _ = derivatives.compute_derivatives(model, X, compute_laplace=False)
+        u_t = grad_u[:,-1:]
         u_grad_2 = torch.sum(grad_u**2, dim=1).unsqueeze(dim=1)
         residual = u_t * u + self.alpha * u_grad_2
         return residual
-    def bc_residual(self, X, u):
-        return u - self.u_analytic(X)
-    def ic_residual(self, X, u):
-        return u - self.u_ic(X[:,:-1])
+    def bc_residual(self, X, model):
+        return model(X) - self.u_analytic(X)
+    def ic_residual(self, X, model):
+        return model(X) - self.u_ic(X[:,:-1])
     def pde_sgsd_single_term_residual(self, X, u, grad_u, spatial_laplace_u, i: int):
         return 1/self.d * grad_u[:,-1:] - self.alpha * spatial_laplace_u[i]
 
+
+# u =   sin(k1 x1) ... sin(kn xn) * e^(-alpha*(k1^2+...+kn^2) t) * cos(beta*t)
+#   =   sin(k1 x1) ... sin(kn xn) * e^(-alpha*|k|^2 t) * cos(beta*t)
+# u_t = sin(k1 x1) ... sin(kn xn) * ( -alpha*|k|^2 e^. cos() - beta e^. sin() )
+#     = - alpha*|k|^2 u - beta tan() u
+# laplace_u = - |k|^2 u
+# u_t - alpha laplace_u = beta tan() u = f
+# f(x,t) = beta * sin(k1 x1) ... sin(kn xn) * e^(-alpha*|k|^2 t) * sin(beta*t)
+class HeatEquationWithSource(PDEModel):
+    def __init__(self, d, alpha=None, k=None, beta=None):
+        self.d = d
+        self.k     = k     if k     is not None else torch.pi * torch.ones(d)
+        self.alpha = alpha if alpha is not None else 0.01
+        self.beta  = beta  if beta  is not None else 2.0 * torch.pi
+        self.k_2 = (self.k**2).sum()
+    def get_pde_metadata(self):
+        return {
+            "alpha": self.alpha,
+            "beta": self.beta,
+            "k": list(map(lambda x: float(x), self.k)),
+        }
+    def dump_pde_metadata(self, file_path) -> None:
+        pde_params = self.get_pde_metadata()
+        utility.json_dump(file_path, {"pde_class": type(self).__name__, "params": pde_params})
+    def load_pde_metadata(self, pde_metadata) -> None:
+        pde_class = pde_metadata["pde_class"]
+        assert pde_class == type(self).__name__, f"ERROR: The given .json file specifies parameters for '{pde_class}', but this class is of type '{type(self).__name__}'."
+        pde_params = pde_metadata["params"]
+        pde_params["k"] = torch.tensor(pde_params["k"])
+        self.__init__(self.d, **pde_params)
+    def u_spatial(self, x):
+        return torch.prod(torch.sin(self.k*x), dim=1)
+    def u_analytic(self, X):
+        bs, D = X.shape
+        d = D-1
+        x = X[:,:-1]
+        t = X[:,-1]
+        u_space = self.u_spatial(x)
+        u_time = torch.exp(- self.alpha * self.k_2 * t) * torch.cos(self.beta * t)
+        return (u_space * u_time).unsqueeze(dim=1)
+    def f(self, X):
+        bs, D = X.shape
+        d = D-1
+        x = X[:,:-1]
+        t = X[:,-1]
+        u_space = self.u_spatial(x)
+        u_time = self.beta * torch.exp(- self.alpha * self.k_2 * t) * torch.sin(self.beta * t)
+        return (u_space * u_time).unsqueeze(dim=1)
+    def u_ic(self, x):
+        return self.u_spatial(x).unsqueeze(dim=1)
+    def u_bc(self, X):
+        return self.u_analytic(X)
+    # --- RESIDUALS ---
+    # X.shape = (bs, D)
+    # u.shape = (bs, 1)
+    # grad_u.shape = (bs, D)
+    # sp_u_laplace.shape = (bs, 1)
+    # return shape = (bs, 1)
+    def pde_residual(self, X, model):
+        X = X.detach().requires_grad_(True)
+        u, grad_u, spatial_laplace_u = derivatives.compute_derivatives(model, X)
+        return grad_u[:,-1:] - self.alpha * spatial_laplace_u.sum(dim=1).unsqueeze(dim=1) - self.f(X)
+    def bc_residual(self, X, model):
+        return model(X) - self.u_bc(X)
+    def ic_residual(self, X, model):
+        return model(X) - self.u_ic(X[:,:-1])
+    #def pde_residual_weak_form(self, X, model):
+    #    u, grad_u, _ = derivatives.compute_derivatives(model, X, compute_laplace=False)
+    #    u_t = grad_u[:,-1].unsqueeze(dim=1)
+    #    residual = u_t * u + self.alpha * torch.sum(grad_u**2, dim=1).unsqueeze(dim=1)
+    #    return residual
+    #def pde_sgsd_single_term_residual(self, X, model, i: int):
+    #    X = X.detach().requires_grad_(True)
+    #    u, grad_u, spatial_laplace_u = derivatives.compute_derivatives(model, X)
+    #    return 1/self.d * grad_u[:,-1:] - self.alpha * spatial_laplace_u[i]
 
 class TravellingGaussPacket:
     def __init__(self, d):
@@ -97,7 +187,7 @@ class TravellingGaussPacket:
         return self.__f_inner(z)
 
 
-class TravellingGaussPacket_v2:
+class TravellingGaussPacket_v2(PDEModel):
     def __init__(self, d, alpha=None, beta=None, gamma=None, a=None, b=None, c=None):
         self.d = d
         # t1
@@ -137,15 +227,16 @@ class TravellingGaussPacket_v2:
             ) * torch.exp(-self.alpha*(z**2).sum(dim=-1) - self.beta*X[:,-1])
         ).unsqueeze(dim=1)
     
-    def pde_residual(self, X, u, grad_u, sp_laplace_u):
+    def pde_residual(self, X, model):
+        X = X.detach().requires_grad_(True)
+        u, grad_u, spatial_laplace_u = derivatives.compute_derivatives(model, X)
         u_t = grad_u[:,-1].unsqueeze(dim=1)
-        laplace = sp_laplace_u.sum(dim=1).unsqueeze(dim=1)
-        residual = u_t - self.delta * laplace + (self.v * grad_u[:,:-1]).sum(dim=1).unsqueeze(dim=1) + self.w * u - self.f(X)
-        return residual
-    def bc_residual(self, X, u):
-        return u - self.u_analytic(X)
-    def ic_residual(self, X, u):
-        return u - self.u_ic(X[:,:-1])
+        laplace = spatial_laplace_u.sum(dim=1).unsqueeze(dim=1)
+        return u_t - self.delta * laplace + (self.v * grad_u[:,:-1]).sum(dim=1).unsqueeze(dim=1) + self.w * u - self.f(X)
+    def bc_residual(self, X, model):
+        return model(X) - self.u_analytic(X)
+    def ic_residual(self, X, model):
+        return model(X) - self.u_ic(X[:,:-1])
 
     def get_pde_metadata(self):
         return {

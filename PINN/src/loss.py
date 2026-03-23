@@ -53,25 +53,26 @@ class ConstantWeights:
     def weight_loss(self, losses):
         assert len(losses) == len(self.weights), "Number of losses and weights must match"
         return sum(self.weights[i] * losses[i] for i in range(len(losses)))
+    
 
-class AdaptiveWeights:
-    def __init__(self, n_terms, momentum=0.9, device='cpu'):
-        self.w = torch.ones(n_terms, device=device)
+class AdaptiveWeights(ConstantWeights):
+    def __init__(self, weights, momentum=0.9, device='cpu'):
+        self.weights = weights
         self.momentum = momentum
 
-    def update(self, grad_norms):
+    def __compute_grad_norm(self, loss, model):
+        """L2 norm of gradients of `loss` w.r.t. model parameters."""
+        grads = torch.autograd.grad(loss, model.parameters(), retain_graph=False, allow_unused=True)
+        total = sum(g.norm() ** 2 for g in grads if g is not None)
+        return total.sqrt()
+
+    def update(self, losses, model):
         """grad_norms: list of grad_\theta(loss) terms"""
-        # w_i = w_i * mean(losses) / val_loss_i
-        norms = torch.stack([g.detach() for g in grad_norms])
-        mean_norm = norms.mean()
-        target = mean_norm / (norms + 1e-8)
+        grad_norms = torch.zeros_like(self.weights)
+        for i in range(len(losses)):
+            grad_norms[i] = self.__compute_grad_norm(losses[i], model)
+        weights_new = torch.ones_like(self.weights) * grad_norms.sum() + 1e-8
+        weights_new /= grad_norms + 1e-8
         # exponential moving average
-        self.w = self.momentum * self.w + (1 - self.momentum) * target
-        return self.w
-
-
-def compute_grad_norm(loss, model):
-    """L2 norm of gradients of `loss` w.r.t. model parameters."""
-    grads = torch.autograd.grad(loss, model.parameters(), retain_graph=False, allow_unused=True).detach()
-    total = sum(g.norm() ** 2 for g in grads if g is not None)
-    return total.sqrt()
+        self.weights = self.momentum * self.weights + (1 - self.momentum) * weights_new
+        print(self.weights)
