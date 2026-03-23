@@ -7,7 +7,7 @@ import pandas as pd
 experiments_dir = "experiments_big"
 
 import utility
-gsp = utility.json_load(f"{experiments_dir}/grid_search_params.json")["params"]
+gsp = utility.json_load(f"{experiments_dir}/grid_search_params.json")["params_gs"]
 
 rows = []
 

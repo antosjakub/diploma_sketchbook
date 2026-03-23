@@ -15,16 +15,15 @@ import time
 #}
 
 base_dir = "experiments_big"  # top‑level folder
-fixed = [
-    "--d", "5",
-    "--n_steps", "10000",
-]
-params = {
+params_fixed = {
+    "d": 5,
+    "n_steps": 10000
+}
+params_gs = {
     "use_rbas": [True],
     "use_adaptive_weights": [True],
-
     "resampling_frequency": [750],
-    "layers": ["128,128,128"],
+    "layers": ["156,156,156"],
     "n_calloc_points": [10_000],
     "bs": [512],
     "seed": [42],
@@ -38,44 +37,41 @@ params = {
 import utility
 os.makedirs(base_dir, exist_ok=True)
 utility.json_dump(f"{base_dir}/grid_search_params.json", {
-    "params": params, "fixed": fixed
+    "params_gs": params_gs, "params_fixed": params_fixed
 })
 
 # Build all combinations
-keys = list(params.keys())
-values = list(params.values())
+keys = list(params_gs.keys())
+values = list(params_gs.values())
 arg_combos = list(itertools.product(*values))
 n_combos = len(arg_combos)
 print(f"Grid search consisting of {n_combos} runs.")
 print(f"Saving into '{base_dir}'")
 
 
+import math
+n_digits = int(math.log(n_combos,10))
+fmt = f"0{n_digits}d"
 for i, combo in enumerate(arg_combos):
     settings = dict(zip(keys, combo))
 
     # Construct output_dir name from settings
     exp_id = "_".join(f"{k}={v}" for k, v in settings.items())
-    output_dir = os.path.join(base_dir, f"run_{i:02d}_{exp_id}")
+    t = time.strftime("%Y-%m-%d--%H:%M:%S", time.gmtime(time.time()))
+    output_dir = os.path.join(base_dir, f"{t}__run{i:{fmt}}__{exp_id}")
     os.makedirs(output_dir, exist_ok=True)
 
     # Build command line
-    cmd = ["python", "main.py"] + fixed + [
-        "--resampling_frequency", str(settings["resampling_frequency"]),
-        "--layers", settings["layers"],
-        "--n_calloc_points", str(settings["n_calloc_points"]),
-        "--bs", str(settings["bs"]),
-        "--seed", str(settings["seed"]),
-        #"--gamma", str(settings["gamma"]),
-    ]
-    if settings["use_rbas"]:
-        cmd.append("--use_rbas")
-    if settings["use_adaptive_weights"]:
-        cmd.append("--use_adaptive_weights")
+    cmd = ["python", "main.py"]
+    for k,v in settings.items():
+        cmd.extend([f"--{k}", str(v)] if type(v) != bool else [f"--{k}"])
+    for k,v in params_fixed.items():
+        cmd.extend([f"--{k}", str(v)] if type(v) != bool else [f"--{k}"])
     cmd.extend(["--output_dir_name", output_dir])
 
     # Print for debugging
     print()
-    print(f"{(i+1):02d}/{n_combos} Running: {' '.join(cmd)}")
+    print(f"{(i+1):{fmt}}/{n_combos:{fmt}} Running: {' '.join(cmd)}")
 
     # Timing and log capture
     start_time = time.time()
