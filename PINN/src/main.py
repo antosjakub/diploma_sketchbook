@@ -393,8 +393,8 @@ if __name__ == "__main__":
 
     # PDE equation
     #pde_model = pde_models.HeatEquation(d, alpha=0.01, a=2*torch.pi*torch.ones(d))
-    #pde_model = pde_models.HeatEquationWithSource(d)
-    pde_model = pde_models.HeatEquation(d)
+    pde_model = pde_models.HeatEquationWithSource(d)
+    #pde_model = pde_models.HeatEquation(d)
     print(type(pde_model))
     print(pde_model.get_pde_metadata())
     if args.use_weak_form:

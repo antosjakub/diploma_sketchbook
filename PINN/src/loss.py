@@ -2,21 +2,21 @@ import torch
 import derivatives
 
 
-def sdgd_loss(model, X, pde_residual, pde_sgsd_single_term_residual, num_dims_to_use: int):
+def sdgd_loss(model, X, pde_model, num_dims_to_use: int):
     # sample some indices
     bs,D = X.shape
     d = D-1
     I = torch.randperm(d)[:num_dims_to_use]
     X.requires_grad = True
     u, grad_u, spatial_laplace_u = derivatives.compute_derivatives(model, X)
-    R = pde_loss(model, X, pde_residual, compute_laplace=True).detach()
+    R = pde_model.pde_residual(X, u, grad_u, spatial_laplace_u).detach()
     R_stoch = torch.zeros((bs,1))
     for i in I:
         #Ri = 1/d * grad_u[:,-1:] - alpha * spatial_laplace_u[i] + v[i] * grad_u[:,i:i+1] + 1/d * b * u
-        Ri = pde_sgsd_single_term_residual(X, u, grad_u, spatial_laplace_u, i)
+        Ri = pde_model.pde_sgsd_single_term_residual(X, u, grad_u, spatial_laplace_u, i)
         R_stoch += Ri
     # total loss
-    loss = 2 * R * R_stoch
+    loss = 2 * R * d/num_dims_to_use * R_stoch
     loss = torch.mean(loss)
     # scalar
     return loss

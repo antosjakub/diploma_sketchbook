@@ -129,7 +129,7 @@ class HeatEquationWithSource(PDEModel):
         x = X[:,:-1]
         t = X[:,-1]
         u_space = self.u_spatial(x)
-        u_time = self.beta * torch.exp(- self.alpha * self.k_2 * t) * torch.sin(self.beta * t)
+        u_time = - 1 * self.beta * torch.exp(- self.alpha * self.k_2 * t) * torch.sin(self.beta * t)
         return (u_space * u_time).unsqueeze(dim=1)
     def u_ic(self, x):
         return self.u_spatial(x).unsqueeze(dim=1)

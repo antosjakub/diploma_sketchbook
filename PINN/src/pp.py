@@ -4,14 +4,14 @@ import torch
 import json
 import pandas as pd
 
-experiments_dir = "experiments_big"
+experiments_dir = "experiments_heat,d=5"
 
 import utility
-gsp = utility.json_load(f"{experiments_dir}/grid_search_params.json")["params_gs"]
+gsp = utility.json_load(f"{experiments_dir}/grid_search_df_report.json")["params_gs"]
 
 rows = []
 
-for run_dir in sorted(glob.glob(os.path.join(experiments_dir, "run_*"))):
+for run_dir in sorted(glob.glob(os.path.join(experiments_dir, "*"))):
     # Read hyperparameters (you’ll need to adapt this to your config format)
     try:
         with open(os.path.join(run_dir, "model_metadata.json")) as f:
@@ -40,7 +40,7 @@ for run_dir in sorted(glob.glob(os.path.join(experiments_dir, "run_*"))):
     row = {
         "last_3_l2": last_3_avg,
     }
-    for k in gsp.keys():
+    for k in gsp:
         row[k] = config.get(k, "unknown")
         #"use_rbas": config.get("use_rbas", "unknown"),
         #"use_adaptive_weights": config.get("use_adaptive_weights", "unknown"),
