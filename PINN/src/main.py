@@ -21,6 +21,8 @@ parser.add_argument("--lambda_bc", default=10.0, type=float, help="")
 parser.add_argument("--lambda_ic", default=10.0, type=float, help="")
 parser.add_argument("--use_adaptive_weights", action="store_true", help="Loss weighting.")
 parser.add_argument("--use_rbas", action="store_true", help="Residual-based adaptive sampling")
+parser.add_argument("--use_sdgd", action="store_true", help="Stochastic dimension gradient-descend (for loss in high dims)")
+parser.add_argument("--sdgd_num_dims", default=None, type=int, help="Number of dimensions to use for SDGD. If None, use all dimensions.")
 # L-BFGS
 parser.add_argument("--n_steps_lbfgs", default=0, type=int, help="Number of L-BFGS steps after Adam. Set to 0 to skip.")
 parser.add_argument("--n_steps_log_lbfgs", default=100, type=int, help="")
@@ -71,7 +73,7 @@ class PINN_Trainer:
 
 
 
-    def train_adam_step(self, batch_pde, batch_bc, batch_ic, u_bc_target, u_ic_target):
+    def train_adam_step(self, batch_pde, batch_bc, batch_ic, u_bc_target, u_ic_target, use_sdgd=False, sdgd_num_dims=None):
         """
         Train a single step of the model.
         """
@@ -80,7 +82,10 @@ class PINN_Trainer:
         # Compute individual losses
         with record_function("loss"):
             #loss_pde = sdgd_loss(model, X_interior, pde_residual, None, 3)
-            loss_pde = self.pde_model.pde_loss(batch_pde, self.model)
+            if use_sdgd:
+                loss_pde = loss.sdgd_loss(batch_pde, self.model, self.pde_model, sdgd_num_dims)
+            else:
+                loss_pde = self.pde_model.pde_loss(batch_pde, self.model)
             loss_bc = self.pde_model.bc_loss(batch_bc, self.model)
             loss_ic = self.pde_model.ic_loss(batch_ic, self.model)
             #loss_pde = loss.pde_loss(self.model, batch_pde, self.pde_model.pde_residual)
@@ -199,7 +204,7 @@ class PINN_Trainer:
 
 
 
-    def train_adam_minibatch(self, bs, n_steps, n_steps_decay, n_calloc_points, n_test_calloc_points, resampling_frequency=2000, testing_frequency=100, use_rbas=False):
+    def train_adam_minibatch(self, bs, n_steps, n_steps_decay, n_calloc_points, n_test_calloc_points, resampling_frequency=2000, testing_frequency=100, use_rbas=False, use_sdgd=False, sdgd_num_dims=None):
         """
         Train the model using Adam optimizer.
         """
@@ -227,7 +232,7 @@ class PINN_Trainer:
             if True:
                 for (batch_pde,), (batch_bc, u_bc_target), (batch_ic, u_ic_target) in batch_iterator:
                     batch_pde.requires_grad = True
-                    loss_value, (loss_pde, loss_bc, loss_ic) = self.train_adam_step(batch_pde, batch_bc, batch_ic, u_bc_target, u_ic_target)
+                    loss_value, (loss_pde, loss_bc, loss_ic) = self.train_adam_step(batch_pde, batch_bc, batch_ic, u_bc_target, u_ic_target, use_sdgd=use_sdgd, sdgd_num_dims=sdgd_num_dims)
             else:
                 loss_value, (loss_pde, loss_bc, loss_ic) = self.train_adam_step_v2(batch_iterator)  # v2 is faster
             losses.append(loss_value.item())
@@ -392,9 +397,8 @@ if __name__ == "__main__":
     
 
     # PDE equation
-    #pde_model = pde_models.HeatEquation(d, alpha=0.01, a=2*torch.pi*torch.ones(d))
-    pde_model = pde_models.HeatEquationWithSource(d)
-    #pde_model = pde_models.HeatEquation(d)
+    #pde_model = pde_models.HeatEquationWithSource(d)
+    pde_model = pde_models.HeatEquation(d)
     print(type(pde_model))
     print(pde_model.get_pde_metadata())
     if args.use_weak_form:
@@ -426,9 +430,16 @@ if __name__ == "__main__":
 
         profiler = utility.Profiler(report_filename=f"{dir_name}/{args.profiler_report_filename}.txt", start_step=100, end_step=110) if args.enable_profiler else None
 
+        sdgd_num_dims = args.sdgd_num_dims if args.sdgd_num_dims is not None else d
+        if args.use_sdgd:
+            print(f"Using SDGD with {sdgd_num_dims} dimensions (d={d})")
+        else:
+            print(f"Using regular Adam training.")
+
         trainer = PINN_Trainer(model, optimizer, scheduler, pde_model, loss_weighting, profiler, device)
         losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
         #losses_adam, l2_errs_adam = trainer.train_adam_fullbatch(
+            bs=args.bs,
             n_steps=args.n_steps,
             n_steps_decay=args.n_steps_decay,
             n_calloc_points=args.n_calloc_points,
@@ -436,7 +447,8 @@ if __name__ == "__main__":
             resampling_frequency=args.resampling_frequency,
             testing_frequency=args.testing_frequency,
             use_rbas=args.use_rbas,
-            bs=args.bs
+            use_sdgd=args.use_sdgd,
+            sdgd_num_dims=sdgd_num_dims,
         )
         losses += losses_adam
         l2_errs += l2_errs_adam

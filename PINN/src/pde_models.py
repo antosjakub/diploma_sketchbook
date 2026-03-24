@@ -65,6 +65,8 @@ class HeatEquation(PDEModel):
     # grad_u.shape = (bs, D)
     # sp_u_laplace.shape = (bs, 1)
     # return shape = (bs, 1)
+    def pde_residual_base(self, X, u, grad_u, spatial_laplace_u):
+        return grad_u[:,-1:] - self.alpha * spatial_laplace_u.sum(dim=1).unsqueeze(dim=1)
     def pde_residual(self, X, model):
         X = X.detach().requires_grad_(True)
         _, grad_u, spatial_laplace_u = derivatives.compute_derivatives(model, X)
@@ -81,7 +83,11 @@ class HeatEquation(PDEModel):
     def ic_residual(self, X, model):
         return model(X) - self.u_ic(X[:,:-1])
     def pde_sgsd_single_term_residual(self, X, u, grad_u, spatial_laplace_u, i: int):
-        return 1/self.d * grad_u[:,-1:] - self.alpha * spatial_laplace_u[i]
+        return 1/self.d * grad_u[:,-1:] - self.alpha * spatial_laplace_u[:,i:i+1]
+    def pde_sgsd_single_term_residual_v1(self, X, u, grad_u, spatial_laplace_u, i: int):
+        return grad_u[:,-1:]
+    def pde_sgsd_single_term_residual_v2(self, X, u, grad_u, spatial_laplace_u, i: int):
+        return -1 * self.alpha * spatial_laplace_u[i:i+1]
 
 
 # u =   sin(k1 x1) ... sin(kn xn) * e^(-alpha*(k1^2+...+kn^2) t) * cos(beta*t)
@@ -141,6 +147,8 @@ class HeatEquationWithSource(PDEModel):
     # grad_u.shape = (bs, D)
     # sp_u_laplace.shape = (bs, 1)
     # return shape = (bs, 1)
+    def pde_residual_base(self, X, u, grad_u, spatial_laplace_u):
+        return grad_u[:,-1:] - self.alpha * spatial_laplace_u.sum(dim=1).unsqueeze(dim=1) - self.f(X)
     def pde_residual(self, X, model):
         X = X.detach().requires_grad_(True)
         u, grad_u, spatial_laplace_u = derivatives.compute_derivatives(model, X)
@@ -154,40 +162,16 @@ class HeatEquationWithSource(PDEModel):
     #    u_t = grad_u[:,-1].unsqueeze(dim=1)
     #    residual = u_t * u + self.alpha * torch.sum(grad_u**2, dim=1).unsqueeze(dim=1)
     #    return residual
-    #def pde_sgsd_single_term_residual(self, X, model, i: int):
-    #    X = X.detach().requires_grad_(True)
-    #    u, grad_u, spatial_laplace_u = derivatives.compute_derivatives(model, X)
-    #    return 1/self.d * grad_u[:,-1:] - self.alpha * spatial_laplace_u[i]
-
-class TravellingGaussPacket:
-    def __init__(self, d):
-        self.alpha = 1
-        self.a = 1.0 * torch.ones(d)
-        self.b = 0.25 * 2*(torch.ones(d)-0.5)
-        self.c = 0.5 + 0.1 * 2*(torch.ones(d)-0.5)
-        self.delta = 1
-        self.v = 1.0 * torch.ones(d)
-        self.w = 1
-
-    def __u_analytic(self, z):
-        return torch.exp(-self.alpha*(z**2).sum(dim=-1))
-
-    def u_analytic(self, X):
-        z = self.a * X[:-1] - self.b + self.c * X[-1:]
-        return self.__u_analytic(z)
-
-    def __f_inner(self, z):
-        coeff = self.v * self.a + self.c
-        sum1  = (coeff * z).sum(dim=-1)
-        sum2  = (self.a**2 * (2 * self.alpha * z**2 - 1)).sum(dim=-1)
-        return (-2 * self.alpha * (sum1 + self.delta * sum2) + self.w).unsqueeze(-1)
-
-    def f(self, X):
-        z = self.a * X[:-1] - self.b + self.c * X[-1:]
-        return self.__f_inner(z)
+    def pde_sgsd_single_term_residual_v1(self, X, u, grad_u, spatial_laplace_u, i: int):
+        return grad_u[:,-1:] - self.f(X)
+    def pde_sgsd_single_term_residual_v2(self, X, u, grad_u, spatial_laplace_u, i: int):
+        return -1 * self.alpha * spatial_laplace_u[i:i+1]
+    def pde_sgsd_single_term_residual(self, X, u, grad_u, spatial_laplace_u, i: int):
+        return 1/self.d * grad_u[:,-1:] - self.alpha * spatial_laplace_u[:,i:i+1] - 1/self.d * self.f(X)
 
 
-class TravellingGaussPacket_v2(PDEModel):
+
+class TravellingGaussPacket(PDEModel):
     def __init__(self, d, alpha=None, beta=None, gamma=None, a=None, b=None, c=None):
         self.d = d
         # t1
@@ -227,6 +211,13 @@ class TravellingGaussPacket_v2(PDEModel):
             ) * torch.exp(-self.alpha*(z**2).sum(dim=-1) - self.beta*X[:,-1])
         ).unsqueeze(dim=1)
     
+    def pde_residual_base(self, X, u, grad_u, spatial_laplace_u):
+        u_t = grad_u[:,-1].unsqueeze(dim=1)
+        laplace = spatial_laplace_u.sum(dim=1).unsqueeze(dim=1)
+        return u_t - self.delta * laplace + (self.v * grad_u[:,:-1]).sum(dim=1).unsqueeze(dim=1) + self.w * u - self.f(X)
+    def pde_sgsd_single_term_residual(self, X, u, grad_u, spatial_laplace_u, i: int):
+        u_t = grad_u[:,-1].unsqueeze(dim=1)
+        return 1/self.d * u_t - self.delta * spatial_laplace_u[:,i:i+1] + (self.v[i] * grad_u[:,i:i+1]) + 1/self.d * self.w * u - 1/self.d * self.f(X)
     def pde_residual(self, X, model):
         X = X.detach().requires_grad_(True)
         u, grad_u, spatial_laplace_u = derivatives.compute_derivatives(model, X)
@@ -261,20 +252,49 @@ class TravellingGaussPacket_v2(PDEModel):
 
 
 class FokkerPlanckLJ:
-    def __init__(self, n_atoms, d, r0=None, epsilon=None, xi=None, D=None):
+    def __init__(self, n_atoms, dof_per_atom, r0=None, epsilon=None, xi=None, D=None):
         self.n_atoms = n_atoms
-        self.d = d
+        self.dof_per_atom = dof_per_atom
+        self.d = n_atoms * dof_per_atom
         self.r0 =           r0 if r0      is not None else 1.0
         self.epsilon = epsilon if epsilon is not None else 1.0
         self.xi =           xi if xi      is not None else 1.0
         self.D =             D if D       is not None else 0.1
 
-    def pde_residual(self, X, u, grad_u, sp_laplace_u, other):
+    def get_pde_metadata(self):
+        return {
+            "d": self.d,
+            "n_atoms": self.n_atoms,
+            "dof_per_atom": self.dof_per_atom,
+            "r0": self.r0,
+            "epsilon": self.epsilon,
+            "xi": self.xi,
+            "D": self.D,
+        }
+    def dump_pde_metadata(self, file_path) -> None:
+        pde_params = self.get_pde_metadata()
+        utility.json_dump(file_path, {"pde_class": type(self).__name__, "params": pde_params})
+    def load_pde_metadata(self, pde_metadata) -> None:
+        pde_class = pde_metadata["pde_class"]
+        assert pde_class == type(self).__name__, f"ERROR: The given .json file specifies parameters for '{pde_class}', but this class is of type '{type(self).__name__}'."
+        pde_params = pde_metadata["params"]
+        pde_params["n_atoms"] = int(pde_params["n_atoms"])
+        pde_params["dof_per_atom"] = int(pde_params["dof_per_atom"])
+        pde_params["r0"] = float(pde_params["r0"])
+        pde_params["epsilon"] = float(pde_params["epsilon"])
+        pde_params["xi"] = float(pde_params["xi"])
+        pde_params["D"] = float(pde_params["D"])
+        self.__init__(**pde_params)
+
+    def pde_residual_base(self, X, u, grad_u, sp_laplace_u, other=None):
         u_t = grad_u[:,-1].unsqueeze(dim=1)
         laplace = sp_laplace_u.sum(dim=1).unsqueeze(dim=1)
         lj_grad, lj_laplace = other["lj_grad"], other["lj_laplace"]
-        residual = u_t - self.D * laplace + (lj_grad * grad_u[:,:-1]).sum(dim=1).unsqueeze(dim=1)/self.xi + u * lj_laplace/self.xi
-        return residual
+        return u_t - self.D * laplace + (lj_grad * grad_u[:,:-1]).sum(dim=1).unsqueeze(dim=1)/self.xi + u * lj_laplace/self.xi
+    def pde_residual(self, X, model, other=None):
+        X = X.detach().requires_grad_(True)
+        u, grad_u, spatial_laplace_u = derivatives.compute_derivatives(model, X)
+        return self.pde_residual_base(None, u, grad_u, spatial_laplace_u, other)
     
     def precompute_grad_and_laplace(self, Y):
         """

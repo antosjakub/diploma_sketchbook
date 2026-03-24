@@ -14,7 +14,7 @@ import time
 #    "seed": [42, 67],
 #}
 
-base_dir = "experiments_heatwsource"  # top‑level folder
+base_dir = "experiments_heat,d=5"  # top‑level folder
 params_fixed = {
     "d": 5,
     "n_steps": 10000
