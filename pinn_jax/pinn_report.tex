@@ -1,0 +1,660 @@
+\documentclass[11pt]{report}
+
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts,amsthm,bm,mathtools}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{xcolor}
+\usepackage{setspace}
+\usepackage{titlesec}
+
+\setstretch{1.08}
+\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue,citecolor=blue}
+
+\title{Physics-Informed Neural Networks for High-Dimensional Diffusion-Type PDEs:\\
+A Technical Report Oriented Toward JAX Implementation}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\tableofcontents
+
+\chapter{Conceptual Summary}
+
+Physics-informed neural networks (PINNs) are neural-network ans\"atze for unknown solution fields \(u(t,x)\) that are trained not mainly from labeled data, but from the requirement that the network output satisfy a governing PDE together with its initial and boundary conditions.[file:5][file:6]  
+The core idea is to represent the solution by a neural network \(u_\theta(t,x)\), compute derivatives such as \(\partial_t u_\theta\), \(\nabla_x u_\theta\), and \(\Delta_x u_\theta\) by automatic differentiation, and minimize a loss that penalizes PDE residuals and condition violations at sampled collocation points in the continuous domain.[file:5][file:6]  
+In the forward-problem setting relevant here, one usually has no experimental data at all, so the loss is built entirely from the PDE residual, initial condition, and boundary condition terms, possibly with adaptive weights or hard constraints.[file:5][file:6][file:3]
+
+For a diffusion-type PDE, this is attractive because the method is meshless, can work directly on continuous space-time coordinates, and does not require constructing a tensor-product grid whose size explodes with dimension.[file:5][file:6][file:2]  
+This makes PINNs conceptually appealing for problems in \(d=5,6,\dots,30\) and even much higher dimensions, especially when one wants a global surrogate \(u_\theta(t,x)\) defined everywhere in the domain instead of values only at grid points.[file:2][file:6]  
+The original PINN paper already emphasized that the same framework can handle nonlinear PDEs, inverse problems, periodic conditions, and complex-valued solutions such as the nonlinear Schr\"odinger equation.[file:5]
+
+However, the most important practical lesson from the attached papers is that \emph{plain} PINNs are often hard to train.[file:3][file:6]  
+Three recurrent failure modes are especially relevant for time-dependent parabolic PDEs: spectral bias, which makes standard MLPs learn low frequencies first and struggle with sharp or multi-scale structure; gradient imbalance between the different loss terms; and causality violation, where the optimizer attempts to fit later-time residuals before earlier-time dynamics are properly learned.[file:3]  
+In high dimensions, an additional bottleneck appears because computing and backpropagating through all second-order derivative terms in operators such as the Laplacian or Fokker--Planck diffusion tensor can become prohibitively expensive in memory and time.[file:2][file:4]
+
+Therefore, for the class of problems that motivated this report, the right question is not ``do PINNs exist for high-dimensional PDEs?'', but rather ``which PINN \emph{variant} should be used, and with which training pipeline?''.[file:6][file:3][file:2]  
+The attached literature points to a modern answer built from several components: non-dimensionalization, a suitable coordinate network architecture, frequency-aware embeddings, adaptive or hard enforcement of conditions, random sampling with residual adaptivity, causal or curriculum training in time, and special high-dimensional differentiation strategies such as stochastic dimension gradient descent (SDGD), Hutchinson trace estimation (HTE), or score-based reformulations for Fokker--Planck equations.[file:3][file:2][file:4][file:1][file:6]
+
+For your use case---forward numerical solution of diffusion, heat, Fokker--Planck, and Schr\"odinger-type equations in dimensions roughly \(5\) to \(30+\), with no observational data---PINNs are best viewed as a family of meshless residual-minimization methods rather than as a single algorithm.[file:5][file:6]  
+They can be very effective when the domain is awkward, when a global differentiable surrogate is useful, or when dimensionality makes standard meshing difficult, but success depends heavily on architecture and training design.[file:6][file:3][file:2]  
+A high-performance JAX implementation should therefore be organized around a modular PINN framework in which the PDE, the residual estimator, the boundary handling strategy, the network architecture, and the sampling/training schedule are all swappable components.[file:3][file:2][file:4][file:6]
+
+\chapter{General Technical Framework}
+
+\section{Problem class}
+
+We consider time-dependent PDEs on a space-time domain \([0,T]\times \Omega\), where \(\Omega \subset \mathbb{R}^d\), of the general form
+\[
+\partial_t u + \mathcal{N}[u](t,x) = 0,
+\qquad (t,x)\in (0,T]\times \Omega,
+\]
+with initial condition
+\[
+u(0,x)=u_0(x),
+\qquad x\in \Omega,
+\]
+and boundary condition
+\[
+\mathcal{B}[u](t,x)=g(t,x),
+\qquad (t,x)\in [0,T]\times \partial\Omega.
+\]
+This is the standard PINN setup used in the original framework and subsequent reviews.[file:5][file:6][file:3]
+
+For diffusion-like equations, \(\mathcal{N}\) typically contains first-order time evolution and second-order spatial operators.[file:6][file:2][file:4]  
+Examples include the heat equation,
+\[
+\partial_t u - \kappa \Delta u - s(t,x)=0,
+\]
+the Fokker--Planck equation,
+\[
+\partial_t p + \nabla\cdot(Fp) - \frac12 \sum_{i,j=1}^d \partial_{x_i x_j}\!\left(D_{ij} p\right)=0,
+\]
+and Schr\"odinger-type equations, where one often deals with complex-valued outputs or coupled real--imaginary systems.[file:6][file:2][file:5]
+
+\section{Neural ansatz}
+
+A PINN replaces the unknown solution by a neural network \(u_\theta(t,x)\), where \(\theta\) collects all trainable parameters.[file:5][file:6]  
+The input is the coordinate pair \((t,x)\in \mathbb{R}^{1+d}\), and the output is a scalar, vector, or complex-valued field depending on the PDE.[file:5][file:6]  
+For scalar diffusion equations one typically uses \(u_\theta:[0,T]\times \Omega \to \mathbb{R}\), while for Schr\"odinger equations one often outputs \((u_\theta^{(R)},u_\theta^{(I)})\) as a two-output real network.[file:5]
+
+In the classical formulation, \(u_\theta\) is a multilayer perceptron (MLP) with smooth activations such as \(\tanh\), because second-order derivatives must exist and remain numerically meaningful.[file:3][file:6]  
+The expert guide explicitly recommends widths in the range \(128\) to \(512\), depths roughly \(3\) to \(6\), \(\tanh\) activations, and Glorot-type initialization as a robust default for PINNs, although this is only a baseline and not the final recommendation for difficult problems.[file:3]  
+The original PINN paper also used relatively standard fully connected networks with \(\tanh\), showing that the basic mechanism does not rely on exotic architectures.[file:5]
+
+\section{Residual construction by automatic differentiation}
+
+The defining step in PINNs is that the PDE residual is computed by differentiating the network with respect to its inputs.[file:5][file:6]  
+If
+\[
+\mathcal{R}_\theta(t,x)
+:= \partial_t u_\theta(t,x) + \mathcal{N}[u_\theta](t,x),
+\]
+then the PDE is enforced by driving \(\mathcal{R}_\theta\) toward zero on sampled collocation points.[file:5][file:3][file:6]  
+Automatic differentiation (AD) is what makes this practical, because it gives derivatives such as \(\partial_t u_\theta\), \(\partial_{x_i}u_\theta\), \(\partial_{x_i x_j}u_\theta\), and higher derivatives without hand-derived symbolic code.[file:5][file:6]
+
+In JAX terms, this means that the neural network must be implemented as a differentiable pure function, and all PDE operators are composed from JAX differentiation primitives.[file:4][file:3]  
+For scalar diffusion operators, a direct implementation computes \(\partial_t u_\theta\) and the Laplacian \(\Delta u_\theta = \sum_{i=1}^d \partial_{x_i x_i}u_\theta\).[file:2][file:4]  
+For Fokker--Planck equations with general diffusion tensor \(D(x)\), one may need mixed second derivatives \(\partial_{x_i x_j}\), which raises both computational cost and variance in high dimension.[file:2][file:4]
+
+\section{Loss function}
+
+The classical PINN loss is a weighted sum of several terms.[file:5][file:6][file:3]  
+For forward PDE solution without observational data, the relevant loss is
+\[
+\mathcal{L}(\theta)
+=
+\lambda_r \mathcal{L}_r(\theta)
++
+\lambda_{ic} \mathcal{L}_{ic}(\theta)
++
+\lambda_{bc} \mathcal{L}_{bc}(\theta),
+\]
+where
+\[
+\mathcal{L}_r(\theta)
+=
+\frac{1}{N_r}\sum_{n=1}^{N_r}
+\bigl|\mathcal{R}_\theta(t_n^{(r)},x_n^{(r)})\bigr|^2,
+\]
+\[
+\mathcal{L}_{ic}(\theta)
+=
+\frac{1}{N_{ic}}\sum_{n=1}^{N_{ic}}
+\bigl|u_\theta(0,x_n^{(ic)})-u_0(x_n^{(ic)})\bigr|^2,
+\]
+and
+\[
+\mathcal{L}_{bc}(\theta)
+=
+\frac{1}{N_{bc}}\sum_{n=1}^{N_{bc}}
+\bigl|\mathcal{B}[u_\theta](t_n^{(bc)},x_n^{(bc)})-g(t_n^{(bc)},x_n^{(bc)})\bigr|^2.
+\]
+This is the standard strong-form formulation described in both the original paper and later reviews.[file:5][file:6][file:3]
+
+The key point is that in your setting there is usually no separate data term \(\mathcal{L}_{data}\), because the PDE is a forward problem with known coefficients and no measurements.[file:5][file:6]  
+If one enforces the boundary and initial conditions exactly through a hard-constrained ansatz, then \(\mathcal{L}_{ic}\) and/or \(\mathcal{L}_{bc}\) can be removed or reduced.[file:3][file:6][file:2]  
+This is often desirable because it eliminates competition between residual and condition losses.[file:6][file:3]
+
+\section{Collocation points and sampling}
+
+PINNs do not discretize the PDE on a mesh in the classical finite-difference or finite-element sense.[file:5][file:6]  
+Instead, they sample collocation points in the continuous domain and enforce the PDE there.[file:5][file:3]  
+The basic choices are uniform random sampling, grid sampling, Latin hypercube sampling, low-discrepancy sequences such as Sobol or Halton, and residual-adaptive schemes.[file:6]
+
+In high dimensions, naive full grids are impossible, so random or low-discrepancy point sets become the natural default.[file:6][file:2]  
+The systematic review notes that Latin hypercube sampling is especially useful in high-dimensional settings because it spreads samples more uniformly across each marginal direction than simple i.i.d.\ uniform sampling.[file:6]  
+For difficult regions such as boundary layers, singular zones, or rapidly varying solution regions, residual-based adaptive refinement (RAR), residual adaptive distribution (RAD), and related methods allocate more points where the current model performs poorly.[file:6]
+
+\section{Optimization}
+
+The training objective is nonconvex and multi-objective.[file:3][file:6]  
+The original PINN paper often optimized with full-batch L-BFGS because the data sets were small and the collocation set was fixed.[file:5]  
+Later practice, especially in modern JAX pipelines and higher-dimensional settings, uses Adam or another first-order optimizer with random mini-batches, often followed by L-BFGS as a refinement stage when feasible.[file:3][file:6]
+
+A strong practical recommendation from the expert guide is to use Adam with an initial learning rate around \(10^{-3}\) and exponential decay, together with random sampling at every iteration.[file:3]  
+The same guide argues against full-batch training as a default because random sampling introduces a useful regularization effect and reduces memory requirements.[file:3]  
+For high-dimensional PDEs, stochastic optimization is not just a convenience but usually a necessity.[file:2][file:4]
+
+\section{Why training is difficult}
+
+The attached papers identify three especially important optimization pathologies.[file:3]  
+First, standard coordinate MLPs have a \emph{spectral bias}: they learn low-frequency components first and struggle with high-frequency, multiscale, or sharply varying structure.[file:3][file:6]  
+Second, the gradients of different loss terms can be badly imbalanced, so one constraint dominates while others stagnate.[file:3][file:6]
+
+Third, for time-dependent PDEs, vanilla PINNs minimize residuals over all times simultaneously and can violate temporal causality by trying to fit later-time dynamics before earlier-time states are correct.[file:3]  
+The expert guide gives both a conceptual and empirical case that this is a real failure mode for evolutionary PDEs.[file:3]  
+These difficulties explain why the implementation for high-dimensional parabolic PDEs must be built around more than the original loss alone.[file:3][file:6][file:2]
+
+\section{Continuous-time and discrete-time formulations}
+
+The original PINN paper distinguishes two broad formulations.[file:5]  
+The \emph{continuous-time} formulation enforces the PDE directly through the residual \(\mathcal{R}_\theta(t,x)\) on space-time points.[file:5]  
+This is the form used in most modern work on high-dimensional PINNs and is the main focus of this report, because it is simple, general, and easy to express in JAX.[file:2][file:3][file:4]
+
+The \emph{discrete-time} formulation uses Runge--Kutta structure and predicts one or more time stages, effectively embedding a time integrator into the network architecture.[file:5]  
+This can remove the need for large numbers of time collocation points and can be advantageous for some stiff or long-step settings, but it is less commonly used in the recent high-dimensional PINN literature than continuous-time residual minimization.[file:5][file:6]  
+For your target implementation, continuous-time PINNs should be treated as the primary framework, with time-marching or curriculum methods available when long-time integration becomes difficult.[file:3][file:6]
+
+\chapter{Architectures and Framework Variants Relevant in High Dimension}
+
+\section{Baseline MLP PINN}
+
+The baseline architecture is a smooth fully connected MLP that maps \((t,x)\) to \(u_\theta(t,x)\).[file:5][file:3][file:6]  
+Its main advantages are simplicity, universality, and compatibility with arbitrary PDE operators and geometries.[file:5][file:6]  
+For moderate difficulty problems, it can be enough, and it remains the conceptual foundation for almost all PINN variants.[file:5]
+
+For high-dimensional diffusion-type problems, however, the plain MLP mainly serves as a reference point.[file:3][file:2][file:6]  
+Its weaknesses are spectral bias, unstable optimization, and poor scaling of second-order differentiation costs as dimension grows.[file:3][file:2][file:4]  
+A production implementation should therefore treat the plain MLP as the simplest fallback, not as the default final architecture.[file:3][file:6]
+
+\section{Adaptive activation architectures}
+
+Several papers reviewed in the attached survey emphasize adaptive activation functions, especially layer-wise or neuron-wise locally adaptive activations such as L-LAAF and N-LAAF.[file:6]  
+The idea is to replace a fixed activation shape by a trainable one, so that the local nonlinearity of the network can adjust during training.[file:6]  
+This can accelerate convergence and reduce premature trapping in poor local minima, especially in nonlinear and oscillatory PDEs.[file:6]
+
+For high-dimensional parabolic PDEs, adaptive activations are not a complete scaling solution, but they can improve approximation efficiency when the solution contains regions of different effective smoothness.[file:6]  
+They are most naturally interpreted as a low-level architectural enhancement that can be combined with other strategies such as Fourier features or causal training.[file:6][file:3]  
+If implemented in JAX, they are cheap compared with more radical changes such as second-order operator estimators, so they are worth keeping as an optional switch.[file:6]
+
+\section{SIREN and oscillatory activations}
+
+The review lists SIREN-type sinusoidal activations as especially suitable for oscillatory fields and high-frequency information.[file:6]  
+This matters for Schr\"odinger-type equations, wave-like diffusive-dispersive systems, and highly oscillatory multi-scale regimes where \(\tanh\) may smooth too aggressively.[file:6]  
+SIREN-type networks directly represent oscillations in the architecture rather than asking the optimizer to build them indirectly through many tanh layers.[file:6]
+
+The trade-off is that oscillatory activations can be harder to initialize and may interact subtly with higher-order derivatives.[file:6]  
+For pure heat or classical diffusion equations, they are usually not the first thing to try, because those solutions are often strongly smoothing in time.[file:6]  
+For Schr\"odinger or mixed diffusive-oscillatory problems, they become much more interesting.[file:6][file:5]
+
+\section{Fourier feature embeddings}
+
+One of the most important enhancements in the attached material is the use of random Fourier feature embeddings.[file:3]  
+The expert guide recommends replacing the raw coordinate input \(x\) by
+\[
+\gamma(x) = \bigl(\cos(Bx),\, \sin(Bx)\bigr),
+\]
+with a frequency matrix \(B\) sampled from a Gaussian distribution.[file:3]  
+This changes the effective kernel induced by the network and mitigates spectral bias, making high-frequency and multi-scale solution content easier to learn.[file:3][file:6]
+
+For diffusion-type PDEs in \(d=5\) to \(30\), Fourier features are one of the most practical upgrades because they are easy to implement, JAX-friendly, and supported by both theory and extensive experiments.[file:3]  
+The expert guide explicitly states that Fourier features are highly recommended and that their removal often causes a dramatic loss in accuracy on difficult benchmarks.[file:3]  
+In a codebase, they should be treated as a front-end coordinate transform, ideally with tunable scale and possibly per-dimension anisotropic frequencies when the PDE is anisotropic.[file:3][file:2]
+
+\section{Random weight factorization}
+
+Random weight factorization (RWF) is another major component emphasized in the expert guide.[file:3]  
+Instead of parameterizing a dense-layer weight row as a single vector \(w\), RWF writes
+\[
+w = s\, v,
+\]
+or in matrix form \(W = \mathrm{diag}(s)V\), with trainable scale factors.[file:3]  
+The guide explains that this changes the geometry of the optimization landscape and effectively induces self-adaptive per-neuron learning rates.[file:3]
+
+Empirically, RWF often accelerates convergence and improves final accuracy.[file:3]  
+Because it is a drop-in modification of dense layers, it is very attractive in JAX: it adds little conceptual complexity and can be composed naturally with Fourier features, modified MLPs, and causal training.[file:3]  
+For high-dimensional PDEs where optimization is already delicate, RWF is a strong default rather than an optional luxury.[file:3]
+
+\section{Modified MLP with gating encoders}
+
+The expert guide highlights a modified MLP architecture in which the input is first passed through two encoders \(U\) and \(V\), and each hidden layer mixes its ordinary transformed features with these encoded features through elementwise gating.[file:3]  
+Schematically, the hidden state update is of the form
+\[
+g^{(\ell)} = f^{(\ell)} \odot U + (1-f^{(\ell)}) \odot V,
+\]
+where \(f^{(\ell)}\) is the usual nonlinear layer output.[file:3]  
+This resembles a lightweight gating mechanism and empirically improves the ability of the network to learn difficult nonlinear PDE solutions.[file:3]
+
+For high-dimensional diffusion-type PDEs, the modified MLP is appealing because it improves expressivity without changing the PDE residual machinery.[file:3]  
+Its cost is somewhat higher than a plain MLP, but the guide reports that it generally yields better minimization of PDE residuals and better accuracy.[file:3]  
+In a JAX implementation, this is a good candidate for the default backbone, especially when combined with Fourier features and RWF.[file:3]
+
+\section{Hard-constrained architectures for conditions}
+
+A major architectural issue in PINNs is whether initial and boundary conditions are enforced \emph{softly} through penalty losses or \emph{hardly} by building them into the network output.[file:6][file:3][file:2]  
+Hard constraints remove or reduce the corresponding loss terms and therefore reduce gradient competition.[file:6][file:3]  
+The attached material discusses exact imposition of periodic boundaries via Fourier embeddings and hard imposition of Dirichlet conditions through approximate distance functions or suitable output transformations.[file:3][file:6][file:2]
+
+For box domains relevant to high-dimensional heat or diffusion equations, hard constraints can often be implemented very simply by using a boundary-vanishing factor such as
+\[
+\phi(x)=\prod_{i=1}^d (1-x_i^2)
+\]
+on \([-1,1]^d\).[file:3][file:6]  
+Then one writes
+\[
+u_\theta(t,x)=g(t,x)+\phi(x)\,v_\theta(t,x),
+\]
+where \(g\) is a lifting that already satisfies the boundary values.[file:6][file:3]  
+This is architecturally important because it can substantially stabilize training, especially when the residual term would otherwise dominate the boundary term by several orders of magnitude.[file:6]
+
+\section{Variational and weak-form architectures}
+
+The survey emphasizes variational PINN frameworks such as VPINN, hp-VPINN, and VINO, which replace strong residual matching by weak-form or energy-form enforcement.[file:6]  
+This is not merely a training trick; it changes the functional object being approximated and the regularity burden on the network.[file:6]  
+For second-order diffusion operators, weak forms can reduce sensitivity to pointwise second derivatives and can incorporate boundary information more naturally through integration by parts.[file:6]
+
+The hp-VPINN framework also combines variational principles with subdomain refinement, making it relevant for localized complexity and multiscale structure.[file:6]  
+In high-dimensional settings, weak formulations can sometimes be preferable when strong-form second derivatives are too noisy or too expensive, although the integrals themselves still need stochastic approximation.[file:6]  
+For a JAX codebase oriented toward research flexibility, a weak-form backend is highly desirable even if the first implementation uses the strong form.[file:6]
+
+\section{Domain decomposition: cPINN, XPINN, and related methods}
+
+Domain decomposition is one of the most important structural ideas for difficult PDEs.[file:6]  
+The conservative PINN (cPINN) decomposes the spatial domain into subdomains with separate subnetworks and interface matching conditions, while XPINN generalizes this to flexible space-time decompositions.[file:6][file:2]  
+These methods reduce optimization difficulty by splitting a hard global task into several easier local tasks.[file:6]
+
+For high-dimensional diffusion-type problems, decomposition can help in two distinct ways.[file:6]  
+First, if the solution exhibits localized sharp behavior, different subdomains can use different sampling densities or even different architectures.[file:6]  
+Second, for long-time problems, space-time decomposition gives a form of parallel or sequential time-marching that respects causality better than one-shot global training.[file:6][file:3]
+
+The price is increased implementation complexity: one must manage interface losses, multiple optimizers or parameter groups, and possibly heterogeneous subdomain models.[file:6]  
+Still, for genuinely hard problems, XPINN-style decomposition is one of the most credible ways to push PINNs beyond small benchmark cases.[file:6]  
+A research-grade JAX implementation should therefore isolate domain decomposition as a first-class module rather than hard-coding a single global network.[file:6][file:2]
+
+\section{FBPINN and finite-basis localized subnetworks}
+
+FBPINN, discussed in the high-dimensional and long-time literature summarized in the review, uses many small local subnetworks multiplied by basis functions and trained over decomposed subdomains.[file:6]  
+This is especially attractive for multi-scale and long-time problems because each local network sees a smaller, simpler task.[file:6]  
+Compared with one monolithic global MLP, FBPINN offers better scalability and a natural path to parallel training.[file:6]
+
+Architecturally, FBPINN is important because it addresses both approximation and optimization simultaneously.[file:6]  
+The basis functions localize support, which regularizes each subnetwork’s responsibility, and the decomposition reduces the stiffness of the global training problem.[file:6]  
+For dimensions \(5\)–\(30\), FBPINN is one of the most relevant advanced frameworks if the baseline global architecture fails.[file:6]
+
+\section{Time-aware architectures: causal weighting, PPINN, Trans-Net, and windows}
+
+Although causal weighting is technically a training strategy rather than a neural architecture, it has architectural consequences because it restructures the residual across temporal segments.[file:3][file:6]  
+The expert guide partitions the time axis into chunks and introduces temporally ordered weights so that later residuals are not emphasized until earlier ones are small.[file:3]  
+PPINN and Trans-Net push this further by explicitly decomposing time into windows or subdomains with separate subnetworks or pretrained temporal transfer.[file:6]
+
+For parabolic PDEs, this is extremely relevant because information should propagate forward in time.[file:3][file:6]  
+A monolithic network over \([0,T]\times \Omega\) can easily produce low average residual while still learning the wrong time evolution, especially over long horizons.[file:3]  
+Hence any serious implementation for heat-like or Fokker--Planck evolution should include time-windowed training as an available mode, even if short-horizon problems can be solved in one shot.[file:3][file:6]
+
+\section{High-dimensional residual architectures: SDGD}
+
+Stochastic Dimension Gradient Descent (SDGD) is one of the most important papers in your set for high-dimensional PDEs.[file:2]  
+Its main idea is not to change the solution network itself but to change how the residual gradient is computed when the PDE operator decomposes into many dimensional components.[file:2]  
+For a Laplacian or other sum of many second-order terms, SDGD samples only a subset of the dimensional pieces in each iteration, producing an unbiased estimator of the full residual gradient while massively reducing memory cost.[file:2]
+
+For example, if
+\[
+\Delta u = \sum_{i=1}^d \partial_{x_i x_i}u,
+\]
+then the bottleneck in backpropagation is the sum over all \(d\) second derivatives.[file:2]  
+SDGD decomposes this operator and samples only a subset \(I\subset\{1,\dots,d\}\) during each iteration.[file:2]  
+The paper reports stable training for nonlinear PDEs up to \(100{,}000\) dimensions on a single GPU and emphasizes that the method is general to arbitrary decomposable high-dimensional PDE operators.[file:2]
+
+For your use case, SDGD is arguably the most directly relevant scaling mechanism for heat and diffusion equations in \(5\)–\(30+\) dimensions.[file:2]  
+It is especially natural for Laplacian-type operators because the decomposition is obvious.[file:2]  
+In a JAX implementation, SDGD should be treated as a residual-estimator backend that sits underneath the same model and optimizer interface as the ordinary exact residual.[file:2]
+
+\section{HTE-based residual architectures}
+
+Hutchinson Trace Estimation (HTE) is another key high-dimensional method in your attachments.[file:4]  
+For second-order PDEs whose diffusion term can be written via a Hessian trace, HTE replaces the exact trace computation by stochastic Hessian-vector products.[file:4]  
+This can avoid forming the full Hessian and substantially reduce memory cost, especially when implemented efficiently in JAX with forward-mode or Taylor-mode differentiation.[file:4]
+
+The method is especially relevant for operators of the form
+\[
+\mathrm{Tr}\!\bigl(A(x,t)\,\nabla_x^2 u\bigr),
+\]
+which include many parabolic PDEs such as Fokker--Planck and related second-order diffusions.[file:4]  
+The paper compares HTE with SDGD and argues that each has regimes in which it is preferable, with HTE being particularly appealing when the operator naturally appears as a trace and JAX implementation is available.[file:4]  
+Since you explicitly want a JAX-oriented report, HTE deserves a central place in the eventual code design.[file:4]
+
+\section{Score-PINN for Fokker--Planck equations}
+
+Score-PINN is a specialized but very important variant for high-dimensional Fokker--Planck problems.[file:1]  
+The main idea is that directly learning the probability density \(p(t,x)\) or its log-likelihood can be numerically terrible in high dimensions because the density becomes extremely small.[file:1][file:2]  
+Instead, Score-PINN learns the score \(\nabla_x \log p(t,x)\), which often has more stable scaling and can then be integrated to recover log-likelihood information.[file:1]
+
+This is not a universal architecture for every parabolic PDE, but it is highly relevant if your main interest shifts toward high-dimensional Fokker--Planck equations.[file:1]  
+The paper also connects this strategy to efficient derivative estimation in JAX and shows that it can outperform direct PINN approaches to the log-likelihood formulation.[file:1]  
+Therefore, for a software design intended to support diffusion and Fokker--Planck families, Score-PINN should be treated as a specialized model class rather than as a small tweak to the default heat-equation solver.[file:1]
+
+\section{Bayesian PINNs}
+
+Bayesian PINNs treat network parameters as random variables and perform posterior inference rather than point estimation.[file:6]  
+Their main value is uncertainty quantification, especially under sparse or noisy data, but the survey also notes their improved robustness in some inverse and noisy settings.[file:6]  
+For pure forward deterministic PDE solution without measurements, they are usually not the first architecture to implement.[file:6]
+
+Still, there are reasons to keep them in mind.[file:6]  
+In high-dimensional problems, training can be unstable or produce multiple plausible residual-minimizing solutions, and uncertainty-aware methods can be diagnostically valuable.[file:6]  
+For a first high-performance JAX solver, however, Bayesian PINNs should be considered future work rather than core infrastructure.[file:6]
+
+\section{Hybrid deep-learning architectures: LSTM, CNN, GAN, DeepONet, transfer and meta-learning}
+
+The systematic review devotes significant attention to combinations of PINNs with LSTM, CNN, GAN, operator-learning, transfer-learning, and meta-learning frameworks.[file:6]  
+These are important because they expand the range of representational priors available to the model.[file:6]  
+For instance, LSTM hybrids can help with temporal memory, CNNs help with structured spatial fields, and DeepONet or neural operators learn maps between function spaces rather than single solutions.[file:6]
+
+For the particular goal of forward solution of one PDE instance in dimensions \(5\)–\(30+\), these hybrids are secondary to the earlier items in this chapter.[file:6][file:2][file:3]  
+They become more important when one wants amortized solvers over many parameterized PDE instances, fast surrogates over families of boundary conditions, or transfer across related tasks.[file:6][file:2]  
+Hence they belong in the medium-term architecture roadmap, not in the minimal first implementation.[file:6]
+
+\section{Practical ranking for your target problems}
+
+For high-dimensional heat and diffusion equations, the most relevant architecture stack suggested by the attached papers is:
+\begin{enumerate}[label=\arabic*.]
+\item Fourier features + modified MLP + RWF as the default coordinate network.[file:3]
+\item Hard-constrained handling of conditions whenever simple geometry permits it.[file:3][file:6]
+\item Causal weighting or time-windowing for longer time horizons.[file:3][file:6]
+\item SDGD for Laplacian-like operators, and HTE when the operator is naturally trace-based.[file:2][file:4]
+\item XPINN/FBPINN/domain decomposition when the global model remains hard to optimize.[file:6]
+\end{enumerate}
+
+For Fokker--Planck equations, the same list applies, but Score-PINN becomes a front-line candidate because of the numerical scaling of densities in high dimension.[file:1][file:2]  
+For Schr\"odinger equations, the baseline should be adjusted toward complex or two-output networks, periodic hard constraints when appropriate, and possibly oscillatory activations or frequency-rich embeddings.[file:5][file:6]  
+This is the architecture strategy that best aligns with the attached literature as a whole.[file:5][file:6][file:3][file:2][file:4][file:1]
+
+\chapter{Most Important Ideas for High-Dimensional PDEs}
+
+The central high-dimensional difficulty for diffusion-type PINNs is the cost of second-order differentiation.[file:2][file:4]  
+Even if the network itself is modest, operators such as the Laplacian or a full diffusion tensor require many second derivatives, and backpropagating through all of them can exhaust memory or slow training dramatically.[file:2][file:4]  
+Therefore, the first high-dimensional design principle is: \emph{do not compute the full operator naively if the PDE structure allows stochastic decomposition or trace estimation}.[file:2][file:4]
+
+For heat and classical diffusion equations, SDGD is especially natural because the Laplacian is already a sum over coordinate directions.[file:2]  
+For Fokker--Planck operators with trace structure, HTE can often provide a more JAX-native path using Hessian-vector products.[file:4]  
+These two methods should be treated as primary scaling tools, not afterthoughts.[file:2][file:4]
+
+The second principle is to reduce optimization pathologies before attempting brute-force scaling.[file:3][file:6]  
+In practice this means non-dimensionalization, frequency-aware embeddings, RWF, adaptive loss balancing, and causal or curriculum training.[file:3][file:6]  
+A badly conditioned vanilla PINN does not become good merely because the Hessian estimator is cheaper.[file:3][file:2]
+
+The third principle is to enforce what can be enforced exactly.[file:3][file:6]  
+If the domain is a hypercube or another geometry with a simple boundary vanishing factor, hard imposition of Dirichlet or periodic conditions can remove major sources of loss competition and improve stability.[file:3][file:6]  
+This is particularly valuable in high dimensions, where every extra soft-penalty term further complicates gradient balance.[file:6]
+
+The fourth principle is to respect temporal structure.[file:3][file:6]  
+Time-dependent parabolic PDEs should not always be learned in one huge global shot over long intervals, because temporal causality violations and error accumulation become severe.[file:3]  
+Causal weighting, time-windowing, curriculum in time, or domain decomposition over the temporal axis are therefore core ingredients for long-horizon evolution problems.[file:3][file:6]
+
+The fifth principle is to adapt the formulation to the PDE class.[file:1][file:6]  
+For Fokker--Planck equations, score-based formulations can be numerically superior to direct density formulations in high dimensions.[file:1]  
+For strongly oscillatory Schr\"odinger-type problems, frequency-rich architectures or oscillatory activations become more relevant than for smoothing heat equations.[file:5][file:6]
+
+Finally, one should be realistic about the role of PINNs.[file:6]  
+The review explicitly notes that baseline PINNs often do \emph{not} yet match mature classical solvers in generic accuracy, and that breakthroughs usually come from problem-specific enhancements rather than from a single universal architecture.[file:6]  
+So the right engineering attitude is modularity: implement a framework that can switch between strong-form PINN, weak-form PINN, SDGD, HTE, score-based formulations, and domain decomposition according to the PDE at hand.[file:6][file:2][file:4][file:1]
+
+\chapter{Concrete Application: Heat Equation with Diffusion and Source}
+
+\section{Model problem}
+
+Consider the \(d\)-dimensional inhomogeneous heat equation on the box \(\Omega=[-1,1]^d\):
+\[
+\partial_t u(t,x) - \kappa \Delta_x u(t,x) = f(t,x),
+\qquad (t,x)\in (0,T]\times \Omega,
+\]
+with initial condition
+\[
+u(0,x)=u_0(x),
+\qquad x\in \Omega,
+\]
+and Dirichlet boundary condition
+\[
+u(t,x)=g(t,x),
+\qquad (t,x)\in [0,T]\times \partial\Omega.
+\]
+This is the canonical forward parabolic PDE used here to explain the full PINN setup.[file:5][file:6]
+
+If \(\kappa>0\) is constant, the PDE residual of a network \(u_\theta\) is
+\[
+R_\theta(t,x)
+=
+\partial_t u_\theta(t,x)-\kappa \sum_{i=1}^d \partial_{x_i x_i}u_\theta(t,x)-f(t,x).
+\]
+The goal is to train \(\theta\) so that \(R_\theta\) is small in the domain while the initial and boundary conditions are satisfied.[file:5][file:6]  
+This is the pure forward-problem setting, so there is no observational data term.[file:5][file:6]
+
+\section{Choice of ansatz}
+
+There are two main choices.[file:3][file:6]  
+
+\paragraph{Soft-constraint formulation.}
+Represent \(u\) directly as \(u_\theta(t,x)\) and use the total loss
+\[
+\mathcal{L}(\theta)
+=
+\lambda_r \mathcal{L}_r
++
+\lambda_{ic}\mathcal{L}_{ic}
++
+\lambda_{bc}\mathcal{L}_{bc}.
+\]
+This is the simplest generic formulation and works on arbitrary geometries, but requires careful balancing of the three losses.[file:5][file:6][file:3]
+
+\paragraph{Hard-constraint formulation.}
+If the geometry is the box \([-1,1]^d\), define the boundary-vanishing factor
+\[
+\phi(x)=\prod_{i=1}^d (1-x_i^2).
+\]
+Then construct a lifting \(G(t,x)\) satisfying the boundary condition \(G(t,x)=g(t,x)\) for \(x\in\partial\Omega\), and define
+\[
+u_\theta(t,x)=G(t,x)+\phi(x)v_\theta(t,x).
+\]
+This automatically enforces the Dirichlet boundary condition, because \(\phi(x)=0\) on \(\partial\Omega\).[file:3][file:6]
+
+If one also wants to impose the initial condition exactly, one may further write
+\[
+u_\theta(t,x)=G(t,x)+\phi(x)\Bigl(H(x)+t\,w_\theta(t,x)\Bigr),
+\]
+where \(H\) is chosen so that \(u_\theta(0,x)=u_0(x)\) in the interior.[file:3][file:6]  
+In practice, exact simultaneous enforcement of both IC and BC is easiest when \(u_0\) is compatible with the boundary data and the geometry is simple.[file:6]  
+When the exact lifting becomes awkward, it is perfectly reasonable to impose only the BC hard and keep the IC soft.[file:3][file:6]
+
+\section{Recommended network and training stack}
+
+For a first serious JAX implementation, the attached papers suggest the following default stack:
+\begin{enumerate}[label=\arabic*.]
+\item Non-dimensionalize the PDE so that \(t\), \(x_i\), and \(u\) are all \(O(1)\).[file:3]
+\item Use Fourier feature embeddings on the coordinates, especially when the solution contains moderate or high spatial frequency content.[file:3]
+\item Use a modified MLP backbone with \(\tanh\) activations and random weight factorization.[file:3]
+\item Use Adam with learning-rate decay and random re-sampling of collocation points every iteration.[file:3]
+\item Use adaptive loss balancing if IC and BC are imposed softly.[file:3][file:6]
+\item Use causal weighting or time windows when \(T\) is large.[file:3][file:6]
+\end{enumerate}
+
+For moderate dimensions such as \(d\le 10\), one may initially compute the exact Laplacian.[file:2][file:4]  
+For \(d\approx 20\) to \(30+\), SDGD becomes highly attractive because the Laplacian is a sum of coordinatewise second derivatives.[file:2]  
+Hence the heat equation is one of the cleanest testbeds for SDGD in a JAX PINN codebase.[file:2]
+
+\section{Sampling plan}
+
+At each training iteration, sample three point sets if using soft IC/BC constraints:
+\[
+\{x_n^{(ic)}\}_{n=1}^{N_{ic}} \subset \Omega,
+\qquad
+\{(t_n^{(bc)},x_n^{(bc)})\}_{n=1}^{N_{bc}} \subset [0,T]\times \partial\Omega,
+\]
+\[
+\{(t_n^{(r)},x_n^{(r)})\}_{n=1}^{N_r} \subset (0,T]\times \Omega.
+\]
+This is the standard PINN sampling layout.[file:5][file:6][file:3]
+
+In high dimensions, use random or Latin hypercube sampling for interior residual points.[file:6]  
+Boundary points on a box can be sampled by first choosing a face and then sampling the remaining \(d-1\) coordinates uniformly.[file:6]  
+If the model begins to under-resolve localized features, augment the sampling strategy with residual-adaptive refinement.[file:6]
+
+\section{Residual computation in JAX}
+
+Suppose the raw network is \(u_\theta(t,x)\) with scalar output.[file:4][file:3]  
+The implementation should separate:
+\begin{enumerate}[label=\arabic*.]
+\item A pure function \texttt{model(params, t, x)} returning \(u_\theta(t,x)\).[file:4]
+\item A wrapper that builds the hard-constrained or soft-constrained physical solution.[file:3][file:6]
+\item A residual function that computes \(\partial_t u_\theta\) and \(\Delta_x u_\theta\).[file:2][file:4]
+\end{enumerate}
+
+For exact Laplacian mode, one computes
+\[
+\Delta_x u_\theta(t,x)=\sum_{i=1}^d \partial_{x_i x_i}u_\theta(t,x).
+\]
+In JAX this is conceptually straightforward, but for larger \(d\) it becomes expensive because every second derivative participates in the computational graph for backpropagation.[file:2][file:4]
+
+For SDGD mode, write
+\[
+\Delta_x u_\theta = \sum_{i=1}^d L_i u_\theta,
+\qquad
+L_i u_\theta = \partial_{x_i x_i}u_\theta,
+\]
+and at each step sample a subset \(I\subset\{1,\dots,d\}\), replacing the full sum by an unbiased stochastic estimator.[file:2]  
+Then the residual becomes stochastic, but the expected gradient remains the full residual gradient.[file:2]  
+This is the recommended high-dimensional residual engine for the heat equation.[file:2]
+
+\section{Loss design}
+
+With soft IC and BC constraints, define
+\[
+\mathcal{L}_r
+=
+\frac{1}{N_r}\sum_{n=1}^{N_r} |R_\theta(t_n^{(r)},x_n^{(r)})|^2,
+\]
+\[
+\mathcal{L}_{ic}
+=
+\frac{1}{N_{ic}}\sum_{n=1}^{N_{ic}}
+|u_\theta(0,x_n^{(ic)})-u_0(x_n^{(ic)})|^2,
+\]
+\[
+\mathcal{L}_{bc}
+=
+\frac{1}{N_{bc}}\sum_{n=1}^{N_{bc}}
+|u_\theta(t_n^{(bc)},x_n^{(bc)})-g(t_n^{(bc)},x_n^{(bc)})|^2.
+\]
+This is the standard form.[file:5][file:6][file:3]
+
+If BCs are enforced hard, remove \(\mathcal{L}_{bc}\).[file:3][file:6]  
+If both BC and IC are hard, only \(\mathcal{L}_r\) remains.[file:6]  
+In the soft-constraint setting, use adaptive balancing, because fixed weights are usually problem-dependent and brittle.[file:3][file:6]
+
+For long-time evolution, split the time interval into \(M\) ordered segments and use the causal weighting strategy from the expert guide:
+\[
+\mathcal{L}_r = \frac{1}{M}\sum_{m=1}^M w_m \mathcal{L}_r^{(m)},
+\]
+with weights that depend on earlier-time residuals so later segments are not emphasized too early.[file:3]  
+This is particularly important if \(T\) is large enough that one-shot training becomes unstable.[file:3][file:6]
+
+\section{Training loop}
+
+A robust training loop is:
+
+\begin{enumerate}[label=\arabic*.]
+\item Initialize the network with Glorot initialization, Fourier features enabled, and RWF-enabled dense layers.[file:3]
+\item For each iteration, resample interior, boundary, and initial points.[file:3][file:6]
+\item Evaluate residual, IC, and BC losses.[file:5][file:3]
+\item Update adaptive loss weights if using them.[file:3][file:6]
+\item Apply Adam with decay.[file:3]
+\item Every fixed number of steps, compute diagnostics: relative sizes of losses, gradient norms, and, if possible, residual histograms across time or subdomains.[file:3]
+\item If training stagnates, either increase residual points, activate adaptive sampling, or switch to time-windowed training.[file:6][file:3]
+\end{enumerate}
+
+For lower dimensions and moderate batch sizes, one may optionally finish with L-BFGS after Adam plateaus.[file:5][file:6]  
+For higher dimensions with SDGD, staying in Adam or another stochastic optimizer is usually more natural.[file:2][file:3]  
+The code should therefore support both purely stochastic training and hybrid Adam--L-BFGS schedules.[file:3][file:5]
+
+\section{Pseudocode for a JAX-oriented implementation}
+
+Below is the logical structure a coding agent should follow.
+
+\begin{verbatim}
+params = init_model(...)
+opt_state = optimizer.init(params)
+
+for step in range(num_steps):
+    batch_ic = sample_initial(...)
+    batch_bc = sample_boundary(...)
+    batch_r  = sample_residual(...)
+
+    loss, aux = total_loss(
+        params,
+        batch_ic=batch_ic,
+        batch_bc=batch_bc,
+        batch_r=batch_r,
+        mode_residual="exact" or "sdgd",
+        hard_bc=True/False,
+        hard_ic=True/False,
+        causal=True/False,
+    )
+
+    grads = grad(loss w.r.t. params)
+    updates, opt_state = optimizer.update(grads, opt_state, params)
+    params = apply_updates(params, updates)
+
+    if step % diagnostics_every == 0:
+        log(aux)
+\end{verbatim}
+
+The important design choice is that \texttt{mode\_residual} must be modular.[file:2][file:4]  
+For the heat equation, the same high-level training code should work whether the residual is exact, SDGD-based, or later HTE-based for trace-form operators.[file:2][file:4]  
+This separation is essential if the codebase is intended to grow from heat equations to Fokker--Planck and beyond.[file:1][file:2][file:4]
+
+\section{What to implement first}
+
+A sensible implementation roadmap is:
+\begin{enumerate}[label=\arabic*.]
+\item Heat equation on \([-1,1]^d\) with zero Dirichlet BC, exact Laplacian, and soft IC/BC losses.[file:5][file:3]
+\item Add hard BC via \(\phi(x)=\prod_{i=1}^d (1-x_i^2)\).[file:3][file:6]
+\item Add Fourier features, modified MLP, and RWF.[file:3]
+\item Add adaptive loss balancing and causal weighting.[file:3]
+\item Add SDGD for the Laplacian.[file:2]
+\item Add time-windowing for larger \(T\).[file:3][file:6]
+\item Generalize from \(\kappa \Delta u\) to anisotropic diffusion \(\nabla\cdot(A(x)\nabla u)\).[file:6]
+\item Add Fokker--Planck support, then consider HTE and Score-PINN as specialized backends.[file:4][file:1]
+\end{enumerate}
+
+This sequence follows the attached literature in a way that keeps the code scientifically meaningful at every step.[file:3][file:2][file:4][file:1][file:6]
+
+\chapter*{Closing Remarks}
+
+For high-dimensional diffusion-like PDEs, PINNs should be implemented as a \emph{framework of choices} rather than as a single monolithic solver.[file:6][file:3][file:2]  
+The original strong-form residual PINN supplies the conceptual basis, but the attached papers make clear that practical performance in dimensions \(5\) to \(30+\) depends on modern architectural and optimization additions such as Fourier features, modified MLPs, RWF, hard constraints, causal training, and especially SDGD or HTE for second-order operators.[file:5][file:3][file:2][file:4]  
+If the eventual JAX code is built around those abstractions from the start, it will be well positioned not only for heat and classical diffusion equations, but also for Fokker--Planck, Schr\"odinger, and later operator-learning extensions.[file:1][file:5][file:6]
+
+\end{document}
