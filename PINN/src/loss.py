@@ -50,6 +50,37 @@ def pde_loss(model, X_in, pde_residual, compute_laplace=True):
     residual = pde_residual(X_in, u, grad_u, spatial_laplace_u)
     return torch.mean(residual**2)
 
+def causal_pde_loss(X_in, model, pde_model, num_segments=10, epsilon=1.0):
+    """
+    Causally weighted PDE loss.  Time is assumed to be the last coordinate
+    of X_in (i.e. X_in[:, -1]).
+
+    Args:
+        num_segments: M – number of time segments.
+        epsilon:      causality strength (0 = uniform, large = strict).
+    """
+    residual_sq = pde_model.pde_residual(X_in, model) ** 2
+
+    #t = X_in[:, -1]
+    #t_min, t_max = t.min(), t.max()
+    #seg_idx = ((t - t_min) / (t_max - t_min + 1e-12) * num_segments).long()
+    seg_idx = (X_in[:,-1] * num_segments).long()
+    seg_idx = seg_idx.clamp(max=num_segments - 1)
+
+    # per-segment mean residual (vectorized)
+    dev = X_in.device
+    r_flat = residual_sq.view(-1)
+    seg_sum = torch.zeros(num_segments, device=dev).scatter_add_(0, seg_idx, r_flat)
+    seg_count = torch.bincount(seg_idx, minlength=num_segments).float().clamp_(min=1)
+    seg_mean = seg_sum / seg_count
+
+    # causal weights: w_m = exp(-eps * sum_{k<m} L_k),  detached
+    cumsum = torch.cumsum(seg_mean.detach(), dim=0)
+    shifted = torch.cat([torch.zeros(1, device=dev), cumsum[:-1]])
+    weights = torch.exp(-epsilon * shifted)
+
+    return (weights * seg_mean).sum() / num_segments
+
 def initial_condition_loss(model, X_ic, u_target):
     """
     X_ic: (batch_size, d+1) tensor with t = 0

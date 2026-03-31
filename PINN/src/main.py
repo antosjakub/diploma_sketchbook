@@ -4,6 +4,7 @@ from torch.profiler import record_function
 import sampling, loss, architecture, utility, pde_models
 
 parser = argparse.ArgumentParser()
+parser.add_argument("--description", default="", type=str, help="Smthg to help identify it in grid search.")
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--d", default=2, type=int, help="Number of spatial dimensions.")
 parser.add_argument("--layers", default="128,128,128", type=str, help="")
@@ -85,7 +86,8 @@ class PINN_Trainer:
             if use_sdgd:
                 loss_pde = loss.sdgd_loss(batch_pde, self.model, self.pde_model, sdgd_num_dims)
             else:
-                loss_pde = self.pde_model.pde_loss(batch_pde, self.model)
+                loss_pde = loss.causal_pde_loss(batch_pde, self.model, self.pde_model)
+                #loss_pde = self.pde_model.pde_loss(batch_pde, self.model)
             loss_bc = self.pde_model.bc_loss(batch_bc, self.model)
             loss_ic = self.pde_model.ic_loss(batch_ic, self.model)
             #loss_pde = loss.pde_loss(self.model, batch_pde, self.pde_model.pde_residual)

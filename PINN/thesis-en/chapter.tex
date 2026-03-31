@@ -259,6 +259,38 @@ SoftAdapt
 % https://github.com/levimcclenny/SA-PINNs
 - learnable attention params
 
+\subsubsection{Causal weighting}
+% Wang et al., "Respecting Causality is All You Need" / experts guide
+
+When training PINNs on time-dependent PDEs, the optimizer minimizes the residual over all time steps simultaneously.
+This can lead to \emph{causality violation}: the network attempts to fit later-time dynamics before earlier-time states are correctly learned, producing globally low residual but physically meaningless solutions.
+
+Causal weighting addresses this by partitioning the time domain $[0,T]$ into $M$ ordered segments
+$$
+0 = t_0 < t_1 < \cdots < t_M = T,
+$$
+and assigning to each segment an exponential weight that depends on the cumulative residual of all preceding segments.
+Let
+$$
+\mathcal{L}_r^{(m)} = \frac{1}{|\mathcal{S}_m|}\sum_{n \in \mathcal{S}_m} \bigl|\mathcal{R}_\theta(t_n, x_n)\bigr|^2
+$$
+be the mean squared PDE residual over the collocation points $\mathcal{S}_m$ falling in the $m$-th time segment $[t_{m-1}, t_m)$.
+The causal weight for segment $m$ is defined as
+$$
+w_m = \exp\!\Biggl(-\varepsilon \sum_{k=1}^{m-1} \mathcal{L}_r^{(k)}\Biggr), \qquad m = 1, \dots, M,
+$$
+where $\varepsilon > 0$ is a causality parameter controlling the strictness of the temporal ordering.
+When $\varepsilon = 0$, all segments are weighted equally (standard training).
+As $\varepsilon \to \infty$, the training concentrates entirely on the earliest segment whose residual has not yet converged.
+
+The causally weighted PDE loss is then
+$$
+\mathcal{L}_r^{\mathrm{causal}} = \frac{1}{M}\sum_{m=1}^{M} w_m\, \mathcal{L}_r^{(m)}.
+$$
+
+Note that the weights $w_m$ are computed from the \emph{detached} (non-differentiated) per-segment losses: gradients flow only through $\mathcal{L}_r^{(m)}$, not through the weights themselves.
+This ensures that the causal mechanism acts as a curriculum schedule rather than altering the gradient landscape.
+
 
 \subsection{d) Problem specific technique - Capturing physics}
 add additional residuals capturing the physics
@@ -303,8 +335,62 @@ $$
 NNs learn low freq sol first
 - FF embedds?
 $$
-\gamma(x) = 
+\gamma(x) =
 $$
+
+
+\subsubsection{Random Weight Factorization}
+% arXiv:2308.08468, Sec 4.3
+
+Standard PINN training often suffers from slow convergence due to the loss landscape geometry.
+Random Weight Factorization (RWF) \cite{rwf_modified_mlp} reparametrizes each weight matrix by factoring it into a diagonal scale matrix and a weight factor:
+$$
+W^{(l)} = \operatorname{diag}\!\bigl(\exp(s^{(l)})\bigr)\, V^{(l)}, \qquad l = 1,\dots,L{+}1,
+$$
+where $s^{(l)} \in \mathbb{R}^{d_l}$ is a trainable scale vector and $V^{(l)} \in \mathbb{R}^{d_l \times d_{l-1}}$ is the corresponding weight factor.
+The exponential parametrization ensures that the per-neuron scales remain strictly positive and can span a wide range of magnitudes.
+
+The initialization proceeds as follows:
+\begin{enumerate}
+    \item Initialize a weight matrix $W^{(l)}$ via Glorot (Xavier) initialization.
+    \item Sample the scale vector $s^{(l)} \sim \mathcal{N}(\mu,\, \sigma^2 I)$, with recommended defaults $\mu = 1.0$, $\sigma = 0.1$.
+    \item Set $V^{(l)} = \operatorname{diag}\!\bigl(\exp(-s^{(l)})\bigr)\, W^{(l)}$, so that the effective weight $\operatorname{diag}(\exp(s^{(l)}))\, V^{(l)} = W^{(l)}$ matches the original Glorot initialization.
+\end{enumerate}
+The trainable parameters per layer are $\{s^{(l)},\, V^{(l)},\, b^{(l)}\}$.
+During the forward pass, the output of each layer is computed efficiently as
+$$
+y = \bigl(x\, {V^{(l)}}^\top\bigr) \odot \exp(s^{(l)}) + b^{(l)},
+$$
+without materializing the full weight matrix $W^{(l)}$.
+The factorization introduces additional degrees of freedom in the loss landscape, which helps the optimizer escape saddle points and accelerates convergence, particularly for multi-scale PDE solutions.
+
+
+\subsubsection{Modified MLP}
+% arXiv:2308.08468, Sec 6.4 (Wang et al.)
+
+A known limitation of standard MLPs in the PINN setting is that input information is progressively diluted through successive layers, making it difficult for deeper layers to retain sensitivity to the original coordinates.
+The Modified MLP \cite{rwf_modified_mlp} addresses this by introducing two encoder sub-networks whose outputs are injected into every hidden layer via element-wise gating.
+
+Given input $x \in \mathbb{R}^{d_{\mathrm{in}}}$, two encodings are computed:
+$$
+U = \sigma(W_1\, x + b_1), \qquad V = \sigma(W_2\, x + b_2),
+$$
+where $W_1, W_2 \in \mathbb{R}^{h \times d_{\mathrm{in}}}$, $b_1, b_2 \in \mathbb{R}^h$, and $\sigma$ is the activation function (e.g.\ $\tanh$).
+
+The hidden layers are then defined recursively. Starting from $g^{(0)} = x$, for $l = 1, \dots, L$:
+\begin{align}
+    f^{(l)} &= W^{(l)}\, g^{(l-1)} + b^{(l)}, \\
+    g^{(l)} &= \sigma\!\bigl(f^{(l)}\bigr) \odot U \;+\; \bigl(1 - \sigma\!\bigl(f^{(l)}\bigr)\bigr) \odot V,
+\end{align}
+where $\odot$ denotes element-wise multiplication.
+The final output is a standard linear projection:
+$$
+u_\theta(x) = W^{(L+1)}\, g^{(L)} + b^{(L+1)}.
+$$
+
+The gating mechanism $\sigma(f^{(l)}) \odot U + (1 - \sigma(f^{(l)})) \odot V$ acts as a learned interpolation between the two input encodings at each layer, ensuring that the network retains direct access to input-derived features at every depth.
+Both techniques can be combined: RWF can be applied to all weight matrices in the Modified MLP, including the encoder matrices $W_1$ and $W_2$.
+
 
 XPINN - mulitple pinns - overlapping domains
 
