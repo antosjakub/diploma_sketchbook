@@ -70,6 +70,7 @@ class HeatEquation(PDEModel):
     def pde_residual(self, X, model):
         X = X.detach().requires_grad_(True)
         _, grad_u, spatial_laplace_u = derivatives.compute_derivatives(model, X)
+        #_, grad_u, spatial_laplace_u = derivatives.compute_derivatives_fd(model, X)
         return grad_u[:,-1:] - self.alpha * spatial_laplace_u.sum(dim=1).unsqueeze(dim=1)
     def pde_residual_weak_form(self, X, model):
         X = X.detach().requires_grad_(True)

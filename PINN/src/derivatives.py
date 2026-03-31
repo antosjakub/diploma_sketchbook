@@ -45,6 +45,39 @@ def compute_derivatives(model, X, compute_laplace=True):
     return u, grad_u, spatial_laplace_u
 
 
+def compute_derivatives_fd(model, X, h=1e-2):
+    """
+    Finite-difference derivatives matching the compute_derivatives interface.
+    All perturbations are batched into a single forward pass of size N*(1 + 2D).
+
+    1st derivative (all dims): (u(x+h·eᵢ) - u(x-h·eᵢ)) / 2h
+    2nd derivative (spatial):  (u(x-h·eᵢ) - 2u(x) + u(x+h·eᵢ)) / h²  — reuses grad evals
+
+    Note: Laplacian round-off error ≈ ε_mach/h². For float32 (ε≈1.2e-7),
+    h=1e-2 gives ~1e-3 error; h=1e-4 is suitable for float64.
+
+    Returns: u (N,1),  grad_u (N,D),  spatial_laplace_u (N,d)
+    """
+    N, D = X.shape
+    d = D - 1
+
+    e = torch.eye(D, device=X.device, dtype=X.dtype)  # (D, D)
+
+    X_fwd = (X + h * e.unsqueeze(1)).view(-1, D)  # (D*N, D)
+    X_bwd = (X - h * e.unsqueeze(1)).view(-1, D)  # (D*N, D)
+
+    u_all = model(torch.cat([X, X_fwd, X_bwd], dim=0))
+
+    u     = u_all[:N]                       # (N,  1)
+    u_fwd = u_all[N     : N*(1+D)].view(D, N)   # (D,  N)
+    u_bwd = u_all[N*(1+D):        ].view(D, N)  # (D,  N)
+
+    grad_u            = ((u_fwd - u_bwd) / (2 * h)).T        # (N, D)
+    spatial_laplace_u = ((u_fwd[:d] + u_bwd[:d] - 2 * u.T) / h**2).T  # (N, d)
+
+    return u, grad_u, spatial_laplace_u
+
+
 def compute_u_grad_u(model, X):
     u, vjp_fn = torch.func.vjp(model, X)
     grad_u = vjp_fn(torch.ones_like(u))
