@@ -86,8 +86,8 @@ class PINN_Trainer:
             if use_sdgd:
                 loss_pde = loss.sdgd_loss(batch_pde, self.model, self.pde_model, sdgd_num_dims)
             else:
-                loss_pde = loss.causal_pde_loss(batch_pde, self.model, self.pde_model)
-                #loss_pde = self.pde_model.pde_loss(batch_pde, self.model)
+                #loss_pde = loss.causal_pde_loss(batch_pde, self.model, self.pde_model)
+                loss_pde = self.pde_model.pde_loss(batch_pde, self.model)
             loss_bc = self.pde_model.bc_loss(batch_bc, self.model)
             loss_ic = self.pde_model.ic_loss(batch_ic, self.model)
             #loss_pde = loss.pde_loss(self.model, batch_pde, self.pde_model.pde_residual)
@@ -438,6 +438,8 @@ if __name__ == "__main__":
         else:
             print(f"Using regular Adam training.")
 
+        import time
+        t1 = time.time()
         trainer = PINN_Trainer(model, optimizer, scheduler, pde_model, loss_weighting, profiler, device)
         losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
         #losses_adam, l2_errs_adam = trainer.train_adam_fullbatch(
@@ -455,6 +457,13 @@ if __name__ == "__main__":
         losses += losses_adam
         l2_errs += l2_errs_adam
         print("\nAdam training complete!")
+        t2 = time.time()
+        h,m,s = utility.get_duration(t2-t1)
+        train_time_str = f"Adam training completed in: "
+        train_time_str += f"{h} hours " if h > 0 else ""
+        train_time_str += f"{m} minutes " if m > 0 else ""
+        train_time_str += f"{s} seconds"
+        print(train_time_str)
         torch.save(model, f'{dir_name}/model_adam.pth')
 
     # --- Phase 2: L-BFGS fine-tuning ---

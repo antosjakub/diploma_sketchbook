@@ -11,6 +11,12 @@ def json_load(file_path):
     return d
 
 
+def get_duration(dt):
+    h = dt // 3600
+    m = (dt - 3600 * h) // 60
+    s = dt - 3600 * h - 60 * m
+    return int(h),int(m),s
+
 
 from torch.profiler import profile, ProfilerActivity
 from contextlib import nullcontext
