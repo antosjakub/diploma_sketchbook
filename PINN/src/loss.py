@@ -2,18 +2,18 @@ import torch
 import derivatives
 
 
-def sdgd_loss(X, model, pde_model, num_dims_to_use: int):
+def sdgd_loss(X, model, pde_model, precomputed, num_dims_to_use: int):
     # sample some indices
     bs,D = X.shape
     d = D-1
     I = torch.randperm(d)[:num_dims_to_use]
     X.requires_grad = True
     u, grad_u, spatial_laplace_u = derivatives.compute_derivatives(model, X)
-    R = pde_model.pde_residual_base(X, u, grad_u, spatial_laplace_u).detach()
+    R = pde_model.pde_residual_base(X, u, grad_u, spatial_laplace_u, precomputed).detach()
     R_stoch = torch.zeros((bs,1))
     for i in I:
         #Ri = 1/d * grad_u[:,-1:] - alpha * spatial_laplace_u[i] + v[i] * grad_u[:,i:i+1] + 1/d * b * u
-        Ri = pde_model.pde_sgsd_single_term_residual(X, u, grad_u, spatial_laplace_u, i)
+        Ri = pde_model.pde_sgsd_single_term_residual(X, u, grad_u, spatial_laplace_u, i, precomputed)
         R_stoch += Ri
     # total loss
     loss = 2 * R * d/num_dims_to_use * R_stoch
@@ -50,16 +50,17 @@ def pde_loss(model, X_in, pde_residual, compute_laplace=True):
     residual = pde_residual(X_in, u, grad_u, spatial_laplace_u)
     return torch.mean(residual**2)
 
-def causal_pde_loss(X_in, model, pde_model, num_segments=10, epsilon=1.0):
+def causal_pde_loss(X_in, model, pde_model, precomputed, num_segments=10, epsilon=1.0):
     """
     Causally weighted PDE loss.  Time is assumed to be the last coordinate
     of X_in (i.e. X_in[:, -1]).
 
     Args:
-        num_segments: M – number of time segments.
+        precomputed:  dictionary containing precomputed values for the PDE model.
+        num_segments: M - number of time segments.
         epsilon:      causality strength (0 = uniform, large = strict).
     """
-    residual_sq = pde_model.pde_residual(X_in, model) ** 2
+    residual_sq = pde_model.pde_residual(X_in, model, precomputed) ** 2
 
     #t = X_in[:, -1]
     #t_min, t_max = t.min(), t.max()

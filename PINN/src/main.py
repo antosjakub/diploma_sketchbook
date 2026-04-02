@@ -44,55 +44,154 @@ parser.add_argument("--starting_model", default=None, type=str, help="")
 
 
 
+class TestingSuite:
+    def __init__(self, d, keep_in_cache=True):
+        self.d = d
+        self.test_file_exists = True
+        self.test_file_path = ""
+        self.keep_in_cache = keep_in_cache
+    
+    def connect_test_data(self, file_path: str):
+        import os
+        if os.path.exists(file_path):
+            payload = torch.load(file_path, map_location="cpu")
+            metadata = payload["metadata"]
+            if (metadata["d"] != self.d):
+                raise ValueError(
+                    f"Dimension mismatch. Testing suite has d={self.d}, but the loaded data have d={metadata['d']}."
+                )
+            assert payload["data"]["X"].shape[1] == self.d+1
+            assert payload["data"]["u_true"].shape[1] == 1
+            assert payload["data"]["X"].shape[0] == payload["data"]["u_true"].shape[0]
+        if self.keep_in_cache: self.payload = payload
+        self.test_file_exists = True
+        self.test_file_path = file_path
+
+
+    def make_test_data(self, pde_model, n_test_calloc_points, file_path, sampling_strategy="lhs", seed=4242):
+        # Create once, deterministic.
+        cuda_devices = [torch.cuda.current_device()] if torch.cuda.is_available() else []
+        with torch.random.fork_rng(devices=cuda_devices):
+            torch.manual_seed(seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(seed)
+
+            X, _, _ = sampling.sample_collocation_points(
+                self.d,
+                n_test_calloc_points,
+                0,
+                0,
+                sampling_strategy=sampling_strategy,
+                device="cpu",
+            )
+
+        # Optional: pre-store analytic truth to avoid recomputing every test call.
+        with torch.no_grad():
+            u_true = pde_model.u_analytic(X)
+
+        payload = {
+            "metadata": {
+                "d": self.d,
+                "N": n_test_calloc_points,
+                "sampling_strategy": sampling_strategy,
+                "seed": seed,
+            },
+            "data": {
+                "X": X,
+                "u_true": u_true,
+            }
+        }
+        if self.keep_in_cache:
+            self.payload = payload
+        else:
+            torch.save(payload, file_path)
+        self.test_file_exists = True
+        self.test_file_path = file_path
+
+
+    def test_model(self, model, test_bs=100_000, device="cpu"):
+
+        import time
+        a = time.time()
+
+        if not self.test_file_exists:
+            raise ValueError(
+                "Make or Connect test data first before testing."
+            )
+
+        try:
+            if self.keep_in_cache:
+                payload = self.payload
+            else:
+                payload = torch.load(self.test_file_path)
+            X = payload["data"]["X"]
+            u_true = payload["data"]["u_true"]
+        except:
+            raise "Unable to load the testing data."
+
+        N = X.shape[0]
+        sum_l2 = 0.0
+        sum_l1 = 0.0
+        max_rel = 0.0
+        eps = 1e-10
+
+        model.eval()
+        with torch.no_grad():
+            for i in range(0, N, test_bs):
+                j = min(i + test_bs, N)
+                X_chunk = X[i:j]
+                u_true_chunk = u_true[i:j]
+
+                u_pred = model(X_chunk)
+                err = u_pred - u_true_chunk
+
+                sum_l2 += torch.sum(err**2).item()
+                sum_l1 += torch.sum(err.abs()).item()
+
+                rel_chunk = ( (err-eps) / (u_true_chunk-eps) ).abs().max().item()
+                if rel_chunk > max_rel:
+                    max_rel = rel_chunk
+        model.train()
+
+        l2_err = (sum_l2 / N)**(1/2)
+        l1_err = sum_l1 / N
+        rel_err = max_rel
+
+        b = time.time()
+        print(f"Testing took: {b-a}s")
+        return l2_err, l1_err, rel_err
+
+
 
 class PINN_Trainer:
-    def __init__(self, model, optimizer, scheduler, pde_model, loss_weighting, profiler=None, device='cpu'):
+    def __init__(self, model, optimizer, scheduler, pde_model, loss_weighting, testing_suite, profiler=None, device='cpu'):
         self.model = model
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.pde_model = pde_model
         self.loss_weighting = loss_weighting
         self.profiler = profiler
+        self.testing_suite = testing_suite
         self.device = device
         self.d = self.pde_model.d
 
-    def test_model(self, n_test_calloc_points):
-        n_test_interior = 8*n_test_calloc_points//10
-        n_test_boundary = n_test_calloc_points//10
-        n_test_initial = n_test_calloc_points//10
-
-        X_interior_test, X_boundary_test, X_initial_test = sampling.sample_collocation_points(
-            self.d, n_test_interior, n_test_boundary, n_test_initial, device=self.device
-        )
-
-        u_pred = self.model(X_interior_test)
-        u_true = self.pde_model.u_analytic(X_interior_test)
-        l2_err = torch.sqrt(torch.mean((u_pred - u_true) ** 2)).item()
-        l1_err = torch.mean((u_pred - u_true).abs()).item()
-        rel_err = torch.max( ((u_pred - u_true-1e-7)/(u_true+1e-7)).abs() ).item()
-        return l2_err, l1_err, rel_err
-
-
-
-    def train_adam_step(self, batch_pde, batch_bc, batch_ic, u_bc_target, u_ic_target, use_sdgd=False, sdgd_num_dims=None):
+    def train_adam_step(self, batch_pde, batch_bc, batch_ic, use_sdgd=False, sdgd_num_dims=None):
         """
         Train a single step of the model.
         """
+        #batch_pde, batch_bc, batch_ic, u_bc_target, u_ic_target
         self.optimizer.zero_grad()
 
         # Compute individual losses
         with record_function("loss"):
-            #loss_pde = sdgd_loss(model, X_interior, pde_residual, None, 3)
+            batch_pde[0].requires_grad = True
             if use_sdgd:
-                loss_pde = loss.sdgd_loss(batch_pde, self.model, self.pde_model, sdgd_num_dims)
+                loss_pde = loss.sdgd_loss(batch_pde[0], self.model, self.pde_model, batch_pde[1], sdgd_num_dims)
             else:
-                #loss_pde = loss.causal_pde_loss(batch_pde, self.model, self.pde_model)
-                loss_pde = self.pde_model.pde_loss(batch_pde, self.model)
-            loss_bc = self.pde_model.bc_loss(batch_bc, self.model)
-            loss_ic = self.pde_model.ic_loss(batch_ic, self.model)
-            #loss_pde = loss.pde_loss(self.model, batch_pde, self.pde_model.pde_residual)
-            #loss_bc = loss.boundary_condition_loss(self.model, batch_bc, u_bc_target)
-            #loss_ic = loss.initial_condition_loss(self.model, batch_ic, u_ic_target)
+                #loss_pde = loss.causal_pde_loss(batch_pde[0], self.model, self.pde_model, batch_pde[1])
+                loss_pde = self.pde_model.pde_loss(batch_pde[0], self.model, batch_pde[1])
+            loss_bc = self.pde_model.bc_loss(batch_bc[0], self.model, batch_bc[1])
+            loss_ic = self.pde_model.ic_loss(batch_ic[0], self.model, batch_ic[1])
 
         # Weighted loss
         loss_value = self.loss_weighting.weight_loss([loss_pde, loss_bc, loss_ic])
@@ -106,20 +205,19 @@ class PINN_Trainer:
         return loss_value, (loss_pde.item(), loss_bc.item(), loss_ic.item())
     
 
-    def train_adam_step_v2(self, batch_iterator):
+    def train_adam_step_accumulated(self, batch_iterator):
         self.optimizer.zero_grad()
 
         n_cycles = 0
         loss_pde, loss_bc, loss_ic = 0.0, 0.0, 0.0
-        for (batch_pde,), (batch_bc, u_bc_target), (batch_ic, u_ic_target) in batch_iterator:
+        for batch_pde, batch_bc, batch_ic in batch_iterator:
             n_cycles += 1
-            batch_pde.requires_grad = True
+            batch_pde[0].requires_grad = True
             # Compute individual losses
             with record_function("loss"):
-                #loss_pde = sdgd_loss(model, X_interior, pde_residual, None, 3)
-                loss_pde += loss.pde_loss(self.model, batch_pde, self.pde_model.pde_residual)
-                loss_bc += loss.boundary_condition_loss(self.model, batch_bc, u_bc_target)
-                loss_ic += loss.initial_condition_loss(self.model, batch_ic, u_ic_target)
+                loss_pde += self.pde_model.pde_loss(batch_pde[0], self.model, batch_pde[1])
+                loss_bc += self.pde_model.bc_loss(batch_bc[0], self.model, batch_bc[1])
+                loss_ic += self.pde_model.ic_loss(batch_ic[0], self.model, batch_ic[1])
         # Weighted loss
         loss_pde /= n_cycles
         loss_bc /= n_cycles
@@ -206,7 +304,7 @@ class PINN_Trainer:
 
 
 
-    def train_adam_minibatch(self, bs, n_steps, n_steps_decay, n_calloc_points, n_test_calloc_points, resampling_frequency=2000, testing_frequency=100, use_rbas=False, use_sdgd=False, sdgd_num_dims=None):
+    def train_adam_minibatch(self, bs, n_steps, n_steps_decay, n_calloc_points, resampling_frequency=2000, testing_frequency=100, use_rbas=False, use_sdgd=False, sdgd_num_dims=None):
         """
         Train the model using Adam optimizer.
         """
@@ -222,8 +320,7 @@ class PINN_Trainer:
 
             if (si + 1) % resampling_frequency == 0:
                 ## Resample training data
-                print("New training data arrived?")
-                #X_interior, X_boundary, X_initial = self.resample_training_data()
+                print("New training data arrived!")
                 loader_interior, loader_bc, loader_ic = sampling.create_dataloaders(self.d, n_calloc_points, bs, self.model, self.pde_model, use_rbas=use_rbas)
     
             # Start profiler context
@@ -232,11 +329,10 @@ class PINN_Trainer:
             # batches
             batch_iterator = zip(loader_interior, loader_bc, loader_ic)
             if True:
-                for (batch_pde,), (batch_bc, u_bc_target), (batch_ic, u_ic_target) in batch_iterator:
-                    batch_pde.requires_grad = True
-                    loss_value, (loss_pde, loss_bc, loss_ic) = self.train_adam_step(batch_pde, batch_bc, batch_ic, u_bc_target, u_ic_target, use_sdgd=use_sdgd, sdgd_num_dims=sdgd_num_dims)
+                for batch_pde, batch_bc, batch_ic in batch_iterator:
+                    loss_value, (loss_pde, loss_bc, loss_ic) = self.train_adam_step(batch_pde, batch_bc, batch_ic, use_sdgd=use_sdgd, sdgd_num_dims=sdgd_num_dims)
             else:
-                loss_value, (loss_pde, loss_bc, loss_ic) = self.train_adam_step_v2(batch_iterator)  # v2 is faster
+                loss_value, (loss_pde, loss_bc, loss_ic) = self.train_adam_step_accumulated(batch_iterator)
             losses.append(loss_value.item())
 
 
@@ -257,7 +353,8 @@ class PINN_Trainer:
 
             # Print progress
             if (si + 1) % testing_frequency == 0:
-                l2_err, l1_err, rel_err = self.test_model(n_test_calloc_points)
+                # do not resample - sample at the beggining, then reuse
+                l2_err, l1_err, rel_err = self.testing_suite.test_model(model)
                 l2_errs.append(l2_err)
                 print(f'Step {si+1}/{n_steps}, Loss: {loss_value.item():.6f}, '
                       f'PDE: {loss_pde:.6f}, '
@@ -391,6 +488,7 @@ if __name__ == "__main__":
     if args.starting_model:
         model = torch.load(args.starting_model, weights_only=False)
     else:
+        #model = architecture.PINN(D, layers, head_fn=lambda x: torch.sinh(5*x)/100).to(device)
         model = architecture.PINN(D, layers).to(device)
         #model = PINN_SeparableTimes(D, layers).to(device)
         #model = PINN_SepTime(D, layers).to(device)
@@ -400,7 +498,8 @@ if __name__ == "__main__":
 
     # PDE equation
     #pde_model = pde_models.HeatEquationWithSource(d)
-    pde_model = pde_models.HeatEquation(d)
+    pde_model = pde_models.TravellingGaussPacket(d, gamma=1)
+    #pde_model = pde_models.HeatEquation(d)
     print(type(pde_model))
     print(pde_model.get_pde_metadata())
     if args.use_weak_form:
@@ -440,14 +539,16 @@ if __name__ == "__main__":
 
         import time
         t1 = time.time()
-        trainer = PINN_Trainer(model, optimizer, scheduler, pde_model, loss_weighting, profiler, device)
+        testing_suite = TestingSuite(d)
+        testing_suite.make_test_data(pde_model, args.n_test_calloc_points, f"{dir_name}/testing_data.pt")
+        #testing_suite.connect_test_data(f"{dir_name}/testing_data.pt")
+        trainer = PINN_Trainer(model, optimizer, scheduler, pde_model, loss_weighting, testing_suite, profiler, device)
         losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
         #losses_adam, l2_errs_adam = trainer.train_adam_fullbatch(
             bs=args.bs,
             n_steps=args.n_steps,
             n_steps_decay=args.n_steps_decay,
             n_calloc_points=args.n_calloc_points,
-            n_test_calloc_points=args.n_test_calloc_points,
             resampling_frequency=args.resampling_frequency,
             testing_frequency=args.testing_frequency,
             use_rbas=args.use_rbas,

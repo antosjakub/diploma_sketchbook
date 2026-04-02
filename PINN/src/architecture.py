@@ -21,10 +21,11 @@ class RWFLinear(nn.Module):
         return x @ self.V.t() * torch.exp(self.s) + self.bias
 
 
-def _linear(in_f, out_f, rwf=False, rwf_mu=1.0, rwf_sigma=0.1):
+def _linear(input_dim, output_dim, rwf={}):
     if rwf:
-        return RWFLinear(in_f, out_f, mu=rwf_mu, sigma=rwf_sigma)
-    return nn.Linear(in_f, out_f)
+        return RWFLinear(input_dim, output_dim, **rwf)
+    else:
+        return nn.Linear(input_dim, output_dim)
 
 
 # Usage example (d=15 case)
@@ -38,7 +39,7 @@ class FourierFeatures(nn.Module):
         self.num_freqs = num_freqs
         self.sigma = sigma
         self.input_dim = D
-        self.ouput_dim = 2 * num_freqs
+        self.output_dim = 2 * num_freqs
 
         # Optional: multi-scale
         self.multi_scale = scale_multiples is not None
@@ -66,10 +67,10 @@ class FourierFeatures(nn.Module):
 
 
 class ResNetBlock(nn.Module):
-    def __init__(self, width, activation=nn.Mish, rwf=False, rwf_mu=1.0, rwf_sigma=0.1):
+    def __init__(self, width, activation=nn.Mish, rwf={}):
         super().__init__()
-        self.l1 = _linear(width, width, rwf, rwf_mu, rwf_sigma)
-        self.l2 = _linear(width, width, rwf, rwf_mu, rwf_sigma)
+        self.l1 = _linear(width, width, **rwf)
+        self.l2 = _linear(width, width, **rwf)
         self.act = activation()
 
     def forward(self, x):
@@ -77,41 +78,49 @@ class ResNetBlock(nn.Module):
 
 
 
+def identity_fn(x):
+    return x
+
 
 class PINN(nn.Module):
-    def __init__(self, D, layers=[64], activation_fn=nn.Tanh, ff=None,
-                 modified_mlp=False, rwf=False, rwf_mu=1.0, rwf_sigma=0.1):
-        """
+    def __init__(self, D, layers=[64], activation_fn=nn.Tanh, head_fn=identity_fn,
+            ff=None,
+            modified_mlp=False,
+            rwf={}
+        ):
+        f"""
         D: input dimension (d spatial dims + 1 time dim)
         activation_fn: 'nn.Tanh', 'nn.SiLU'
         modified_mlp: use Modified MLP with input-gated hidden layers (Sec 6.4, arXiv:2308.08468)
-        rwf: use Random Weight Factorization on all linear layers
+        rwf: dict['mu': 1.0, 'sigma': 0.1] use Random Weight Factorization on all linear layers
+        head_fn: can be torch.exp - for log space - might be good for Fokker-Planck pdes
         """
         super().__init__()
+        self.head_fn = head_fn
         self.ff = ff
+        self.rwf = rwf
         self.modified_mlp = modified_mlp
         self.act = activation_fn()
-        rw = dict(rwf=rwf, rwf_mu=rwf_mu, rwf_sigma=rwf_sigma)
-        in_dim = ff.ouput_dim if ff else D
+        in_dim = ff.output_dim if ff else D
 
         if modified_mlp:
-            self.enc1 = _linear(in_dim, layers[0], **rw)
-            self.enc2 = _linear(in_dim, layers[0], **rw)
+            self.enc1 = _linear(in_dim, layers[0], **rwf)
+            self.enc2 = _linear(in_dim, layers[0], **rwf)
             self.hidden = nn.ModuleList()
-            self.hidden.append(_linear(in_dim, layers[0], **rw))
+            self.hidden.append(_linear(in_dim, layers[0], **rwf))
             for l1, l2 in zip(layers[:-1], layers[1:]):
-                self.hidden.append(_linear(l1, l2, **rw))
-            self.out_layer = _linear(layers[-1], 1, **rw)
+                self.hidden.append(_linear(l1, l2, **rwf))
+            self.out_layer = _linear(layers[-1], 1, **rwf)
         else:
             net_layers = []
             for l1, l2 in zip(layers[:-1], layers[1:]):
-                net_layers.append(_linear(l1, l2, **rw))
+                net_layers.append(_linear(l1, l2, **rwf))
                 net_layers.append(activation_fn())
-            first = _linear(in_dim, layers[0], **rw)
+            first = _linear(in_dim, layers[0], **rwf)
             self.net = nn.Sequential(
                 first, activation_fn(),
                 *net_layers,
-                _linear(layers[-1], 1, **rw)
+                _linear(layers[-1], 1, **rwf)
             )
 
     def forward(self, X):
@@ -125,9 +134,9 @@ class PINN(nn.Module):
                 for layer in self.hidden:
                     z = self.act(layer(h))
                     h = V + z * UmV
-                return self.out_layer(h)
+                return self.out_layer(self.head_fn(h))
             else:
-                return self.net(x)
+                return self.net(self.head_fn(x))
 
 
 #d=5:  num_freqs=128, sigma=8, hidden_width=128, num_blocks=4
@@ -135,26 +144,28 @@ class PINN(nn.Module):
 #d=15: num_freqs=320, sigma=30, hidden_width=256, num_blocks=6
 #d=20: num_freqs=512, sigma=40, hidden_width=256, num_blocks=8
 class ResPINN(nn.Module):
-    def __init__(self, D, hidden_width=256, num_blocks=5, ff=None,
-                 modified_mlp=False, rwf=False, rwf_mu=1.0, rwf_sigma=0.1):
+    def __init__(self, D, hidden_width=256, num_blocks=5,
+        ff=None,
+        modified_mlp=False,
+        rwf={}
+        ):
         super().__init__()
         self.ff = ff
         self.modified_mlp = modified_mlp
-        rw = dict(rwf=rwf, rwf_mu=rwf_mu, rwf_sigma=rwf_sigma)
-        in_dim = ff.ouput_dim if ff else D
+        in_dim = ff.output_dim if ff else D
 
-        self.first = _linear(in_dim, hidden_width, **rw)
+        self.first = _linear(in_dim, hidden_width, **rwf)
         self.act = nn.Mish()
 
         if modified_mlp:
-            self.enc1 = _linear(in_dim, hidden_width, **rw)
-            self.enc2 = _linear(in_dim, hidden_width, **rw)
+            self.enc1 = _linear(in_dim, hidden_width, **rwf)
+            self.enc2 = _linear(in_dim, hidden_width, **rwf)
 
         self.blocks = nn.ModuleList([
-            ResNetBlock(hidden_width, rwf=rwf, rwf_mu=rwf_mu, rwf_sigma=rwf_sigma)
+            ResNetBlock(hidden_width, rwf=rwf)
             for _ in range(num_blocks)
         ])
-        self.out = _linear(hidden_width, 1, **rw)
+        self.out = _linear(hidden_width, 1, **rwf)
 
     def forward(self, X):
         with record_function("forward"):

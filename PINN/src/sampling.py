@@ -37,10 +37,10 @@ def sample_hypercube_boundary(num_samples, d, sampling_strategy="lhs", device='c
     fixed_dims = torch.randint(0, d, (num_samples,), device=device)
     
     # Choose whether to fix to 0 or 1 for each sample
-    fixed_values = torch.randint(0, 2, (num_samples,), device=device).float()
+    fixed_values = torch.randint(0, 2, (num_samples,), device=device)
     
     # Set the fixed dimension to 0 or 1
-    samples[torch.arange(num_samples, device=device), fixed_dims] = fixed_values
+    samples[torch.arange(num_samples, device=device), fixed_dims] = fixed_values.float()
     
     return samples
 
@@ -131,6 +131,32 @@ def resample_training_data(d, residual_fn, model, n_interior, n_boundary, n_init
     return X_interior, X_boundary, X_initial
 
 
+
+# pde collac:
+# - sample points once
+# - push it to pde_models to store some funs
+# - store those in the dataset
+#
+# ic collac:
+# - same as in pde col
+#
+# bc collac
+# - same as in pde col
+# - now also store face / edge indices for n normal
+
+
+class CollocationDataset(torch.utils.data.Dataset):
+    def __init__(self, X: torch.Tensor, precomputed: dict[str, torch.Tensor]) -> None:
+        self.X = X
+        self.precomputed = precomputed
+    def __len__(self) -> int:
+        return len(self.X)
+    def __getitem__(self, idx) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        #return {"X": self.X[idx]} | {k: v[idx] for k, v in self.precomputed.items()}
+        return (self.X[idx], {k: v[idx] for k, v in self.precomputed.items()})
+
+
+
 from torch.utils.data import TensorDataset, DataLoader
 def create_dataloaders(d, num_colloc, bs, model, pde_model, use_rbas=False, sampling_strategy="lhs", device="cpu"):
     # bs = 1024...
@@ -159,9 +185,13 @@ def create_dataloaders(d, num_colloc, bs, model, pde_model, use_rbas=False, samp
         ], dim=0)
     else:
         X_pde, X_bc, X_ic = sample_collocation_points(d, n_interior, n_boundary, n_initial, sampling_strategy=sampling_strategy, device=device)
-    
-    loader_pde = DataLoader(TensorDataset(X_pde), batch_size=bs_pde, shuffle=True)
-    loader_bc  = DataLoader(TensorDataset(X_bc, pde_model.u_bc(X_bc)), batch_size=bs_bc, shuffle=True)
-    loader_ic  = DataLoader(TensorDataset(X_ic, pde_model.u_ic(X_ic[:,:-1])), batch_size=bs_ic, shuffle=True)
+        
+    # dict containing precomputed 
+    # precomputed = {"pde": {"V_grad": tensor, "V_laplace": tensor}, "ic": {"analytic": tensor}, "bc": {"V_grad": tensor}}
+    precomputed = pde_model.precompute(X_pde, X_bc, X_ic)
+
+    loader_pde = DataLoader(CollocationDataset(X_pde, precomputed["pde"]), batch_size=bs_pde, shuffle=True)
+    loader_bc  = DataLoader(CollocationDataset(X_bc, precomputed["bc"]), batch_size=bs_bc, shuffle=True)
+    loader_ic  = DataLoader(CollocationDataset(X_ic, precomputed["ic"]), batch_size=bs_ic, shuffle=True)
     
     return loader_pde, loader_bc, loader_ic
