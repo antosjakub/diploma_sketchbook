@@ -288,15 +288,23 @@ class TravellingGaussPacket(PDEModel):
 
 
 
-class FokkerPlanckLJ:
-    def __init__(self, n_atoms, dof_per_atom, r0=None, epsilon=None, xi=None, D=None):
+class FokkerPlanckLJ(PDEModel):
+    def __init__(self, n_atoms, dof_per_atom, r0=None, epsilon=None, zeta=None, D=None, x0=None, sigma0=None, L=10, T=35.0):
         self.n_atoms = n_atoms
         self.dof_per_atom = dof_per_atom
         self.d = n_atoms * dof_per_atom
         self.r0 =           r0 if r0      is not None else 1.0
         self.epsilon = epsilon if epsilon is not None else 1.0
-        self.xi =           xi if xi      is not None else 1.0
-        self.D =             D if D       is not None else 0.1
+        self.zeta =       zeta if zeta    is not None else 14.2
+        self.D =             D if D       is not None else 4*10e-3
+        # renormalize to have x \in [0,1]^d
+        self.x_bar = L
+        self.t_bar = T
+        # precompute the IC data
+        self.x0 =           x0 if x0      is not None else 0.2 + 0.6*torch.rand(self.d)
+        self.sigma0 =   sigma0 if sigma0  is not None else torch.diag(0.02 + 0.005*torch.rand(self.d))
+        self.prefactor = 1.0 / (torch.sqrt((2.0 * torch.pi) ** self.d * torch.det(self.sigma0)))
+        self.inv_sigma = torch.inverse(self.sigma0)
 
     def get_pde_metadata(self):
         return {
@@ -305,7 +313,7 @@ class FokkerPlanckLJ:
             "dof_per_atom": self.dof_per_atom,
             "r0": self.r0,
             "epsilon": self.epsilon,
-            "xi": self.xi,
+            "zeta": self.zeta,
             "D": self.D,
         }
 
@@ -315,43 +323,56 @@ class FokkerPlanckLJ:
         #pde_params["dof_per_atom"] = int(pde_params["dof_per_atom"])
         #pde_params["r0"] = float(pde_params["r0"])
         #pde_params["epsilon"] = float(pde_params["epsilon"])
-        #pde_params["xi"] = float(pde_params["xi"])
+        #pde_params["zeta"] = float(pde_params["zeta"])
         #pde_params["D"] = float(pde_params["D"])
         self.__init__(**pde_params)
 
     def pde_residual_base(self, X, u, grad_u, sp_laplace_u, precomputed):
         u_t = grad_u[:,-1].unsqueeze(dim=1)
         laplace = sp_laplace_u.sum(dim=1).unsqueeze(dim=1)
-        return u_t - self.D * laplace + (precomputed["lj_grad"] * grad_u[:,:-1]).sum(dim=1).unsqueeze(dim=1)/self.xi + u * precomputed["lj_laplace"]/self.xi
+        lj_grad = precomputed["lj_grad"]
+        lj_laplace = precomputed["lj_laplace"]
+        residual = u_t - self.t_bar/(self.x_bar)**2 * (self.D * laplace + (precomputed["lj_grad"] * grad_u[:,:-1]).sum(dim=1).unsqueeze(dim=1)/self.zeta + u * precomputed["lj_laplace"].sum(dim=1).unsqueeze(dim=1)/self.zeta)
+        return residual
+        #return 1/self.t_bar * u_t - 1/(self.x_bar)**2 * (self.D * laplace + (precomputed["lj_grad"] * grad_u[:,:-1]).sum(dim=1).unsqueeze(dim=1)/self.zeta + u * precomputed["lj_laplace"].sum(dim=1).unsqueeze(dim=1)/self.zeta)
     def pde_residual(self, X, model, precomputed):
         X = X.detach().requires_grad_(True)
         u, grad_u, spatial_laplace_u = derivatives.compute_derivatives(model, X)
         return self.pde_residual_base(None, u, grad_u, spatial_laplace_u, precomputed)
-    
-    def precompute(self, X_pde, X_bc, X_ic):
+
+    def bc_residual(self, X, model, precomputed_bc):
+        return model(X)
+
+    def p_ic(self, x):
+        diff = x - self.x0
+        return (self.prefactor * torch.exp(-0.5 * torch.sum(diff * (self.inv_sigma @ diff.T).T, dim=1))).unsqueeze(dim=1)
+    def ic_residual(self, X, model, precomputed_ic):
+        return model(X) - precomputed_ic["p"]
+
+    def precompute_lj(self, Y):
         """
         Y: (B, n_atoms * d)
         returns:
             grad:    (B, n_atoms, d)
             laplace: (B, n_atoms, d)
         """
-        Y = X_pde
+
         B = Y.shape[0]
-        X = Y.view(B, self.n_atoms, self.d)                      # (B, n_atoms, d)
+        X = (self.x_bar * Y).view(B, self.n_atoms, self.dof_per_atom) # (B, n_atoms, d)
 
         # pairwise differences: dX[b, k, j, c] = X[b, k, c] - X[b, j, c]
-        dX = X[:, :, None, :] - X[:, None, :, :]      # (B, n_atoms, n_atoms, d)
+        dX = X[:, :, None, :] - X[:, None, :, :]       # (B, n_atoms, n_atoms, d)
 
         # pairwise distances r[b, k, j]
-        r = torch.linalg.vector_norm(dX, dim=-1)      # (B, n_atoms, n_atoms)
+        r = torch.linalg.vector_norm(dX, dim=-1)       # (B, n_atoms, n_atoms)
 
         # mask self-interactions (k == j)
         eye = torch.eye(self.n_atoms, dtype=torch.bool, device=X.device).expand(B, self.n_atoms, self.n_atoms)
-        r = r.masked_fill(eye, float('inf'))          # (B, n_atoms, n_atoms)
+        r = r.masked_fill(eye, float('inf'))           # (B, n_atoms, n_atoms)
 
         # shared powers of r
-        r_inv8  = r**(-8)                             # (B, n_atoms, n_atoms)
-        r_inv14 = r**(-14)                            # (B, n_atoms, n_atoms)
+        r_inv8  = r**(-8)                              # (B, n_atoms, n_atoms)
+        r_inv14 = r**(-14)                             # (B, n_atoms, n_atoms)
 
         # ---------------------------
         # Gradient of LJ potential
@@ -360,7 +381,7 @@ class FokkerPlanckLJ:
 
         grad_pair = coeff_grad[..., None] * dX                       # (B, n_atoms, n_atoms, d)
         grad = grad_pair.sum(dim=2)                                  # (B, n_atoms, d)
-        grad = 4 * self.epsilon * grad                                    # (B, n_atoms, d)
+        grad = 4 * self.epsilon * grad                               # (B, n_atoms, d)
 
         # ---------------------------
         # Laplacian of LJ potential
@@ -371,16 +392,25 @@ class FokkerPlanckLJ:
         ratio    = dX / r[..., None]                    # (B, n_atoms, n_atoms, d)
         ratio_sq = ratio**2                             # (B, n_atoms, n_atoms, d)
 
-        term1   = coeff1[..., None] * ratio_sq                      # (B, n_atoms, n_atoms, d)
-        term2   = coeff2[..., None] * (1.0 - ratio_sq)              # (B, n_atoms, n_atoms, d)
+        term1   = coeff1[..., None] * ratio_sq                     # (B, n_atoms, n_atoms, d)
+        term2   = coeff2[..., None] * (1.0 - ratio_sq)             # (B, n_atoms, n_atoms, d)
         lap_pair = term1 + term2                                   # (B, n_atoms, n_atoms, d)
 
         laplace = lap_pair.sum(dim=2)                               # (B, n_atoms, d)
-        laplace = 4 * self.epsilon * laplace                             # (B, n_atoms, d)
+        laplace = 4 * self.epsilon * laplace                        # (B, n_atoms, d)
 
-        grad_flat    = grad.view(B, self.n_atoms * self.d)
-        laplace_flat = laplace.view(B, self.n_atoms * self.d)
+        grad_flat    = grad.view(B, self.n_atoms * self.dof_per_atom)
+        laplace_flat = laplace.view(B, self.n_atoms * self.dof_per_atom)
 
+        # Clip the humongous grads
+        grad_flat[grad_flat > 10_000] = 10_000
+        laplace_flat[laplace_flat > 10_000] = 10_000
+
+        return grad_flat, laplace_flat
+
+
+    def precompute(self, X_pde, X_bc, X_ic):
+        grad_flat, laplace_flat = self.precompute_lj(X_pde[:,:-1])
         return {
             "pde": {
                 "lj_grad": grad_flat,
@@ -389,6 +419,7 @@ class FokkerPlanckLJ:
             "bc": {
             },
             "ic": {
+                "p": self.p_ic(X_ic[:,:-1])
             },
         }
 

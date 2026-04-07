@@ -44,122 +44,6 @@ parser.add_argument("--starting_model", default=None, type=str, help="")
 
 
 
-class TestingSuite:
-    def __init__(self, d, keep_in_cache=True):
-        self.d = d
-        self.test_file_exists = True
-        self.test_file_path = ""
-        self.keep_in_cache = keep_in_cache
-    
-    def connect_test_data(self, file_path: str):
-        import os
-        if os.path.exists(file_path):
-            payload = torch.load(file_path, map_location="cpu")
-            metadata = payload["metadata"]
-            if (metadata["d"] != self.d):
-                raise ValueError(
-                    f"Dimension mismatch. Testing suite has d={self.d}, but the loaded data have d={metadata['d']}."
-                )
-            assert payload["data"]["X"].shape[1] == self.d+1
-            assert payload["data"]["u_true"].shape[1] == 1
-            assert payload["data"]["X"].shape[0] == payload["data"]["u_true"].shape[0]
-        if self.keep_in_cache: self.payload = payload
-        self.test_file_exists = True
-        self.test_file_path = file_path
-
-
-    def make_test_data(self, pde_model, n_test_calloc_points, file_path, sampling_strategy="lhs", seed=4242):
-        # Create once, deterministic.
-        cuda_devices = [torch.cuda.current_device()] if torch.cuda.is_available() else []
-        with torch.random.fork_rng(devices=cuda_devices):
-            torch.manual_seed(seed)
-            if torch.cuda.is_available():
-                torch.cuda.manual_seed_all(seed)
-
-            X, _, _ = sampling.sample_collocation_points(
-                self.d,
-                n_test_calloc_points,
-                0,
-                0,
-                sampling_strategy=sampling_strategy,
-                device="cpu",
-            )
-
-        # Optional: pre-store analytic truth to avoid recomputing every test call.
-        with torch.no_grad():
-            u_true = pde_model.u_analytic(X)
-
-        payload = {
-            "metadata": {
-                "d": self.d,
-                "N": n_test_calloc_points,
-                "sampling_strategy": sampling_strategy,
-                "seed": seed,
-            },
-            "data": {
-                "X": X,
-                "u_true": u_true,
-            }
-        }
-        if self.keep_in_cache:
-            self.payload = payload
-        else:
-            torch.save(payload, file_path)
-        self.test_file_exists = True
-        self.test_file_path = file_path
-
-
-    def test_model(self, model, test_bs=100_000, device="cpu"):
-
-        import time
-        a = time.time()
-
-        if not self.test_file_exists:
-            raise ValueError(
-                "Make or Connect test data first before testing."
-            )
-
-        try:
-            if self.keep_in_cache:
-                payload = self.payload
-            else:
-                payload = torch.load(self.test_file_path)
-            X = payload["data"]["X"]
-            u_true = payload["data"]["u_true"]
-        except:
-            raise "Unable to load the testing data."
-
-        N = X.shape[0]
-        sum_l2 = 0.0
-        sum_l1 = 0.0
-        max_rel = 0.0
-        eps = 1e-10
-
-        model.eval()
-        with torch.no_grad():
-            for i in range(0, N, test_bs):
-                j = min(i + test_bs, N)
-                X_chunk = X[i:j]
-                u_true_chunk = u_true[i:j]
-
-                u_pred = model(X_chunk)
-                err = u_pred - u_true_chunk
-
-                sum_l2 += torch.sum(err**2).item()
-                sum_l1 += torch.sum(err.abs()).item()
-
-                rel_chunk = ( (err-eps) / (u_true_chunk-eps) ).abs().max().item()
-                if rel_chunk > max_rel:
-                    max_rel = rel_chunk
-        model.train()
-
-        l2_err = (sum_l2 / N)**(1/2)
-        l1_err = sum_l1 / N
-        rel_err = max_rel
-
-        b = time.time()
-        print(f"Testing took: {b-a}s")
-        return l2_err, l1_err, rel_err
 
 
 
@@ -199,6 +83,8 @@ class PINN_Trainer:
         # Backward pass
         with record_function("backward"):
             loss_value.backward()
+        
+        #torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         with record_function("optimizer_step"):
             self.optimizer.step()
 
@@ -361,10 +247,12 @@ class PINN_Trainer:
                       f'BC: {loss_bc:.6f}, '
                       f'IC: {loss_ic:.6f}, '
                       f'lr: {self.optimizer.param_groups[0]["lr"]:.6f}, '
+                      #
                       f'L2: {l2_err:.6f}, '
                       f'L1: {l1_err:.6f}, '
                       f'rel_max: {rel_err:.6f}'
                 )
+                print(l2_errs)
 
         return losses, l2_errs
 
@@ -466,7 +354,10 @@ if __name__ == "__main__":
     # Arguments
     args = parser.parse_args([] if "__file__" not in globals() else None)
     torch.manual_seed(args.seed)
-    d = args.d # space dims
+    if False:
+        d = 6
+    else:
+        d = args.d # space dims
     D = d + 1 # space + time dims
     layers = utility.layers_from_string(args.layers)
     print(f"\n{'='*60}")
@@ -482,24 +373,35 @@ if __name__ == "__main__":
     os.makedirs(dir_name, exist_ok=True)    
     
 
-
-
-    # Select the model architecture
-    if args.starting_model:
-        model = torch.load(args.starting_model, weights_only=False)
-    else:
-        #model = architecture.PINN(D, layers, head_fn=lambda x: torch.sinh(5*x)/100).to(device)
-        model = architecture.PINN(D, layers).to(device)
-        #model = PINN_SeparableTimes(D, layers).to(device)
-        #model = PINN_SepTime(D, layers).to(device)
-    #model = torch.compile(model, mode="reduce-overhead")
-    #model = torch.compile(model)
-    
-
     # PDE equation
-    #pde_model = pde_models.HeatEquationWithSource(d)
-    pde_model = pde_models.TravellingGaussPacket(d, gamma=1)
-    #pde_model = pde_models.HeatEquation(d)
+    if False:
+        import sys, os
+        fp_dir = os.path.join(os.path.dirname(__file__), '../../Fokker-Planck')
+        sys.path.append(fp_dir)
+        import utility_fp
+        mol_coords = torch.tensor(utility_fp.read_mol(os.path.join(fp_dir, 'molecules/mol.1')))
+
+        n_atoms = 3
+        dof_per_atom = 2
+        d = n_atoms * dof_per_atom
+        mol_coords_ss = mol_coords[:n_atoms,:dof_per_atom]
+
+        L = 10.0
+        mean = torch.mean(mol_coords, dim=0)
+        mol_coords_ss -= mean.unsqueeze(dim=1)
+        mol_coords_ss /= L
+        mol_coords_ss += 0.5
+        x0 = mol_coords_ss.reshape(-1)
+        print(x0)
+
+        pde_model = pde_models.FokkerPlanckLJ(n_atoms=n_atoms, dof_per_atom=dof_per_atom, x0=x0, L=L)
+
+    else:
+        #pde_model = pde_models.HeatEquationWithSource(d)
+        pde_model = pde_models.TravellingGaussPacket(d, gamma=1)
+        #pde_model = pde_models.HeatEquation(d)
+
+
     print(type(pde_model))
     print(pde_model.get_pde_metadata())
     if args.use_weak_form:
@@ -511,10 +413,24 @@ if __name__ == "__main__":
     else:
         use_weak_form = False
 
+
+    # Select the model architecture
+    if args.starting_model:
+        model = torch.load(args.starting_model, weights_only=False)
+    else:
+        #model = architecture.PINN(D, layers, head_fn=lambda x: torch.sinh(5*x)/100).to(device)
+        #head = lambda X: torch.exp(-X)
+        head_fn = utility.identity_fn
+        model = architecture.PINN(D, layers, head_fn=head_fn).to(device)
+        #model = PINN_SeparableTimes(D, layers).to(device)
+        #model = PINN_SepTime(D, layers).to(device)
+    #model = torch.compile(model, mode="reduce-overhead")
+    #model = torch.compile(model)
+
+
     # Preparation time
     losses = [] 
     l2_errs = [] 
-
 
     # Train the model
     if args.n_steps > 0:
@@ -539,9 +455,12 @@ if __name__ == "__main__":
 
         import time
         t1 = time.time()
-        testing_suite = TestingSuite(d)
-        testing_suite.make_test_data(pde_model, args.n_test_calloc_points, f"{dir_name}/testing_data.pt")
-        #testing_suite.connect_test_data(f"{dir_name}/testing_data.pt")
+        if False:
+            testing_suite = None
+        else:
+            testing_suite = utility.TestingSuite(d)
+            testing_suite.make_test_data(pde_model, args.n_test_calloc_points, f"{dir_name}/testing_data.pt")
+            #testing_suite.connect_test_data(f"{dir_name}/testing_data.pt")
         trainer = PINN_Trainer(model, optimizer, scheduler, pde_model, loss_weighting, testing_suite, profiler, device)
         losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
         #losses_adam, l2_errs_adam = trainer.train_adam_fullbatch(
@@ -603,15 +522,45 @@ if __name__ == "__main__":
     torch.save(torch.tensor(l2_errs), f'{l2_name}.pth')
     print("\nResults saved.")
 
+    print(l2_errs)
 
     # Plot results
-    n_steps_log = args.testing_frequency
-    n_logged_pnts = len(l2_errs)
-    steps = n_steps_log*torch.linspace(1,n_logged_pnts,n_logged_pnts, dtype=torch.int)
+    if False:
+        pass
+    else:
+        n_steps_log = args.testing_frequency
+        n_logged_pnts = len(l2_errs)
+        steps = n_steps_log*torch.linspace(1,n_logged_pnts,n_logged_pnts, dtype=torch.int)
+
     import visualize_training_metrics
     visualize_training_metrics.plot_loss(losses, loss_name)
-    visualize_training_metrics.plot_l2(steps, l2_errs, l2_name)
-    import visualize_solution_3plots
-    visualize_solution_3plots.plot_3(model, pde_model.u_analytic, d, dir_name)
-    import visualize_solution_3anims
-    visualize_solution_3anims.anim_3(model, pde_model.u_analytic, d, dir_name)
+
+    import viz
+    model_fn = viz.wrapp_model(model)
+    if False:
+        p_ic = lambda X: pde_model.p_ic(X[:,:-1])
+
+        plotter_ic = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
+        plotter_ic.add_scalar_fn(model_fn, "PINN")
+        plotter_ic.add_scalar_fn(p_ic, "Initial Condition")
+        plotter_ic.add_scalar_fn(lambda X: torch.abs(model_fn(X) - p_ic(X)), "Error", cmap='hot')
+        plotter_ic.save_plot(f'{dir_name}/pinn_plot_ic.png', t_val = 0.0)
+
+        plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
+        plotter.add_scalar_fn(model_fn, "PINN")
+        plotter.save_animation(f'{dir_name}/pinn_anim.gif', num_frames=30, fps=5)
+
+    else:
+        plotter = viz.FunctionPlotter(d=d, device=device)
+        plotter.add_scalar_fn(model_fn, "PINN Solution")
+        plotter.add_scalar_fn(pde_model.u_analytic, "Analytic Solution")
+        plotter.add_scalar_fn(lambda X: torch.abs(model_fn(X) - pde_model.u_analytic(X)), "Error", cmap='hot')
+        plotter.save_plot(f'{dir_name}/pinn_fig.png', t_val = 0.325)
+        plotter.save_plot(f'{dir_name}/pinn_fig_ic.png', t_val = 0.0)
+        plotter.save_animation(f'{dir_name}/pinn_anim.gif', num_frames=30, fps=5)
+
+        #visualize_training_metrics.plot_l2(steps, l2_errs, l2_name)
+        #import visualize_solution_3plots
+        #visualize_solution_3plots.plot_3(model, pde_model.u_analytic, d, dir_name)
+        #import visualize_solution_3anims
+        #visualize_solution_3anims.anim_3(model, pde_model.u_analytic, d, dir_name)

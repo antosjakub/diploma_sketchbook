@@ -4,6 +4,14 @@ import argparse
 from torch.profiler import profile, ProfilerActivity, record_function
 from contextlib import nullcontext
 
+def compute_grad(inputs, outputs, grad_outputs):
+    return torch.autograd.grad(
+        inputs=inputs,
+        outputs=outputs,
+        grad_outputs=grad_outputs,
+        create_graph=True,
+        retain_graph=True,
+    )[0]
 
 def compute_derivatives(model, X, compute_laplace=True):
     """

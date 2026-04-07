@@ -116,19 +116,12 @@ def residual_based_adaptive_sampling(d, residual_fn, model, type="pde", n_new=10
         # Pick top-k high-residual points
         _, idx = torch.topk(abs_res, n_new)
         return X_cand[idx].detach()
-    else:
+    elif picking_criterion == "multinomial":
         probs = abs_res / abs_res.sum()
         idx = torch.multinomial(probs, n_new, replacement=False)
         return X_cand[idx].detach()
-
-
-def resample_training_data(d, residual_fn, model, n_interior, n_boundary, n_initial, sampling_strategy="lhs", device="cpu"):
-    X_int1 = residual_based_adaptive_sampling(d, residual_fn, model, n_new=2*n_interior//3, n_candidates=4*n_interior, sampling_strategy=sampling_strategy, picking_criterion="multinomial", device=device)
-    X_int2 = residual_based_adaptive_sampling(d, residual_fn, model, n_new=n_interior//3, n_candidates=2*n_interior, sampling_strategy=sampling_strategy, picking_criterion="top_k", device=device)
-    X_interior = torch.cat([X_int1, X_int2], dim=0).shuffle(dim=0)
-    X_boundary = sample_bc(n_boundary, d, sampling_strategy=sampling_strategy, device=device)
-    X_initial = sample_ic(n_initial, d, sampling_strategy=sampling_strategy, device=device)
-    return X_interior, X_boundary, X_initial
+    else:
+        raise NameError("Provide a correct picking crierion.")
 
 
 
@@ -143,6 +136,38 @@ def resample_training_data(d, residual_fn, model, n_interior, n_boundary, n_init
 # bc collac
 # - same as in pde col
 # - now also store face / edge indices for n normal
+
+
+#n_atoms=3, dof_per_atom=2, r_min=0.1
+def filter_close_atoms(
+    X: torch.Tensor,
+    n_atoms: int,
+    dof_per_atom: int,
+    r_min: float,
+) -> torch.Tensor:
+    """
+    Remove configurations where any pair of atoms is closer than r_min.
+
+    Assumes the first n_atoms*dof_per_atom columns of X encode atom positions:
+      [x0_0, ..., x0_{dof_per_atom-1},  x1_0, ...,  x_{n-1}_{dof_per_atom-1},  (optional extra cols, e.g. time)]
+
+    Parameters:
+    - X:       (n_samples, >= n_atoms*dof_per_atom)
+    - n_atoms: number of atoms
+    - dof_per_atom:       spatial dimensions per atom
+    - r_min:   minimum allowed distance between any pair of atoms
+
+    Returns:
+    - X filtered to rows where all pairwise interatomic distances >= r_min
+    """
+    d = n_atoms * dof_per_atom
+    positions = X[:, :d].view(-1, n_atoms, dof_per_atom)               # (N, n_atoms, dof_per_atom)
+    diff = positions.unsqueeze(2) - positions.unsqueeze(1)   # (N, n_atoms, n_atoms, dof_per_atom)
+    dists = diff.norm(dim=-1)                                # (N, n_atoms, n_atoms)
+    i, j = torch.triu_indices(n_atoms, n_atoms, offset=1, device=X.device)
+    pair_dists = dists[:, i, j]                              # (N, n_pairs)
+    mask = (pair_dists >= r_min).all(dim=1)
+    return X[mask]
 
 
 class CollocationDataset(torch.utils.data.Dataset):
@@ -195,3 +220,35 @@ def create_dataloaders(d, num_colloc, bs, model, pde_model, use_rbas=False, samp
     loader_ic  = DataLoader(CollocationDataset(X_ic, precomputed["ic"]), batch_size=bs_ic, shuffle=True)
     
     return loader_pde, loader_bc, loader_ic
+
+
+from torch.utils.data import DataLoader
+def create_dataloader_ic(d, n_calloc, bs, model, pde_model, use_rbas=False, sampling_strategy="lhs", device="cpu"):
+    # bs = 1024...
+    if use_rbas:
+        X_ic = torch.cat([
+            residual_based_adaptive_sampling(d, pde_model.ic_residual, model, type='ic', n_new=2*n_calloc//3, n_candidates=4*n_calloc, sampling_strategy=sampling_strategy, picking_criterion="multinomial", device=device),
+            residual_based_adaptive_sampling(d, pde_model.ic_residual, model, type='ic', n_new=n_calloc//3, n_candidates=2*n_calloc, sampling_strategy=sampling_strategy, picking_criterion="top_k", device=device)
+        ], dim=0)
+    else:
+        _, _, X_ic = sample_collocation_points(d, n_interior=0, n_boundary=0, n_initial=n_calloc, sampling_strategy=sampling_strategy, device=device)
+        
+    precomputed_ic = {
+        "p": pde_model.p_ic(X_ic[:,:-1])
+    }
+
+    loader_ic  = DataLoader(CollocationDataset(X_ic, precomputed_ic), batch_size=bs, shuffle=True)
+    
+    return loader_ic
+
+
+if __name__ == "__main__":
+    dof_per_atom = 3
+    n_atoms = 7
+    d = n_atoms * dof_per_atom
+    r_min = 0.1
+    X = torch.rand(10000, d+1)
+    X[:, -1] = 0.0
+    X_filtered = filter_close_atoms(X, n_atoms, dof_per_atom, r_min)
+    print(X.shape)
+    print(X_filtered.shape)

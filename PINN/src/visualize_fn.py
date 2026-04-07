@@ -59,9 +59,13 @@ if __name__ == "__main__":
         dir_name = 'run_latest'
 
 
-    d = 2
     import pde_models
+    #d = 2
     #u_fn = pde_models.TravellingGaussPacket(d, gamma=1).u_analytic
-    u_ic = pde_models.TravellingGaussPacket(d, gamma=1).u_ic
+    #u_ic = pde_models.TravellingGaussPacket(d, gamma=1).u_ic
+    pde_model = pde_models.FokkerPlanckLJ(n_atoms=1, dof_per_atom=2)
+    d = pde_model.d
+    u_ic = pde_model.p_ic
+    print("Value at x0:", u_ic(pde_model.x0.unsqueeze(dim=0)).item())
     u_fn = lambda X: u_ic(X[:,:-1])
     plot_fn(u_fn, d, dir_name, t_val=0.0)

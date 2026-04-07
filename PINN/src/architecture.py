@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.profiler import record_function
+import utility
 
 
 # --------------- Random Weight Factorization (Sec 4.3, arXiv:2308.08468) ---------------
@@ -78,12 +79,8 @@ class ResNetBlock(nn.Module):
 
 
 
-def identity_fn(x):
-    return x
-
-
 class PINN(nn.Module):
-    def __init__(self, D, layers=[64], activation_fn=nn.Tanh, head_fn=identity_fn,
+    def __init__(self, input_dim, layers=[64], output_dim=1, activation_fn=nn.Tanh, head_fn=utility.identity_fn,
             ff=None,
             modified_mlp=False,
             rwf={}
@@ -101,7 +98,7 @@ class PINN(nn.Module):
         self.rwf = rwf
         self.modified_mlp = modified_mlp
         self.act = activation_fn()
-        in_dim = ff.output_dim if ff else D
+        in_dim = ff.output_dim if ff else input_dim
 
         if modified_mlp:
             self.enc1 = _linear(in_dim, layers[0], **rwf)
@@ -110,7 +107,7 @@ class PINN(nn.Module):
             self.hidden.append(_linear(in_dim, layers[0], **rwf))
             for l1, l2 in zip(layers[:-1], layers[1:]):
                 self.hidden.append(_linear(l1, l2, **rwf))
-            self.out_layer = _linear(layers[-1], 1, **rwf)
+            self.out_layer = _linear(layers[-1], output_dim, **rwf)
         else:
             net_layers = []
             for l1, l2 in zip(layers[:-1], layers[1:]):
@@ -120,7 +117,7 @@ class PINN(nn.Module):
             self.net = nn.Sequential(
                 first, activation_fn(),
                 *net_layers,
-                _linear(layers[-1], 1, **rwf)
+                _linear(layers[-1], output_dim, **rwf)
             )
 
     def forward(self, X):
