@@ -86,6 +86,152 @@ import derivatives
 #        }
 
 
+from typing import Optional
+
+
+import math
+class GeneralGaussian:
+    """
+    Builds a covariance Sigma = Q^T Gamma Q, then provides:
+      - s(x, t) = Sigma_t^{-1} x
+      - log p(x, t) for N(0, Sigma_t)
+      - p(x, t) = exp(log p(x, t))
+    Shapes:
+      x: (bs, d)
+      t: (bs, 1)
+    
+    Sigma = Q^T Gamma Q
+    """
+
+    def __init__(
+        self,
+        d: int,
+        gamma_min: float = 0.1,
+        gamma_max: float = 2.0,
+        x0 = None,
+        device: Optional[torch.device] = None,
+        dtype: torch.dtype = torch.float32,
+        seed: int = 76,
+    ):
+        super().__init__()
+
+        if gamma_min < 0 or gamma_max <= 0 or gamma_min > gamma_max:
+            raise ValueError("Need 0 <= gamma_min <= gamma_max and gamma_max > 0")
+        self.d = d
+    
+        self.x0 = x0 if (x0 is not None) else torch.zeros(d)
+
+        self.device = device
+        self.dtype = dtype
+        g = torch.Generator(device=device)
+        g.manual_seed(seed)
+
+        # 1) Construct Gamma diagonal
+        gamma = gamma_min + (gamma_max - gamma_min) * torch.rand(
+            d, generator=g, device=device, dtype=dtype
+        )
+        self.gamma = gamma
+        self.gamma = torch.ones(d)
+
+        # Random orthogonal matrix Q from QR of a Gaussian matrix.
+        A = torch.randn(d, d, generator=g, device=device, dtype=dtype)
+        Q, R = torch.linalg.qr(A, mode="reduced")
+
+        # Fix signs for a more uniform-looking orthogonal draw.
+        # Makes diag(R) positive.
+        signs = torch.sign(torch.diag(R))
+        signs = torch.where(signs == 0, torch.ones_like(signs), signs)
+        Q = Q * signs.unsqueeze(0)
+        self.Q = Q
+
+        # Precompute dense Sigma and Sigma^(1/2) once
+        # Using Sigma = Q^T diag(gamma) Q
+        # Implemented as (Q^T * gamma) @ Q to avoid materializing diag(gamma)
+        QT = Q.transpose(0, 1)
+        self.Sigma = (QT * gamma.unsqueeze(1)) @ Q
+        self.Sigma_sqrt = (QT * torch.sqrt(gamma).unsqueeze(1)) @ Q
+
+
+    def _check_inputs(self, x: torch.Tensor, t: torch.Tensor):
+        if x.ndim != 2 or x.shape[1] != self.d:
+            raise ValueError(f"x must have shape (bs, {self.d}), got {tuple(x.shape)}")
+        if t.ndim == 1:
+            t = t.unsqueeze(1)
+        if t.ndim != 2 or t.shape[1] != 1 or t.shape[0] != x.shape[0]:
+            raise ValueError(
+                f"t must have shape (bs, 1) or (bs,), got {tuple(t.shape)} with bs={x.shape[0]}"
+            )
+
+    def Sigma_t_evals(self, t: torch.Tensor) -> torch.Tensor:
+        """
+        Shape: (bs, d)
+        """
+        et = torch.exp(-t)  # (bs, 1)
+        lam = et + (1.0 - et) * self.gamma.unsqueeze(0)  # (bs, d)
+        return lam
+
+    def log_p(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+        """
+        Returns: log(p(x,t)); p(x,t) = N(0, Sigma_t)(x)
+        Input:
+          x: (bs, d)
+          t: (bs, 1) or (bs,)
+        Output:
+          log_p: (bs,1)
+        """
+        self._check_inputs(x, t)
+
+        evals = self.Sigma_t_evals(t)  # (bs, d)
+        y = (x-self.x0) @ self.Q.transpose(0, 1)   # (bs, d)
+        maha = (y * y / evals).sum(dim=1)  # (bs,)
+
+        logdet = torch.log(evals).sum(dim=1)
+
+        return -0.5 * (self.d*math.log(2.0*math.pi) + logdet + maha).unsqueeze(1)
+
+    def p(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+        """
+        Density p(x,t) = N(0, Sigma_t)
+        Output shape: (bs,1)
+        """
+        return torch.exp(self.log_p(x, t))
+
+    def s(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+        """
+        s(x,t) = - Sigma_t^{-1} x
+               = - Q^T 1/diag(gamma) Q x
+        Input:
+          x: (bs, d)
+          t: (bs, 1)
+        Output:
+          (bs, d)
+        """
+        self._check_inputs(x, t)
+        # apply transpose: (now x^T is a row vector - like in torch)
+        # s^T = - x^T Q^T 1/diag(gamma) Q
+        y = (x-self.x0) @ self.Q.transpose(0, 1)
+        y = y / self.Sigma_t_evals(t)
+        s = - y @ self.Q
+        return s
+
+    def sample(self, t: torch.Tensor) -> torch.Tensor:
+        """
+        Sample from N(0, Sigma_t).
+        """
+
+        bs = t.shape[0]
+        evals_sqrt = torch.sqrt(self.Sigma_t_evals(t))  # (bs, d)
+        z = torch.randn(bs, self.d, device=t.device, dtype=self.dtype)
+
+        # In eigenbasis: y ~ N(0, diag(evals))
+        y = z * evals_sqrt
+        # Back to original coords: x = y Q
+        x = y @ self.Q
+        return x + self.x0
+
+
+
+
 class Isotropic_OU:
     def __init__(self, d, Sigma=torch.tensor(10.0)):
         self.d = d
@@ -103,19 +249,28 @@ class Isotropic_OU:
             loc=torch.zeros(d),
             covariance_matrix=torch.eye(d) * self.Sigma
         )
+        self.gaussian_obj = GeneralGaussian(d, gamma_min=0.5, gamma_max=1.5)
 
     def p0(self, x):
         return torch.exp(self.dist_initial.log_prob(x)).unsqueeze(1)
     def sample_x0(self, n_samples):
         return self.dist_initial.rsample((n_samples,))
-
-    def p_final(self, x):
-        return torch.exp(self.dist_final.log_prob(x)).unsqueeze(1)
     def L_functional(self, X, s, s_div, precomputed=None):
         return 0.5 * (
             self.sigma**2 * ( s_div + (s**2).sum(dim=1).unsqueeze(1) )
             + ( (X[:,:-1] * s).sum(dim=1).unsqueeze(1) - self.d )
         )
+    def p_analytic(self, X):
+        return self.gaussian_obj.p(X[:,:-1], X[:,-1:])
+    def q_analytic(self, X):
+        return self.gaussian_obj.log_p(X[:,:-1], X[:,-1:])
+    def s_analytic(self, X):
+        return self.gaussian_obj.s(X[:,:-1], X[:,-1:])
+
+
+
+    def p_final(self, x):
+        return torch.exp(self.dist_final.log_prob(x)).unsqueeze(1)
     
     class Score_PDE:
         def __init__(self, score_sde_model) -> None:

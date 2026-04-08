@@ -226,12 +226,26 @@ if __name__ == "__main__":
     #plotter.save_animation(f'__pinn_solution_anim.gif', num_frames=30, fps=5)
 
 
-    fn_scal = lambda X: torch.sum(X[:,:-1]**2, dim=1).unsqueeze(dim=1)
-    fn_vec = lambda X: X[:,:-1]
-    plotter = FunctionPlotter(d=2)
-    plotter.add_scalar_fn(fn_scal, "scal")
-    plotter.add_vector_fn(fn_vec, "vec & scal", scalar_fn=fn_scal)
-    plotter.save_plot(f'__pinn_solution_plots.png', t_val=0.0)
+    #fn_scal = lambda X: torch.sum(X[:,:-1]**2, dim=1).unsqueeze(dim=1)
+    #fn_vec = lambda X: X[:,:-1]
+    #plotter = FunctionPlotter(d=2)
+    #plotter.add_scalar_fn(fn_scal, "scal")
+    #plotter.add_vector_fn(fn_vec, "vec & scal", scalar_fn=fn_scal)
+    #plotter.save_plot(f'__pinn_solution_plots.png', t_val=0.0)
+
+    from main_score_pinn import GeneralGaussian
+    d = 3
+    g_obj = GeneralGaussian(d, gamma_min=0.5, gamma_max=1.5, x0=0.5*torch.ones(d))
+    p = lambda X: g_obj.p(X[:,:-1], X[:,-1:])
+    log_p = lambda X: g_obj.log_p(X[:,:-1], X[:,-1:])
+    s = lambda X: g_obj.s(X[:,:-1], X[:,-1:])
+
+    plotter = FunctionPlotter(d=d)
+    plotter.add_scalar_fn(p, "p(x,t)")
+    plotter.add_scalar_fn(log_p, "q(x,t)")
+    plotter.add_vector_fn(s, "s(x,t)")
+    plotter.save_plot(f'general_gaussian.png', t_val=0.0)
+    #plotter.save_animation(f'general_gaussian.png')
 
 
 
