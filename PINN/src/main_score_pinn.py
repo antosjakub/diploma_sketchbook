@@ -356,8 +356,9 @@ if __name__ == "__main__":
     os.makedirs(dir_name, exist_ok=True)    
     
 
-    type_sp = 'score_pde'
-    #type_sp = 'll_ode'
+    #type_sp = 'score_pde'
+    type_sp = 'll_ode'
+    print(f"Training Score-PINN, type: '{type_sp}'")
 
     ### PREP PDE MODEL
     score_sde_model = Isotropic_OU(d=d)
@@ -373,6 +374,7 @@ if __name__ == "__main__":
         pde_model = score_sde_model.LL_ODE(score_sde_model, model_s)
 
     print(type(pde_model))
+    print()
     #print(pde_model.get_pde_metadata())
 
 
@@ -481,20 +483,21 @@ if __name__ == "__main__":
 
     if type_sp == "score_pde":
         model_fn_s = viz.wrapp_model(model)
+        s_ic = lambda X: pde_model.s0(X[:,:-1])
 
         plotter_ic = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter_ic.add_vector_fn(model_fn_s, "PINN(t=0), score model vs ic", scalar_fn=p_ic)
-        plotter_ic.save_plot(f'{dir_name}/pinn_plot_model_s_vs_ic.png', t_val = 0.0)
+        plotter_ic.add_vector_fn(model_fn_s, "model_s(x,0)")
+        plotter_ic.add_vector_fn(model_fn_s, "s_0(x)")
+        plotter_ic.save_plot(f'{dir_name}/plot_model_s_vs_s0.png', t_val = 0.0)
 
         plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter.add_vector_fn(model_fn_s, "PINN, Score model")
-        plotter.save_plot(f'{dir_name}/pinn_plot.png', t_val = 0.3)
-        plotter.save_animation(f'{dir_name}/pinn_anim.gif', num_frames=30, fps=5)
+        plotter.add_vector_fn(model_fn_s, "model_s(x,t)")
+        plotter.save_animation(f'{dir_name}/anim_model_s.gif', num_frames=30, fps=5)
 
         plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter.add_scalar_fn(p_ic, "Initial Distribution, p_0(x)")
-        plotter.add_scalar_fn(p_final, "Final Distribution, p_T(x)")
-        plotter.save_plot(f'{dir_name}/pinn_plot.png', t_val = 0.0)
+        plotter.add_scalar_fn(p_ic, "p_0(x)")
+        plotter.add_scalar_fn(p_final, "p_T(x)")
+        plotter.save_plot(f'{dir_name}/plot_p0_vs_pT.png', t_val = 0.0)
 
     elif type_sp == "ll_ode":
         model_fn_q = viz.wrapp_model(model)
@@ -503,24 +506,24 @@ if __name__ == "__main__":
         q_ic = lambda X: pde_model.q0(X[:,:-1])
 
         plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter.add_scalar_fn(q_ic, "Initial Distribution, q_0(x)")
-        plotter.add_scalar_fn(model_fn_q, "PINN, X -> model_q(X)")
-        plotter.save_plot(f'{dir_name}/pinn_plot_initial_q.png', t_val = 0.0)
+        plotter.add_scalar_fn(q_ic, "q_0(x)")
+        plotter.add_scalar_fn(model_fn_q, "model_q(x,0)")
+        plotter.save_plot(f'{dir_name}/plot_model_q_vs_q0.png', t_val = 0.0)
 
         plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter.add_scalar_fn(p_ic, "Initial Distribution, p_0(x)")
-        plotter.add_scalar_fn(model_fn_p, "PINN, X -> exp(model_q(X))")
-        plotter.save_plot(f'{dir_name}/pinn_plot_initial_p.png', t_val = 0.0)
+        plotter.add_scalar_fn(p_ic, "p_0(x)")
+        plotter.add_scalar_fn(model_fn_p, "model_p(x,0) = exp(model_q(x,0))")
+        plotter.save_plot(f'{dir_name}/plot_model_p_vs_p0.png', t_val = 0.0)
 
         plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter.add_scalar_fn(model_fn_q, "PINN, X -> model_q(X)")
-        plotter.save_animation(f'{dir_name}/pinn_anim_q.gif', num_frames=30, fps=5)
+        plotter.add_scalar_fn(model_fn_q, "model_q(x,t)")
+        plotter.save_animation(f'{dir_name}/anim_model_q.gif', num_frames=30, fps=5)
 
         plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter.add_scalar_fn(model_fn_p, "PINN, X -> exp(model_q(X))")
-        plotter.save_animation(f'{dir_name}/pinn_anim_p.gif', num_frames=30, fps=5)
+        plotter.add_scalar_fn(model_fn_p, "model_p(x,t) = exp(model_q(x,t))")
+        plotter.save_animation(f'{dir_name}/anim_model_p.gif', num_frames=30, fps=5)
 
         plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter.add_vector_fn(model_fn_s, "PINN, s & q", scalar_fn=model_fn_q)
-        plotter.add_vector_fn(model_fn_s, "PINN, s & p", scalar_fn=model_fn_p)
-        plotter.save_animation(f'{dir_name}/pinn_anim_sq-sp.gif', num_frames=30, fps=5)
+        plotter.add_vector_fn(model_fn_s, "model_s & model_q", scalar_fn=model_fn_q)
+        plotter.add_vector_fn(model_fn_s, "model_s & model_p", scalar_fn=model_fn_p)
+        plotter.save_animation(f'{dir_name}/anim_model_sq_sp.gif', num_frames=30, fps=5)
