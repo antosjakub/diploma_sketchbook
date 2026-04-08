@@ -24,11 +24,11 @@ parser.add_argument("--use_rbas", action="store_true", help="Residual-based adap
 parser.add_argument("--use_sdgd", action="store_true", help="Stochastic dimension gradient-descend (for loss in high dims)")
 parser.add_argument("--sdgd_num_dims", default=None, type=int, help="Number of dimensions to use for SDGD. If None, use all dimensions.")
 # smart Defaults
-parser.add_argument("--output_dir_name", default="run_sp_latest/", type=str, help="")
+parser.add_argument("--output_dir_name", default="run_ll_latest/", type=str, help="")
 parser.add_argument("--enable_profiler", action="store_true", help="")
 parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
 # enable transfer learning / finetuning
-parser.add_argument("--starting_model", default=None, type=str, help="")
+parser.add_argument("--starting_model", default="run_sp_latest/model.pth", type=str, help="")
 # load the pde mode with default parameters, optionally use the .json file to init the class
 #parser.add_argument("--pde_model_name", default=None, type=str, help="HeatEquation")
 #parser.add_argument("--pde_model_args", default=None, type=str, help="pde_model_args.json")
@@ -89,8 +89,9 @@ import derivatives
 class Isotropic_OU:
     def __init__(self, d, Sigma=torch.tensor(10.0)):
         self.d = d
-        self.mu = lambda x: -1/2*x
         self.Sigma = Sigma
+        # sde terms:
+        self.mu = lambda x: -1/2*x
         self.sigma = torch.sqrt(Sigma)
         # detect whether mu is a constant or a function of x
         self.dist_initial = torch.distributions.MultivariateNormal(
@@ -102,58 +103,107 @@ class Isotropic_OU:
             loc=torch.zeros(d),
             covariance_matrix=torch.eye(d) * self.Sigma
         )
+
+    def p0(self, x):
+        return torch.exp(self.dist_initial.log_prob(x)).unsqueeze(1)
+    def sample_x0(self, n_samples):
+        return self.dist_initial.rsample((n_samples,))
+
+    def p_final(self, x):
+        return torch.exp(self.dist_final.log_prob(x)).unsqueeze(1)
     def L_functional(self, X, s, s_div, precomputed=None):
         return 0.5 * (
             self.sigma**2 * ( s_div + (s**2).sum(dim=1).unsqueeze(1) )
             + ( (X[:,:-1] * s).sum(dim=1).unsqueeze(1) - self.d )
         )
-    def ll_ode_redisual(self, X, model_q, model_s, precomputed):
-        s, _, s_div = sp_derivatives.compute_score_dt_div(model_s, X)
-        q = model_q(X)
-        q_t = derivatives.compute_grad(X, q, torch.ones_like(q))[:,-1:]
-        return q_t - self.L_functional(X, s, s_div, precomputed)
-    def score_pde_residual(self, X, model_s, precomputed):
-        X.detach()
-        X.requires_grad_(True)
-        s, s_t, s_div = sp_derivatives.compute_score_dt_div(model_s, X)
-        L = self.L_functional(X, s, s_div, precomputed)
-        assert L.shape == (X.shape[0], 1)
-        residual = s_t - derivatives.compute_grad(X, L, torch.ones_like(L))[:,:-1]
-        return residual
-    def score_ic_residual(self, X, model_s, precomputed):
-        return model_s(X) - precomputed["s0"]
+    
+    class Score_PDE:
+        def __init__(self, score_sde_model) -> None:
+            self.score_sde_model = score_sde_model
+        def __getattr__(self, name):
+            return getattr(self.score_sde_model, name)
 
-    def score_term_loss(self, d_dim_residual):
-        loss = torch.mean(torch.sum(d_dim_residual**2, dim=1))
-        return loss
-    def score_pde_loss(self, X, model_s, precomputed):
-        res = self.score_pde_residual(X, model_s, precomputed)
-        return self.score_term_loss(res)
-    def score_ic_loss(self, X, model_s, precomputed):
-        res = self.score_ic_residual(X, model_s, precomputed)
-        return self.score_term_loss(res)
+        def s0(self, x):
+            x.detach()
+            x.requires_grad_(True)
+            q = self.dist_initial.log_prob(x).unsqueeze(1)
+            s0 = derivatives.compute_grad(x, q, torch.ones_like(q))
+            return s0
+        def pde_residual(self, X, model_s, precomputed):
+            X.detach()
+            X.requires_grad_(True)
+            s, s_t, s_div = sp_derivatives.compute_score_dt_div(model_s, X)
+            L = self.L_functional(X, s, s_div, precomputed)
+            assert L.shape == (X.shape[0], 1)
+            residual = s_t - derivatives.compute_grad(X, L, torch.ones_like(L))[:,:-1]
+            return residual
+        def ic_residual(self, X, model_s, precomputed):
+            return model_s(X) - precomputed["s0"]
 
-    def q0(self, x):
-        return self.dist_initial.log_prob(x)
-    def s0(self, x):
-        x.detach()
-        x.requires_grad_(True)
-        q = self.dist_initial.log_prob(x).unsqueeze(1)
-        s0 = derivatives.compute_grad(x, q, torch.ones_like(q))
-        return s0
-    def p0(self, x):
-        return torch.exp(self.dist_initial.log_prob(x))
-    def p_final(self, x):
-        return torch.exp(self.dist_final.log_prob(x))
-    def sample_x0(self, n_samples):
-        return self.dist_initial.rsample((n_samples,))
-    def precompute(self, X_pde, X_ic):
-        return {
-            "pde": {},
-            "ic": {
-                "s0": self.s0(X_ic[:,:-1]).detach()
-            },
-        }
+        def _term_loss(self, d_dim_residual):
+            loss = torch.mean(torch.sum(d_dim_residual**2, dim=1))
+            return loss
+        def pde_loss(self, X, model_s, precomputed):
+            res = self.pde_residual(X, model_s, precomputed)
+            return self._term_loss(res)
+        def ic_loss(self, X, model_s, precomputed):
+            res = self.ic_residual(X, model_s, precomputed)
+            return self._term_loss(res)
+        def precompute(self, X_pde, X_ic):
+            return {
+                "pde": {},
+                "ic": {
+                    "s0": self.s0(X_ic[:,:-1]).detach()
+                },
+            }
+
+    class LL_ODE:
+        def __init__(self, score_sde_model, model_s):
+            self.score_sde_model = score_sde_model
+            self.model_s = model_s
+        #    self.d = score_sde_model.d
+        #    self.L_functional = score_sde_model.L_functional
+        #    self.mu = score_sde_model.mu
+        #    self.sigma = score_sde_model.sigma
+        #    self.sample_x0 = score_sde_model.sample_x0
+        #    ##
+        #    self.model_s = model_s
+        def __getattr__(self, name):
+            return getattr(self.score_sde_model, name)
+
+        def q0(self, x):
+            return self.dist_initial.log_prob(x).unsqueeze(1)
+        def pde_residual(self, X, model_q, precomputed):
+            X.detach()
+            X.requires_grad_(True)
+            q = model_q(X)
+            q_t = derivatives.compute_grad(X, q, torch.ones_like(q))[:,-1:]
+            return q_t - precomputed["L"]
+        def pde_loss(self, X, model_q, precomputed):
+            res = self.pde_residual(X, model_q, precomputed)
+            loss = torch.mean(res**2)
+            return loss
+        def ic_residual(self, X, model_q, precomputed):
+            return model_q(X) - precomputed["q0"]
+        def ic_loss(self, X, model_q, precomputed):
+            res = self.ic_residual(X, model_q, precomputed)
+            loss = torch.mean(res**2)
+            return loss
+        def precompute(self, X_pde, X_ic):
+            X_pde.detach()
+            X_pde.requires_grad_(True)
+            s, _, s_div = sp_derivatives.compute_score_dt_div(self.model_s, X_pde)
+            L = self.L_functional(X_pde, s, s_div)
+            return {
+                "pde": {
+                    "L": L.detach()
+                },
+                "ic": {
+                    "q0": self.q0(X_ic[:,:-1]).detach()
+                },
+            }
+
+
 
 
 class ScorePINN_Trainer:
@@ -172,11 +222,12 @@ class ScorePINN_Trainer:
     
 
     """
-    def __init__(self, model, optimizer, scheduler, pde_model, loss_weighting, testing_suite, profiler=None, device='cpu'):
+    def __init__(self, model, optimizer, scheduler, pde_model, sampling, loss_weighting, testing_suite, profiler=None, device='cpu'):
         self.model = model
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.pde_model = pde_model
+        self.sampling = sampling
         self.loss_weighting = loss_weighting
         self.profiler = profiler
         self.testing_suite = testing_suite
@@ -195,8 +246,8 @@ class ScorePINN_Trainer:
                 #loss_pde = loss.sdgd_loss(batch_pde[0], self.model, self.pde_model, batch_pde[1], sdgd_num_dims)
                 pass
             else:
-                loss_pde = self.pde_model.score_pde_loss(batch_pde[0], self.model, batch_pde[1])
-            loss_ic = self.pde_model.score_ic_loss(batch_ic[0], self.model, batch_ic[1])
+                loss_pde = self.pde_model.pde_loss(batch_pde[0], self.model, batch_pde[1])
+            loss_ic = self.pde_model.ic_loss(batch_ic[0], self.model, batch_ic[1])
 
         # Weighted loss
         loss_value = self.loss_weighting.weight_loss([loss_pde, loss_ic])
@@ -213,7 +264,7 @@ class ScorePINN_Trainer:
     
 
 
-    def train_adam_minibatch(self, bs, n_steps, n_steps_decay, n_res_points, resampling_frequency=2000, testing_frequency=100, use_rbas=False, use_sdgd=False, sdgd_num_dims=None):
+    def train_adam_minibatch(self, n_steps, n_steps_decay, resampling_frequency=2000, testing_frequency=100, use_sdgd=False, sdgd_num_dims=None):
         """
         Train the model using Adam optimizer.
         """
@@ -222,18 +273,17 @@ class ScorePINN_Trainer:
 
         if self.profiler: self.profiler.make()
 
-        n_trajs = 1_000
-        nt_steps = 100
-
         # batches
-        loader_interior, loader_ic = sp_sampling.create_dataloaders(self.d, n_trajs, nt_steps, n_res_points, bs, self.model, self.pde_model)
+        #loader_interior, loader_ic = sp_sampling.create_dataloaders(self.d, self.model_s, n_trajs, nt_steps, n_res_points, bs, self.model, self.pde_model)
+        loader_interior, loader_ic = sp_sampling.create_dataloaders(self.model, self.pde_model, **self.sampling)
 
         for si in range(n_steps):
 
             if (si + 1) % resampling_frequency == 0:
                 ## Resample training data
                 print("New training data arrived!")
-                loader_interior, loader_ic = sp_sampling.create_dataloaders(self.d, n_trajs, nt_steps, n_res_points, bs, self.model, self.pde_model)
+                #loader_interior, loader_ic = sp_sampling.create_dataloaders(self.d, self.model_s, n_trajs, nt_steps, n_res_points, bs, self.model, self.pde_model)
+                loader_interior, loader_ic = sp_sampling.create_dataloaders(self.model, self.pde_model, **self.sampling)
     
             # Start profiler context
             if self.profiler: self.profiler.start(si)
@@ -306,16 +356,31 @@ if __name__ == "__main__":
     os.makedirs(dir_name, exist_ok=True)    
     
 
-    pde_model = Isotropic_OU(d=d)
+    type_sp = 'score_pde'
+    #type_sp = 'll_ode'
+
+    ### PREP PDE MODEL
+    score_sde_model = Isotropic_OU(d=d)
+
+    # Score PDE
+    if type_sp == "score_pde":
+        pde_model = score_sde_model.Score_PDE(score_sde_model)
+    ## LL ODE
+    elif type_sp == "ll_ode":
+        model_s = architecture.PINN(D, layers, d).to(device)
+        model_s.load_state_dict(torch.load(args.starting_model, weights_only=True))
+        model_s.eval()
+        pde_model = score_sde_model.LL_ODE(score_sde_model, model_s)
 
     print(type(pde_model))
     #print(pde_model.get_pde_metadata())
 
+
     # Select the model architecture
-    if args.starting_model:
-        model = torch.load(args.starting_model, weights_only=False)
-    else:
+    if type_sp == "score_pde":
         model = architecture.PINN(D, layers, d).to(device)
+    elif type_sp == "ll_ode":
+        model = architecture.PINN(D, layers, 1).to(device)
     #model = torch.compile(model, mode="reduce-overhead")
     #model = torch.compile(model)
 
@@ -349,15 +414,22 @@ if __name__ == "__main__":
     #testing_suite = utility.TestingSuite(d)
     #testing_suite.make_test_data(pde_model, args.n_test_calloc_points, f"{dir_name}/testing_data.pt")
     #testing_suite.connect_test_data(f"{dir_name}/testing_data.pt")
-    trainer = ScorePINN_Trainer(model, optimizer, scheduler, pde_model, loss_weighting, testing_suite, profiler, device)
+
+    sampling = {
+        "n_trajs": 1_000,
+        "nt_steps": 100,
+        "T": 1.0,
+        "n_res_points": args.n_calloc_points,
+        "bs": args.bs,
+    }
+    # use_rbas??
+
+    trainer = ScorePINN_Trainer(model, optimizer, scheduler, pde_model, sampling, loss_weighting, testing_suite, profiler, device)
     losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
-        bs=args.bs,
         n_steps=args.n_steps,
         n_steps_decay=args.n_steps_decay,
-        n_res_points=args.n_calloc_points,
         resampling_frequency=args.resampling_frequency,
         testing_frequency=args.testing_frequency,
-        use_rbas=args.use_rbas,
         use_sdgd=args.use_sdgd,
         sdgd_num_dims=sdgd_num_dims,
     )
@@ -404,45 +476,51 @@ if __name__ == "__main__":
     visualize_training_metrics.plot_loss(losses, loss_name)
 
     import viz
-    model_fn = viz.wrapp_model(model)
-    if True:
-        p_ic = lambda X: pde_model.p0(X[:,:-1])
-        p_final = lambda X: pde_model.p_final(X[:,:-1])
+    p_ic = lambda X: pde_model.p0(X[:,:-1])
+    p_final = lambda X: pde_model.p_final(X[:,:-1])
 
-        #plotter_ic = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        #plotter_ic.add_scalar_fn(model_fn, "PINN")
-        #plotter_ic.add_scalar_fn(p_ic, "Initial Condition")
-        #plotter_ic.add_scalar_fn(lambda X: torch.abs(model_fn(X) - p_ic(X)), "Error", cmap='hot')
-        #plotter_ic.save_plot(f'{dir_name}/pinn_plot_ic.png', t_val = 0.0)
-
-        #plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        #plotter.add_scalar_fn(model_fn, "PINN")
-        #plotter.save_animation(f'{dir_name}/pinn_anim.gif', num_frames=30, fps=5)
-
-        plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter.add_scalar_fn(p_ic, "Initial Distribution")
-        plotter.add_scalar_fn(p_final, "Final Distribution")
-        plotter.save_plot(f'{dir_name}/pinn_plot_initial_final.png', t_val = 0.3)
+    if type_sp == "score_pde":
+        model_fn_s = viz.wrapp_model(model)
 
         plotter_ic = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter_ic.add_vector_fn(model_fn, "PINN", scalar_fn=p_ic)
+        plotter_ic.add_vector_fn(model_fn_s, "PINN(t=0), score model vs ic", scalar_fn=p_ic)
         plotter_ic.save_plot(f'{dir_name}/pinn_plot_model_s_vs_ic.png', t_val = 0.0)
 
         plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter.add_vector_fn(model_fn, "PINN")
+        plotter.add_vector_fn(model_fn_s, "PINN, Score model")
         plotter.save_plot(f'{dir_name}/pinn_plot.png', t_val = 0.3)
         plotter.save_animation(f'{dir_name}/pinn_anim.gif', num_frames=30, fps=5)
-    else:
-        plotter = viz.FunctionPlotter(d=d, device=device)
-        plotter.add_scalar_fn(model_fn, "PINN Solution")
-        plotter.add_scalar_fn(pde_model.u_analytic, "Analytic Solution")
-        plotter.add_scalar_fn(lambda X: torch.abs(model_fn(X) - pde_model.u_analytic(X)), "Error", cmap='hot')
-        plotter.save_plot(f'{dir_name}/pinn_fig.png', t_val = 0.325)
-        plotter.save_plot(f'{dir_name}/pinn_fig_ic.png', t_val = 0.0)
-        plotter.save_animation(f'{dir_name}/pinn_anim.gif', num_frames=30, fps=5)
 
-        #visualize_training_metrics.plot_l2(steps, l2_errs, l2_name)
-        #import visualize_solution_3plots
-        #visualize_solution_3plots.plot_3(model, pde_model.u_analytic, d, dir_name)
-        #import visualize_solution_3anims
-        #visualize_solution_3anims.anim_3(model, pde_model.u_analytic, d, dir_name)
+        plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
+        plotter.add_scalar_fn(p_ic, "Initial Distribution, p_0(x)")
+        plotter.add_scalar_fn(p_final, "Final Distribution, p_T(x)")
+        plotter.save_plot(f'{dir_name}/pinn_plot.png', t_val = 0.0)
+
+    elif type_sp == "ll_ode":
+        model_fn_q = viz.wrapp_model(model)
+        model_fn_p = lambda X: torch.exp(model_fn_q(X))
+        model_fn_s = viz.wrapp_model(model_s)
+        q_ic = lambda X: pde_model.q0(X[:,:-1])
+
+        plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
+        plotter.add_scalar_fn(q_ic, "Initial Distribution, q_0(x)")
+        plotter.add_scalar_fn(model_fn_q, "PINN, X -> model_q(X)")
+        plotter.save_plot(f'{dir_name}/pinn_plot_initial_q.png', t_val = 0.0)
+
+        plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
+        plotter.add_scalar_fn(p_ic, "Initial Distribution, p_0(x)")
+        plotter.add_scalar_fn(model_fn_p, "PINN, X -> exp(model_q(X))")
+        plotter.save_plot(f'{dir_name}/pinn_plot_initial_p.png', t_val = 0.0)
+
+        plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
+        plotter.add_scalar_fn(model_fn_q, "PINN, X -> model_q(X)")
+        plotter.save_animation(f'{dir_name}/pinn_anim_q.gif', num_frames=30, fps=5)
+
+        plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
+        plotter.add_scalar_fn(model_fn_p, "PINN, X -> exp(model_q(X))")
+        plotter.save_animation(f'{dir_name}/pinn_anim_p.gif', num_frames=30, fps=5)
+
+        plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
+        plotter.add_vector_fn(model_fn_s, "PINN, s & q", scalar_fn=model_fn_q)
+        plotter.add_vector_fn(model_fn_s, "PINN, s & p", scalar_fn=model_fn_p)
+        plotter.save_animation(f'{dir_name}/pinn_anim_sq-sp.gif', num_frames=30, fps=5)

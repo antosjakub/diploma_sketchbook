@@ -243,7 +243,7 @@ def residual_based_adaptive_sampling(X_cand, residual_fn, model, n_new=1000, pic
 
 import sampling
 from torch.utils.data import DataLoader
-def create_dataloaders(d, n_trajs, nt_steps, n_res_points, bs, model, pde_model):
+def create_dataloaders(model, pde_model, n_res_points=10_000, bs=1_000, n_trajs=100, T=1.0, nt_steps=100):
     n_cycles = n_res_points // bs
     bs_pde = bs // 10 * 9
     bs_ic =  bs // 10
@@ -261,15 +261,15 @@ def create_dataloaders(d, n_trajs, nt_steps, n_res_points, bs, model, pde_model)
             x0=x0,
             f=pde_model.mu,
             G=pde_model.sigma,
-            T=1.0,
-            n_steps=n_t_steps,
+            T=T,
+            n_steps=nt_steps,
         )
     else:
         times, traj_bank = euler_maruyama_trajectory_bank_constant_iso_diag(
             x0=x0,
             f=pde_model.mu,
             sigma=pde_model.sigma,
-            T=1.0,
+            T=T,
             n_steps=nt_steps,
         )
 
@@ -286,10 +286,12 @@ def create_dataloaders(d, n_trajs, nt_steps, n_res_points, bs, model, pde_model)
 
     precomputed = pde_model.precompute(X_pde, X_ic)
 
+    # change bs here to bs_pde, bs_ic:
     loader_pde  = DataLoader(sampling.CollocationDataset(X_pde, precomputed["pde"]), batch_size=bs, shuffle=True)
     loader_ic  = DataLoader(sampling.CollocationDataset(X_ic, precomputed["ic"]), batch_size=bs, shuffle=True)
-    
+
     return loader_pde, loader_ic
+
 
 # -------------------------------------------------------------------------
 # Example usage
