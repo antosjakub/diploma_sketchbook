@@ -1,108 +1,33 @@
 import torch
-from typing import Callable, Tuple, Optional
-
-import torch
-from typing import Callable, Tuple
-
-
-def euler_maruyama_trajectory_bank_constant_iso_diag(
-    x0: torch.Tensor,
-    f: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    sigma: float,
-    T: float,
-    n_steps: int,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Euler-Maruyama trajectory bank for the SDE
-
-        dx = f(x, t) dt + sigma * I dW_t
-
-    where G = sigma * I is a constant diagonal diffusion matrix with the
-    same value sigma on every diagonal entry.
-
-    Parameters
-    ----------
-    x0 : torch.Tensor
-        Initial samples of shape (n_traj, d).
-    f : callable
-        Drift function with signature:
-            f(x, t) -> tensor of shape (n_traj, d)
-        where x has shape (n_traj, d) and t has shape (n_traj, 1).
-    sigma : float
-        Constant value on the diagonal of G.
-    T : float
-        Final time.
-    n_steps : int
-        Number of Euler-Maruyama steps.
-
-    Returns
-    -------
-    times : torch.Tensor
-        Time grid of shape (n_steps + 1,).
-    traj_bank : torch.Tensor
-        Simulated trajectories of shape (n_traj, n_steps + 1, d),
-        with traj_bank[:, n, :] = x_{t_n}.
-    """
-    if x0.ndim != 2:
-        raise ValueError("x0 must have shape (n_traj, d).")
-    if n_steps <= 0:
-        raise ValueError("n_steps must be positive.")
-
-    device = x0.device
-    dtype = x0.dtype
-    n_traj, d = x0.shape
-
-    dt = T / n_steps
-    sqrt_dt = dt**0.5
-
-    times = torch.linspace(0.0, T, n_steps + 1, device=device, dtype=dtype)
-
-    x = x0.clone()
-    traj_bank = torch.empty(n_traj, n_steps + 1, d, device=device, dtype=dtype)
-    traj_bank[:, 0, :] = x
-
-    sigma_t = torch.as_tensor(sigma, device=device, dtype=dtype)
-
-    for n in range(n_steps):
-        #t_n = torch.full((n_traj, 1), times[n], device=device, dtype=dtype)
-        #drift = f(x, t_n)  # shape: (n_traj, d)
-
-        drift = f(x)  # shape: (n_traj, d)
-        if drift.shape != (n_traj, d):
-            raise ValueError("f(x, t) must return shape (n_traj, d).")
-
-        dW = torch.randn(n_traj, d, device=device, dtype=dtype) * sqrt_dt
-
-        x = x + drift * dt + sigma_t * dW
-        traj_bank[:, n + 1, :] = x
-
-    return times, traj_bank
-
+from typing import Callable, Tuple, Optional, Union
 
 
 def euler_maruyama_trajectory_bank(
     x0: torch.Tensor,
-    f: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    G: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    mu: Union[torch.Tensor, Callable],
+    sigma: Union[float, torch.Tensor, Callable],
     T: float,
     n_steps: int,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Simulate an SDE trajectory bank with Euler-Maruyama:
-        dx = f(x,t) dt + G(x,t) dW_t
+        dx = mu(x,t) dt + sigma(x,t) dW_t
+
+    Automatically simplifies the computation based on the types of mu and sigma.
 
     Parameters
     ----------
     x0 : torch.Tensor
         Initial samples, shape (n_traj, d).
-    f : callable
-        Drift function. Signature:
-            f(x, t) -> tensor of shape (n_traj, d)
-        where x has shape (n_traj, d), t has shape (n_traj, 1) or scalar-like tensor.
-    G : callable
-        Diffusion function. Signature:
-            G(x, t) -> tensor of shape (n_traj, d, m)
-        Usually m = d for full Brownian motion, but it can be different.
+    mu : callable or torch.Tensor
+        Drift. Either:
+          - callable mu(x, t) -> (n_traj, d)
+          - constant tensor of shape (d,)
+    sigma : callable, torch.Tensor, float
+        Diffusion. Either:
+          - callable sigma(x, t) -> (n_traj, d, m)
+          - constant matrix of shape (d, m)
+          - scalar, interpreted as sigma * I
     T : float
         Final time.
     n_steps : int
@@ -114,7 +39,6 @@ def euler_maruyama_trajectory_bank(
         Time grid, shape (n_steps + 1,).
     traj_bank : torch.Tensor
         Simulated trajectories, shape (n_traj, n_steps + 1, d).
-        traj_bank[:, n, :] stores x_{t_n}.
     """
     if x0.ndim != 2:
         raise ValueError("x0 must have shape (n_traj, d).")
@@ -131,22 +55,47 @@ def euler_maruyama_trajectory_bank(
     traj_bank = torch.empty(n_traj, n_steps + 1, d, device=device, dtype=dtype)
     traj_bank[:, 0, :] = x
 
+    # Classify mu
+    mu_is_callable = callable(mu)
+    if not mu_is_callable:
+        if isinstance(mu, torch.Tensor) and mu.ndim == 1 and mu.shape[0] == d:
+            mu_const = torch.as_tensor(mu, device=device, dtype=dtype)
+        else:
+            raise ValueError("mu has incorrect type.")
+
+    # Classify sigma
+    sigma_is_callable = callable(sigma)
+    if not sigma_is_callable:
+        if isinstance(sigma, (float,)) or (isinstance(sigma, torch.Tensor) and sigma.ndim == 0):
+            sigma_mode = "scalar"
+            sigma_scalar = torch.as_tensor(sigma, device=device, dtype=dtype)
+        elif isinstance(sigma, torch.Tensor) and sigma.ndim == 2 and sigma.shape[0] == d and sigma.shape[1] == d:
+            sigma_mode = "matrix"
+            sigma_matrix = torch.as_tensor(sigma, device=device, dtype=dtype)  # (d, m)
+        else:
+            raise ValueError("sigma has incorrect type.")
+
     for n in range(n_steps):
         t_n = torch.full((n_traj, 1), times[n], device=device, dtype=dtype)
 
-        drift = f(x, t_n)  # (n_traj, d)
-        diffusion = G(x, t_n)  # (n_traj, d, m)
+        # Drift
+        drift = mu(x, t_n) if mu_is_callable else mu_const
 
-        if diffusion.ndim != 3 or diffusion.shape[0] != n_traj or diffusion.shape[1] != d:
-            raise ValueError("G(x,t) must return shape (n_traj, d, m).")
+        # Diffusion
+        if sigma_is_callable:
+            diffusion = sigma(x, t_n)  # (n_traj, d, m)
+            m = diffusion.shape[2]
+            dW = torch.randn(n_traj, m, device=device, dtype=dtype) * sqrt_dt
+            diff_step = torch.einsum("ndm,nm->nd", diffusion, dW)
+        elif sigma_mode == "scalar":
+            dW = torch.randn(n_traj, d, device=device, dtype=dtype) * sqrt_dt
+            diff_step = sigma_scalar * dW
+        else:  # sigma_mode == "matrix"
+            m = sigma_matrix.shape[1]
+            dW = torch.randn(n_traj, m, device=device, dtype=dtype) * sqrt_dt
+            diff_step = torch.einsum("dm,nm->nd", sigma_matrix, dW)
 
-        m = diffusion.shape[2]
-        dW = torch.randn(n_traj, m, device=device, dtype=dtype) * sqrt_dt
-
-        # diffusion @ dW
-        diffusion_step = torch.einsum("ndm,nm->nd", diffusion, dW)
-
-        x = x + drift * dt + diffusion_step
+        x = x + drift * dt + diff_step
         traj_bank[:, n + 1, :] = x
 
     return times, traj_bank
@@ -256,22 +205,13 @@ def create_dataloaders(model, pde_model, n_res_points=10_000, bs=1_000, n_trajs=
         torch.zeros(n_ic, 1)],
     dim=1)
 
-    if False:
-        times, traj_bank = euler_maruyama_trajectory_bank(
-            x0=x0,
-            f=pde_model.mu,
-            G=pde_model.sigma,
-            T=T,
-            n_steps=nt_steps,
-        )
-    else:
-        times, traj_bank = euler_maruyama_trajectory_bank_constant_iso_diag(
-            x0=x0,
-            f=pde_model.mu,
-            sigma=pde_model.sigma,
-            T=T,
-            n_steps=nt_steps,
-        )
+    times, traj_bank = euler_maruyama_trajectory_bank(
+        x0=x0,
+        mu=pde_model.mu,
+        sigma=pde_model.sigma,
+        T=T,
+        n_steps=nt_steps,
+    )
 
     X_pde = torch.cat(
         # Sample n residual points row-wise: shape (n, d)
@@ -311,10 +251,10 @@ if __name__ == "__main__":
 
     # Example drift and diffusion:
     # Ornstein-Uhlenbeck style: dx = -x dt + sqrt(2) dW
-    def f(x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+    def mu(x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         return -x
 
-    def G(x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+    def sigma(x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         n, d = x.shape
         eye = torch.eye(d, device=x.device, dtype=x.dtype).unsqueeze(0).expand(n, d, d)
         return (2.0 ** 0.5) * eye
@@ -322,8 +262,8 @@ if __name__ == "__main__":
     # Build trajectory bank
     times, traj_bank = euler_maruyama_trajectory_bank(
         x0=x0,
-        f=f,
-        G=G,
+        mu=mu,
+        sigma=sigma,
         T=T,
         n_steps=n_steps,
     )

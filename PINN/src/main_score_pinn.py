@@ -99,6 +99,30 @@ import derivatives
 
 from typing import Optional
 
+#class DiagonalGaussian(GeneralGaussian):
+#    def __init__(
+#        self,
+#        d: int,
+#        gammas: None,
+#        x0 = None,
+#        device: Optional[torch.device] = None,
+#        dtype: torch.dtype = torch.float32,
+#        seed: int = 76,
+#    ):
+#        super().__init__()
+#
+#        if gamma_min < 0 or gamma_max <= 0 or gamma_min > gamma_max:
+#            raise ValueError("Need 0 <= gamma_min <= gamma_max and gamma_max > 0")
+#        self.d = d
+#        self.x0 = x0 if (x0 is not None) else torch.zeros(d)
+#        self.device = device
+#        self.dtype = dtype
+#        self.Q = torch.ones((d,d), dtype=dtype)
+#
+#        QT = Q.transpose(0, 1)
+#        self.Sigma = (QT * gamma.unsqueeze(1)) @ Q
+#        self.Sigma_sqrt = (QT * torch.sqrt(gamma).unsqueeze(1)) @ Q
+
 
 import math
 class GeneralGaussian:
@@ -362,6 +386,192 @@ class Isotropic_OU:
 
 
 
+class SmoluchowskiGeneral:
+    """
+    formulated in SDE and PDE form
+    p_inf(x) = 1/Z e**(-beta V(x))
+    """
+    def __init__(self, d, beta):
+        self.d = d
+        self.beta = beta
+        self.dist_initial = torch.distributions.MultivariateNormal(
+            loc=torch.zeros(d),
+            covariance_matrix=torch.eye(d)
+        )
+        ### sde terms:
+        self.sigma = torch.sqrt( torch.tensor(2.0)/beta )
+    def L_functional(self, X, s, s_div, precomputed):
+        return (
+            1/self.beta * ( s_div + (s**2).sum(dim=1).unsqueeze(1) )
+            + (precomputed["V_grad"] * s).sum(dim=1).unsqueeze(1)
+            + precomputed["V_laplace"]
+        )
+    def V(self, x):
+        raise NotImplementedError
+    def V_grad(self, x):
+        raise NotImplementedError
+    def V_laplace(self, x):
+        raise NotImplementedError
+    #def p_analytic(self, X):
+    #    return self.gaussian_obj.p(X[:,:-1], X[:,-1:])
+    #def q_analytic(self, X):
+    #    return self.gaussian_obj.log_p(X[:,:-1], X[:,-1:])
+    #def s_analytic(self, X):
+    #    return self.gaussian_obj.s(X[:,:-1], X[:,-1:])
+    def sample_x0(self, n_samples):
+        return self.dist_initial.rsample((n_samples,))
+    def p0(self, x):
+        return torch.exp(self.dist_initial.log_prob(x))
+    def p_final(self, x):
+        Z = 1.0
+        return torch.exp(-1.0*self.beta*self.V(x)).unsqueeze(1) / Z
+    def _precompute_V_grad_V_laplace(self, X) -> dict[str, torch.tensor]:
+        raise NotImplementedError
+    
+    class Score_PDE:
+        def __init__(self, score_sde_model) -> None:
+            self.score_sde_model = score_sde_model
+        def __getattr__(self, name):
+            return getattr(self.score_sde_model, name)
+        def s0(self, x):
+            x.detach()
+            x.requires_grad_(True)
+            q = self.dist_initial.log_prob(x).unsqueeze(1)
+            s0 = derivatives.compute_grad(x, q, torch.ones_like(q))
+            return s0
+        def pde_residual(self, X, model_s, precomputed):
+            X.detach()
+            X.requires_grad_(True)
+            s, s_t, s_div = sp_derivatives.compute_score_dt_div(model_s, X)
+            L = self.L_functional(X, s, s_div, precomputed)
+            assert L.shape == (X.shape[0], 1)
+            residual = s_t - derivatives.compute_grad(X, L, torch.ones_like(L))[:,:-1]
+            return residual
+        def ic_residual(self, X, model_s, precomputed):
+            return model_s(X) - precomputed["s0"]
+        def __term_loss(self, d_dim_residual):
+            loss = torch.mean(torch.sum(d_dim_residual**2, dim=1))
+            return loss
+        def pde_loss(self, X, model_s, precomputed):
+            res = self.pde_residual(X, model_s, precomputed)
+            return self.__term_loss(res)
+        def ic_loss(self, X, model_s, precomputed):
+            res = self.ic_residual(X, model_s, precomputed)
+            return self.__term_loss(res)
+        def precompute(self, X_pde, X_ic):
+            return {
+                "pde": self._precompute_V_grad_V_laplace(X_pde),
+                "ic": {
+                    "s0": self.s0(X_ic[:,:-1]).detach()
+                },
+            }
+
+    class LL_ODE:
+        def __init__(self, score_sde_model, model_s):
+            self.score_sde_model = score_sde_model
+            self.model_s = model_s
+        def __getattr__(self, name):
+            return getattr(self.score_sde_model, name)
+        def q0(self, x):
+            return self.dist_initial.log_prob(x).unsqueeze(1)
+        def pde_residual(self, X, model_q, precomputed):
+            X.detach()
+            X.requires_grad_(True)
+            q = model_q(X)
+            q_t = derivatives.compute_grad(X, q, torch.ones_like(q))[:,-1:]
+            return q_t - precomputed["L"]
+        def pde_loss(self, X, model_q, precomputed):
+            res = self.pde_residual(X, model_q, precomputed)
+            loss = torch.mean(res**2)
+            return loss
+        def ic_residual(self, X, model_q, precomputed):
+            return model_q(X) - precomputed["q0"]
+        def ic_loss(self, X, model_q, precomputed):
+            res = self.ic_residual(X, model_q, precomputed)
+            loss = torch.mean(res**2)
+            return loss
+        def precompute(self, X_pde, X_ic):
+            X_pde.detach()
+            X_pde.requires_grad_(True)
+            s, _, s_div = sp_derivatives.compute_score_dt_div(self.model_s, X_pde)
+            L = self.L_functional(X_pde, s, s_div, self._precompute_V_grad_V_laplace(X_pde))
+            return {
+                "pde": {
+                    "L": L.detach()
+                },
+                "ic": {
+                    "q0": self.q0(X_ic[:,:-1]).detach()
+                },
+            }
+
+
+
+class SmoluchowskiLinearPot(SmoluchowskiGeneral):
+    def __init__(self, d, beta, c):
+        super().__init__(d, beta)
+        ### other
+        self.c = c if c is not None else torch.rand(d)
+        assert c.ndim == 1
+        self.mu = - self.c
+    def L_functional(self, X, s, s_div, precomputed):
+        return (
+            1/self.beta * ( s_div + (s**2).sum(dim=1).unsqueeze(1) )
+            + (s * self.c).sum(dim=1).unsqueeze(1)
+        )
+    def V(self, x):
+        return (x * self.c).sum(dim=1).unsqueeze(1)
+    def V_grad(self, x):
+        "cause: = self.c"
+        return torch.ones((x.shape[0], 1)) * self.c
+    def V_laplace(self, x):
+        "cause: = 0"
+        return torch.zeros((x.shape[0], 1))
+    def _precompute_V_grad_V_laplace(self, X) -> dict[str, torch.tensor]:
+        return {}
+
+    class Score_PDE(SmoluchowskiGeneral.Score_PDE):
+        def __init__(self, score_sde_model) -> None:
+            super().__init__(score_sde_model)
+
+    class LL_ODE(SmoluchowskiGeneral.LL_ODE):
+        def __init__(self, score_sde_model, model_s):
+            super().__init__(score_sde_model, model_s)
+
+
+class SmoluchowskiQuadraticPot(SmoluchowskiGeneral):
+    def __init__(self, d, beta, k=None):
+        super().__init__(d, beta)
+        ### other
+        self.k = k if k is not None else 1.0
+        self.mu = lambda x,t: - 1.0 * self.V_grad()
+    def L_functional(self, X, s, s_div, precomputed):
+        return (
+            1/self.beta * ( s_div + (s**2).sum(dim=1).unsqueeze(1) )
+            + self.k**2 * (s * X[:,:-1]).sum(dim=1).unsqueeze(1)
+            + self.d * self.k**2
+        )
+    def V(self, x):
+        return 0.5*self.k**2 * (x**2).sum(dim=1).unsqueeze(1)
+    def V_grad(self, x):
+        "cause: = k**2 * x"
+        return self.k**2 * x
+    def V_laplace(self, x):
+        "cause: = d k**2"
+        return torch.ones((x.shape[0], 1)) * d * self.k**2
+    def _precompute_V_grad_V_laplace(self, X) -> dict[str, torch.tensor]:
+        return {}
+
+    class Score_PDE(SmoluchowskiGeneral.Score_PDE):
+        def __init__(self, score_sde_model) -> None:
+            super().__init__(score_sde_model)
+
+    class LL_ODE(SmoluchowskiGeneral.LL_ODE):
+        def __init__(self, score_sde_model, model_s):
+            super().__init__(score_sde_model, model_s)
+
+
+
+
 
 class ScorePINN_Trainer:
     """
@@ -503,6 +713,26 @@ if __name__ == "__main__":
     print(f"Domain: [0,1]^{d} x [0,1]")
     print(f"{'='*60}\n")
 
+    type_sp = "score_pde"
+    type_sp = "ll_ode"
+    #type_sp = args.mode
+    print(f"Training Score-PINN, type: '{type_sp}'\n")
+
+    # python main_score_pinn.py --mode="score_pde" --output_dir=run_OU_score_pde --clear_dir --enable_testing
+    if type_sp == "score_pde":
+        args.output_dir = f"run_SMLin_{type_sp}"
+        args.clear_dir = True
+        args.enable_testing = False
+    # python main_score_pinn.py --mode="ll_ode" --output_dir=run_OU_ll_ode --clear_dir --starting_model=run_OU_score_pde/model.pth --enable_testing
+    elif type_sp == "ll_ode":
+        args.output_dir = f"run_SMLin_{type_sp}"
+        args.clear_dir = True
+        args.enable_testing = False
+        args.starting_model = "run_SMLin_score_pde/model.pth"
+    else:
+        raise NameError("Incorrect mode specified.")
+
+
     # Prepare storage
     dir_name = args.output_dir
     if dir_name[-1] == '/':
@@ -524,11 +754,9 @@ if __name__ == "__main__":
     print()
     
 
-    type_sp = args.mode
-    print(f"Training Score-PINN, type: '{type_sp}'")
-
     ### PREP PDE MODEL
-    score_sde_model = Isotropic_OU(d=d)
+    #score_sde_model = Isotropic_OU(d=d)
+    score_sde_model = SmoluchowskiLinearPot(d=d, beta=1.0, c=torch.ones(d))
 
     # Score PDE
     if type_sp == "score_pde":
@@ -639,14 +867,14 @@ if __name__ == "__main__":
 
 
     # Plot results
+    import visualize_training_metrics
+    visualize_training_metrics.plot_loss(losses, loss_name)
     if args.enable_testing:
         n_steps_log = args.testing_frequency
         n_logged_pnts = len(l2_errs)
         steps = n_steps_log*torch.linspace(1,n_logged_pnts,n_logged_pnts, dtype=torch.int)
+        visualize_training_metrics.plot_l2(steps, l2_errs, l2_name)
 
-    import visualize_training_metrics
-    visualize_training_metrics.plot_loss(losses, loss_name)
-    visualize_training_metrics.plot_l2(steps, l2_errs, l2_name)
 
     import viz
     p_ic = lambda X: pde_model.p0(X[:,:-1])
