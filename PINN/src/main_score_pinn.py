@@ -24,11 +24,17 @@ parser.add_argument("--use_rbas", action="store_true", help="Residual-based adap
 parser.add_argument("--use_sdgd", action="store_true", help="Stochastic dimension gradient-descend (for loss in high dims)")
 parser.add_argument("--sdgd_num_dims", default=None, type=int, help="Number of dimensions to use for SDGD. If None, use all dimensions.")
 # smart Defaults
-parser.add_argument("--output_dir_name", default="run_ll_latest/", type=str, help="")
+parser.add_argument("--output_dir", default="run_score_pinn_latest/", type=str, help="")
+parser.add_argument("--clear_dir", action="store_true", help="Erase contents of the output_dir before the training starts.")
+
+parser.add_argument("--mode", default="score_pde", type=str, help="")
+#
 parser.add_argument("--enable_profiler", action="store_true", help="")
 parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
 # enable transfer learning / finetuning
 parser.add_argument("--starting_model", default="run_sp_latest/model.pth", type=str, help="")
+parser.add_argument("--enable_testing", action="store_true", help="Compute L2/L1/rel errors during training (requires analytic solution).")
+parser.add_argument("--n_test_points", default=5_000, type=int, help="Number of test points for the testing suite.")
 # load the pde mode with default parameters, optionally use the .json file to init the class
 #parser.add_argument("--pde_model_name", default=None, type=str, help="HeatEquation")
 #parser.add_argument("--pde_model_args", default=None, type=str, help="pde_model_args.json")
@@ -466,19 +472,17 @@ class ScorePINN_Trainer:
 
             # Print progress
             if (si + 1) % testing_frequency == 0:
-                # do not resample - sample at the beggining, then reuse
-                #l2_err, l1_err, rel_err = self.testing_suite.test_model(model)
-                #l2_errs.append(l2_err)
-                print(f'Step {si+1}/{n_steps}, Loss: {loss_value.item():.6f}, '
-                      f'PDE: {loss_pde:.6f}, '
-                      f'IC: {loss_ic:.6f}, '
-                      f'lr: {self.optimizer.param_groups[0]["lr"]:.6f}, '
-                      #
-                      #f'L2: {l2_err:.6f}, '
-                      #f'L1: {l1_err:.6f}, '
-                      #f'rel_max: {rel_err:.6f}'
-                )
-                print(l2_errs)
+                log = (f'Step {si+1}/{n_steps}, Loss: {loss_value.item():.6f}, '
+                       f'PDE: {loss_pde:.6f}, '
+                       f'IC: {loss_ic:.6f}, '
+                       f'lr: {self.optimizer.param_groups[0]["lr"]:.6f}')
+                if self.testing_suite is not None:
+                    l2_err, l1_err, rel_err = self.testing_suite.test_model(self.model)
+                    l2_errs.append(l2_err)
+                    log += (f', L2: {l2_err:.6f}'
+                            f', L1: {l1_err:.6f}'
+                            f', rel_max: {rel_err:.6f}')
+                print(log)
 
         return losses, l2_errs
 
@@ -504,15 +508,27 @@ if __name__ == "__main__":
     print(f"{'='*60}\n")
 
     # Prepare storage
-    import os
-    dir_name = args.output_dir_name
+    dir_name = args.output_dir
     if dir_name[-1] == '/':
         dir_name = dir_name[:-1]
-    os.makedirs(dir_name, exist_ok=True)    
+
+    import os
+    import shutil
+    if os.path.isdir(dir_name):
+        print(f"Directory already exists: '{dir_name}'")
+        if args.clear_dir:
+            print(f"To the trashbin with you lot...")
+            shutil.rmtree(dir_name)
+            os.makedirs(dir_name)
+    else:
+        print(f"Creating new directory: '{dir_name}'")
+        os.makedirs(dir_name)    
+        if args.clear_dir:
+            print("Why clear the new thing me asky??")
+    print()
     
 
-    #type_sp = 'score_pde'
-    type_sp = 'll_ode'
+    type_sp = args.mode
     print(f"Training Score-PINN, type: '{type_sp}'")
 
     ### PREP PDE MODEL
@@ -524,6 +540,7 @@ if __name__ == "__main__":
     ## LL ODE
     elif type_sp == "ll_ode":
         model_s = architecture.PINN(D, layers, d).to(device)
+        print(f"Loading in a score pde model: '{args.starting_model}'")
         model_s.load_state_dict(torch.load(args.starting_model, weights_only=True))
         model_s.eval()
         pde_model = score_sde_model.LL_ODE(score_sde_model, model_s)
@@ -567,10 +584,16 @@ if __name__ == "__main__":
 
     import time
     t1 = time.time()
-    testing_suite = None
-    #testing_suite = utility.TestingSuite(d)
-    #testing_suite.make_test_data(pde_model, args.n_test_calloc_points, f"{dir_name}/testing_data.pt")
-    #testing_suite.connect_test_data(f"{dir_name}/testing_data.pt")
+    if args.enable_testing:
+        if type_sp == "score_pde":
+            analytic_fn = score_sde_model.s_analytic
+        elif type_sp == "ll_ode":
+            analytic_fn = score_sde_model.q_analytic
+        testing_suite = utility.ScorePINNTestingSuite(d, analytic_fn)
+        testing_suite.make_test_data(score_sde_model, args.n_test_points)
+        print(f"Testing suite ready ({args.n_test_points} points, mode='{type_sp}').")
+    else:
+        testing_suite = None
 
     sampling = {
         "n_trajs": 1_000,
@@ -600,7 +623,6 @@ if __name__ == "__main__":
     train_time_str += f"{m} minutes " if m > 0 else ""
     train_time_str += f"{s} seconds"
     print(train_time_str)
-    torch.save(model, f'{dir_name}/model_adam.pth')
 
     # Dan
     print("\nTraining complete!")
@@ -661,13 +683,13 @@ if __name__ == "__main__":
         q_ic = lambda X: pde_model.q0(X[:,:-1])
 
         plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter.add_scalar_fn(q_ic, "q_0(x)")
         plotter.add_scalar_fn(model_fn_q, "model_q(x,0)")
+        plotter.add_scalar_fn(q_ic, "q_0(x)")
         plotter.save_plot(f'{dir_name}/plot_model_q_vs_q0.png', t_val = 0.0)
 
         plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter.add_scalar_fn(p_ic, "p_0(x)")
         plotter.add_scalar_fn(model_fn_p, "model_p(x,0) = exp(model_q(x,0))")
+        plotter.add_scalar_fn(p_ic, "p_0(x)")
         plotter.save_plot(f'{dir_name}/plot_model_p_vs_p0.png', t_val = 0.0)
 
         plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))

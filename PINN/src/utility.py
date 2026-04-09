@@ -107,6 +107,103 @@ def identity_fn(x):
 
 
 import torch
+class ScorePINNTestingSuite:
+    """
+    Testing suite for Score-PINN models.
+
+    Works for both training stages:
+      - score_pde:  model outputs s(x,t) of shape (N, d),  analytic_fn = pde_model.s_analytic
+      - ll_ode:     model outputs q(x,t) of shape (N, 1),  analytic_fn = pde_model.q_analytic
+
+    Pass the appropriate analytic function at construction time so the suite
+    stays agnostic to which stage is being tested.
+    """
+
+    def __init__(self, d, analytic_fn, keep_in_cache=True):
+        """
+        d           : number of spatial dimensions
+        analytic_fn : callable X (N, d+1) -> target (N, output_dim)
+        """
+        self.d = d
+        self.analytic_fn = analytic_fn
+        self.keep_in_cache = keep_in_cache
+        self.test_data_ready = False
+
+    def make_test_data(self, pde_model, n_test_points, T=1.0, seed=4242):
+        """Sample test points (x ~ p0, t ~ Uniform[0,T]) and cache analytic targets."""
+        cuda_devices = [torch.cuda.current_device()] if torch.cuda.is_available() else []
+        with torch.random.fork_rng(devices=cuda_devices):
+            torch.manual_seed(seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(seed)
+            x = pde_model.sample_x0(n_test_points)
+            t = torch.rand(n_test_points, 1) * T
+
+        X = torch.cat([x, t], dim=1).detach().cpu()
+
+        with torch.no_grad():
+            target = self.analytic_fn(X).detach().cpu()
+
+        payload = {
+            "metadata": {"d": self.d, "N": n_test_points, "seed": seed},
+            "data": {"X": X, "target": target},
+        }
+        if self.keep_in_cache:
+            self.payload = payload
+        self.test_data_ready = True
+
+    def test_model(self, model, test_bs=100_000):
+        """
+        Compute L2 RMSE, mean L1, and max relative error between model output
+        and the pre-cached analytic targets.
+
+        Returns (l2_err, l1_err, rel_err).
+        """
+        import time
+        a = time.time()
+
+        if not self.test_data_ready:
+            raise ValueError("Call make_test_data before test_model.")
+
+        payload = self.payload
+        X = payload["data"]["X"]
+        target = payload["data"]["target"]
+        N = X.shape[0]
+        output_dim = target.shape[1]
+        eps = 1e-10
+
+        sum_sq = 0.0
+        sum_abs = 0.0
+        max_rel = 0.0
+
+        model.eval()
+        with torch.no_grad():
+            for i in range(0, N, test_bs):
+                j = min(i + test_bs, N)
+                X_chunk = X[i:j]
+                target_chunk = target[i:j]
+
+                pred = model(X_chunk)
+                err = pred - target_chunk
+
+                sum_sq += torch.sum(err ** 2).item()
+                sum_abs += torch.sum(err.abs()).item()
+
+                rel_chunk = (err.abs() / (target_chunk.abs() + eps)).max().item()
+                if rel_chunk > max_rel:
+                    max_rel = rel_chunk
+        model.train()
+
+        n_elements = N * output_dim
+        l2_err = (sum_sq / n_elements) ** 0.5
+        l1_err = sum_abs / n_elements
+        rel_err = max_rel
+
+        b = time.time()
+        print(f"Testing took: {b - a:.3f}s")
+        return l2_err, l1_err, rel_err
+
+
 class TestingSuite:
     def __init__(self, d, keep_in_cache=True):
         self.d = d
