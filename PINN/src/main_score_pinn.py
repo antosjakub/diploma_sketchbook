@@ -12,11 +12,18 @@ parser.add_argument("--n_steps", default=1000, type=int, help="")
 parser.add_argument("--n_steps_decay", default=2000, type=int, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--gamma", default=0.9, type=float, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--lr", default=1e-3, type=float, help="")
-parser.add_argument("--n_calloc_points", default=5_000, type=int, help="")
-parser.add_argument("--n_test_calloc_points", default=5_000, type=int, help="")
-parser.add_argument("--testing_frequency", default=100, type=int, help="")
-parser.add_argument("--resampling_frequency", default=2000, type=int, help="")
 parser.add_argument("--bs", default=512, type=int, help="")
+
+parser.add_argument("--n_res_points", default=5_000, type=int, help="")
+parser.add_argument("--n_trajs", default=1_000, type=int, help="")
+parser.add_argument("--nt_steps", default=100, type=int, help="")
+parser.add_argument("--T", default=1.0, type=float, help="")
+
+parser.add_argument("--n_test_points", default=5_000, type=int, help="Number of test points for the testing suite.")
+parser.add_argument("--testing_frequency", default=100, type=int, help="")
+parser.add_argument("--enable_testing", action="store_true", help="Compute L2/L1/rel errors during training (requires analytic solution).")
+
+parser.add_argument("--resampling_frequency", default=2000, type=int, help="")
 parser.add_argument("--lambda_pde", default=1.0, type=float, help="")
 parser.add_argument("--lambda_ic", default=10.0, type=float, help="")
 parser.add_argument("--use_adaptive_weights", action="store_true", help="Loss weighting.")
@@ -33,8 +40,6 @@ parser.add_argument("--enable_profiler", action="store_true", help="")
 parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
 # enable transfer learning / finetuning
 parser.add_argument("--starting_model", default="run_sp_latest/model.pth", type=str, help="")
-parser.add_argument("--enable_testing", action="store_true", help="Compute L2/L1/rel errors during training (requires analytic solution).")
-parser.add_argument("--n_test_points", default=5_000, type=int, help="Number of test points for the testing suite.")
 # load the pde mode with default parameters, optionally use the .json file to init the class
 #parser.add_argument("--pde_model_name", default=None, type=str, help="HeatEquation")
 #parser.add_argument("--pde_model_args", default=None, type=str, help="pde_model_args.json")
@@ -137,7 +142,7 @@ class GeneralGaussian:
             d, generator=g, device=device, dtype=dtype
         )
         self.gamma = gamma
-        self.gamma = torch.ones(d)
+        self.gamma = 10*torch.ones(d)
 
         # Random orthogonal matrix Q from QR of a Gaussian matrix.
         A = torch.randn(d, d, generator=g, device=device, dtype=dtype)
@@ -148,6 +153,7 @@ class GeneralGaussian:
         signs = torch.sign(torch.diag(R))
         signs = torch.where(signs == 0, torch.ones_like(signs), signs)
         Q = Q * signs.unsqueeze(0)
+        self.Q = torch.ones((d,d), dtype=dtype)
         self.Q = Q
 
         # Precompute dense Sigma and Sigma^(1/2) once
@@ -243,7 +249,7 @@ class Isotropic_OU:
         self.d = d
         self.Sigma = Sigma
         # sde terms:
-        self.mu = lambda x: -1/2*x
+        self.mu = lambda x: -0.5*x
         self.sigma = torch.sqrt(Sigma)
         # detect whether mu is a constant or a function of x
         self.dist_initial = torch.distributions.MultivariateNormal(
@@ -272,9 +278,6 @@ class Isotropic_OU:
         return self.gaussian_obj.log_p(X[:,:-1], X[:,-1:])
     def s_analytic(self, X):
         return self.gaussian_obj.s(X[:,:-1], X[:,-1:])
-
-
-
     def p_final(self, x):
         return torch.exp(self.dist_final.log_prob(x)).unsqueeze(1)
     
@@ -322,13 +325,6 @@ class Isotropic_OU:
         def __init__(self, score_sde_model, model_s):
             self.score_sde_model = score_sde_model
             self.model_s = model_s
-        #    self.d = score_sde_model.d
-        #    self.L_functional = score_sde_model.L_functional
-        #    self.mu = score_sde_model.mu
-        #    self.sigma = score_sde_model.sigma
-        #    self.sample_x0 = score_sde_model.sample_x0
-        #    ##
-        #    self.model_s = model_s
         def __getattr__(self, name):
             return getattr(self.score_sde_model, name)
 
@@ -596,10 +592,10 @@ if __name__ == "__main__":
         testing_suite = None
 
     sampling = {
-        "n_trajs": 1_000,
-        "nt_steps": 100,
-        "T": 1.0,
-        "n_res_points": args.n_calloc_points,
+        "n_trajs": args.n_trajs,
+        "nt_steps": args.nt_steps,
+        "T": args.T,
+        "n_res_points": args.n_res_points,
         "bs": args.bs,
     }
     # use_rbas??
@@ -641,40 +637,47 @@ if __name__ == "__main__":
     torch.save(torch.tensor(l2_errs), f'{l2_name}.pth')
     print("\nResults saved.")
 
-    print(l2_errs)
 
     # Plot results
-    if False:
-        pass
-    else:
+    if args.enable_testing:
         n_steps_log = args.testing_frequency
         n_logged_pnts = len(l2_errs)
         steps = n_steps_log*torch.linspace(1,n_logged_pnts,n_logged_pnts, dtype=torch.int)
 
     import visualize_training_metrics
     visualize_training_metrics.plot_loss(losses, loss_name)
+    visualize_training_metrics.plot_l2(steps, l2_errs, l2_name)
 
     import viz
     p_ic = lambda X: pde_model.p0(X[:,:-1])
     p_final = lambda X: pde_model.p_final(X[:,:-1])
 
+
+    os.makedirs(f"{dir_name}/viz/", exist_ok=True)
     if type_sp == "score_pde":
         model_fn_s = viz.wrapp_model(model)
         s_ic = lambda X: pde_model.s0(X[:,:-1])
 
+        if args.enable_testing:
+            plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
+            plotter.add_vector_fn(model_fn_s, "model_s(x,t)")
+            plotter.add_vector_fn(score_sde_model.s_analytic, "s_analytic(x,t)")
+            plotter.add_vector_fn(lambda X: model_fn_s(X) - score_sde_model.s_analytic(X), "err")
+            plotter.save_animation(f'{dir_name}/viz/anim_model_s_vs_s_analytic.gif', num_frames=30, fps=5)
+
         plotter_ic = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
         plotter_ic.add_vector_fn(model_fn_s, "model_s(x,0)")
         plotter_ic.add_vector_fn(model_fn_s, "s_0(x)")
-        plotter_ic.save_plot(f'{dir_name}/plot_model_s_vs_s0.png', t_val = 0.0)
+        plotter_ic.save_plot(f'{dir_name}/viz/plot_model_s_vs_s0.png', t_val = 0.0)
 
         plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
         plotter.add_vector_fn(model_fn_s, "model_s(x,t)")
-        plotter.save_animation(f'{dir_name}/anim_model_s.gif', num_frames=30, fps=5)
+        plotter.save_animation(f'{dir_name}/viz/anim_model_s.gif', num_frames=30, fps=5)
 
         plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
         plotter.add_scalar_fn(p_ic, "p_0(x)")
         plotter.add_scalar_fn(p_final, "p_T(x)")
-        plotter.save_plot(f'{dir_name}/plot_p0_vs_pT.png', t_val = 0.0)
+        plotter.save_plot(f'{dir_name}/viz/plot_p0_vs_pT.png', t_val = 0.0)
 
     elif type_sp == "ll_ode":
         model_fn_q = viz.wrapp_model(model)
@@ -682,25 +685,42 @@ if __name__ == "__main__":
         model_fn_s = viz.wrapp_model(model_s)
         q_ic = lambda X: pde_model.q0(X[:,:-1])
 
+        if args.enable_testing:
+
+            plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
+            plotter.add_scalar_fn(model_fn_q, "model_q(x,t)")
+            plotter.add_scalar_fn(score_sde_model.q_analytic, "q_analytic(x,t)")
+            plotter.add_scalar_fn(lambda X: model_fn_q(X) - score_sde_model.q_analytic(X), "err")
+            plotter.save_plot(f'{dir_name}/viz/plot_model_q_vs_q_analytic.png', t_val = 0.234)
+            plotter.save_animation(f'{dir_name}/viz/anim_model_q_vs_q_analytic.gif', num_frames=30, fps=5)
+
+            plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
+            plotter.add_scalar_fn(model_fn_p, "model_p(x,t)")
+            plotter.add_scalar_fn(score_sde_model.p_analytic, "p_analytic(x,t)")
+            plotter.add_scalar_fn(lambda X: model_fn_p(X) - score_sde_model.p_analytic(X), "err")
+            plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p_analytic.png', t_val = 0.234)
+            plotter.save_animation(f'{dir_name}/viz/anim_model_p_vs_p_analytic.gif', num_frames=30, fps=5)
+
+
         plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
         plotter.add_scalar_fn(model_fn_q, "model_q(x,0)")
         plotter.add_scalar_fn(q_ic, "q_0(x)")
-        plotter.save_plot(f'{dir_name}/plot_model_q_vs_q0.png', t_val = 0.0)
+        plotter.save_plot(f'{dir_name}/viz/plot_model_q_vs_q0.png', t_val = 0.0)
 
         plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
         plotter.add_scalar_fn(model_fn_p, "model_p(x,0) = exp(model_q(x,0))")
         plotter.add_scalar_fn(p_ic, "p_0(x)")
-        plotter.save_plot(f'{dir_name}/plot_model_p_vs_p0.png', t_val = 0.0)
+        plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p0.png', t_val = 0.0)
 
         plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
         plotter.add_scalar_fn(model_fn_q, "model_q(x,t)")
-        plotter.save_animation(f'{dir_name}/anim_model_q.gif', num_frames=30, fps=5)
+        plotter.save_animation(f'{dir_name}/viz/anim_model_q.gif', num_frames=30, fps=5)
 
         plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
         plotter.add_scalar_fn(model_fn_p, "model_p(x,t) = exp(model_q(x,t))")
-        plotter.save_animation(f'{dir_name}/anim_model_p.gif', num_frames=30, fps=5)
+        plotter.save_animation(f'{dir_name}/viz/anim_model_p.gif', num_frames=30, fps=5)
 
         plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
         plotter.add_vector_fn(model_fn_s, "model_s & model_q", scalar_fn=model_fn_q)
         plotter.add_vector_fn(model_fn_s, "model_s & model_p", scalar_fn=model_fn_p)
-        plotter.save_animation(f'{dir_name}/anim_model_sq_sp.gif', num_frames=30, fps=5)
+        plotter.save_animation(f'{dir_name}/viz/anim_model_sq_sp.gif', num_frames=30, fps=5)
