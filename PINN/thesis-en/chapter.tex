@@ -1,15 +1,81 @@
 
+(put this into the diploma introduction itself??)
+
+In the past few years, solving PDEs using machine and deep learning methods has emerged as a new and rapidly growing field of scientific machine learning.
+Leveraging the universal approximation theorem \cite{uni_approx} and high expressivity of neural networks, the 
+
+The 2019 publication by Karniadakis et al. was the seminal work that brought about the 
+In combine machine learning with partial differential equation is a unique and simple way that was intuitive to both the machine learning and pde solving communities.
+https://www.sciencedirect.com/science/article/abs/pii/S0021999118307125
+
+climate modelling
+
+flexibility
+
+
 
 \chapter{Phyics-Informed Neural Networks (PINNs)}
 
-Quite recently, solving PDEs using deep learning has emerged as a new field of scientific machine learning (SciML), leveraging the universal approximation theorem \cite{uni_approx} and high expressivity of neural networks.
+First introduced in 2019 by Karniadakis et al., the Physics-Informed Neural Network combines the architecture and training loop of a traditional neural networks and with a 
 
-In general, deep neural networks could approximate any high-dimensional function given that sufficient training data are supplied. \cite{uni_approx}
+data + physs loss
+solve inverse problems - value of a fucntion or a coefficient from the data
 
-Their advantage lies in the flexibility and the adaptibility to different problems.
-However, this advantege is also a burden - as there are many architectural and parametric choices at each level.
+good integration into the neural network arch - training data sampling, automatic differentiation
 
-We base out PINN architecture on a few crutial publications and existing established codebases.
+We first provide a short introduction into neural networks before moving into the PINNs.
+
+\section{Neural Networks}
+
+In general, neural networks can approximate any high-dimensional function given that sufficient training data are supplied. \cite{uni_approx}
+Their advantage lies in their relative simplicity and the ability to adapt the architecture to the specifics of the problem at hand.
+However, this advantege is also a burden - as there are many architectural and parametric choices at each level, and deciding on the best combination of parameters is not a straighforward matter.
+
+- mathematical intro
+    - weights - what we optimize
+    - how we update them - grad descent - variants to make it faster
+    - data
+- training loop of NNs
+
+\subsection{Architecture}
+data input -> transformation (nonlin) -> output
+signle hidden layer transformat as
+$$
+y_i = a(W^i x+b_i)
+$$
+final activation
+we stack many after each other to form a neural network $NN_{\theta}: \mathbb{R^D} \to \mathbb{R^n}$
+
+
+\subsection{Training}
+optimization problem in a $\theta$ parameter space
+automatic differentiation - we keep track of all the oprations and compute the derivatives exactlty using chain rule and elementry derivatives (sin -> cos, ...)
+- numerical diff not needed
+
+\begin{algorithm}[H]
+\caption{Standard NN Training (Mini-Batch Gradient Descent)}
+\begin{algorithmic}[1]
+    \Require $\mathcal{N}:\mathbb{R}^n\to\mathbb{R}^m$, training data $\{(x_i, y_i)\}_{i=1}^{N}$
+    \State \textbf{Initialize} network parameters $\theta$
+    \For{epoch $= 1, \dots, E$}
+        \State Shuffle training data
+        \For{each mini-batch $\mathcal{B} \subset \{1,\dots,N\}$, $|\mathcal{B}|=B$}
+            \State \textbf{Forward pass:} compute $\hat{y}_i = \mathcal{N}_\theta(x_i)$ for $i\in\mathcal{B}$
+            \State \textbf{Compute loss:}
+            $\mathcal{L}(\theta) = \dfrac{1}{B}\displaystyle\sum_{i\in\mathcal{B}}
+                \bigl(\hat{y}_i - y_i\bigr)^2$
+            \State \textbf{Backward pass:} compute $\nabla_\theta \mathcal{L}$ via backpropagation
+            \State \textbf{Update:} $\theta \leftarrow \theta - \eta\,\nabla_\theta \mathcal{L}$
+        \EndFor
+    \EndFor
+    \State \Return $\theta$
+\end{algorithmic}
+\end{algorithm}
+
+
+
+\section{PINN Architecture}
+We base out PINN architecture on a few crutial publications and based took the inspiration of our implemntation from some existing established codebases.
 Namely:
 \begin{itemize}
     \item studies published by Karniadakis et. al, including
@@ -19,11 +85,7 @@ Namely:
     \end{itemize}
     \item deepxde - rar
 \end{itemize}
-
-
-\section{Architecture}
-
-Automatic differentiation - builds computational graph
+Needed to code from scratch - relatively novel field, no codebase has access to the latest architecutres combined that we wanted to explore - relevant to high dims
 
 physics-informed - PDE in the loss function
 
@@ -45,7 +107,7 @@ physics-informed - PDE in the loss function
 
 - tanh activations - smooth derivatives
 
-\subsection{Training}
+\subsection{PINN Training}
 
 \begin{algorithm}[H]
 \caption{Mini-batch PINN training}
@@ -399,6 +461,11 @@ PDE separable? -> sum of product of 1d networks
 
 \subsection{my genious ideas TD}
 - have 3 networks - each focused on different frequency signals
+
+
+
+
+
 
 
 
