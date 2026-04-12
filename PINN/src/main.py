@@ -139,11 +139,11 @@ class PINN_Trainer:
         if self.profiler: self.profiler.make()
 
         # Generate training data
-        X_interior, X_boundary, X_initial = sampling.sample_collocation_points(
+        X_interior, X_boundary, X_initial, _ = sampling.sample_collocation_points(
             self.d, n_points_interior, n_points_boundary, n_points_initial, device=self.device
         )
         # other:
-        #pre_precompute = 
+        #pre_precompute =
         #other = self.pde_model.precompute(X_interior, X_boundary, X_initial)
         u_bc_target = self.pde_model.u_bc(X_boundary)
         u_ic_target = self.pde_model.u_ic(X_initial)
@@ -154,7 +154,7 @@ class PINN_Trainer:
                 ## Resample training data
                 #X_interior, X_boundary, X_initial = self.resample_training_data()
                 print("New training data arrived?")
-                X_interior, X_boundary, X_initial = sampling.sample_collocation_points(
+                X_interior, X_boundary, X_initial, _ = sampling.sample_collocation_points(
                     self.d, n_points_interior, n_points_boundary, n_points_initial, device=self.device
                 )
                 u_bc_target = self.pde_model.u_bc(X_boundary)

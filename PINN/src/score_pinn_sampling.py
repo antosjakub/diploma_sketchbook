@@ -226,7 +226,7 @@ def create_dataloaders(model, pde_model, n_res_points=10_000, bs=1_000, n_trajs=
         ), dim=1
     )
 
-    X_boundary = sampling.sample_bc(n_boundary, d, sampling_strategy='lhs', device=device)
+    X_boundary, _ = sampling.sample_bc(n_boundary, d, sampling_strategy='lhs', device=device)
     #X_pde, X_bc, X_ic = sampling.sample_collocation_points(d, n_interior, n_boundary, n_initial, sampling_strategy='lhs', device=device)
     #X_pde[:,:-1] = 4.0 * X_pde[:,:-1] - 2.0
     #X_bc[:,:-1] = 4.0 * X_bc[:,:-1] - 2.0

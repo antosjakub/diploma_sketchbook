@@ -28,28 +28,32 @@ def sample_hypercube_boundary(num_samples, d, sampling_strategy="lhs", device='c
     - d: num of spatial dimensions
     - device: 'cuda' or 'cpu'
     Returns:
-    - tensor of shape (num_samples, d)
+    - samples: tensor of shape (num_samples, d)
+    - normals: outward unit normals, tensor of shape (num_samples, d)
     """
     # Sample all coordinates uniformly from [0,1]
     samples = sample_domain(num_samples, d, sampling_strategy=sampling_strategy, device=device)
-    
+
     # Choose which dimension to fix for each sample
     fixed_dims = torch.randint(0, d, (num_samples,), device=device)
-    
+
     # Choose whether to fix to 0 or 1 for each sample
     fixed_values = torch.randint(0, 2, (num_samples,), device=device)
-    
+
     # Set the fixed dimension to 0 or 1
     samples[torch.arange(num_samples, device=device), fixed_dims] = fixed_values.float()
-    
-    return samples
+
+    # Outward normals: face at 0 has normal -1, face at 1 has normal +1
+    normals = torch.zeros(num_samples, d, device=device)
+    normals[torch.arange(num_samples, device=device), fixed_dims] = 2.0 * fixed_values.float() - 1.0
+
+    return samples, normals
 
 
-def sample_bc(n_boundary: int, d: int, sampling_strategy="lhs", device="cpu") -> torch.Tensor:
-    return torch.cat([
-        sample_hypercube_boundary(n_boundary, d, sampling_strategy=sampling_strategy, device=device),
-        torch.rand(n_boundary, 1, device=device)
-    ], dim=1).float()
+def sample_bc(n_boundary: int, d: int, sampling_strategy="lhs", device="cpu") -> tuple[torch.Tensor, torch.Tensor]:
+    spatial, normals = sample_hypercube_boundary(n_boundary, d, sampling_strategy=sampling_strategy, device=device)
+    X_bc = torch.cat([spatial, torch.rand(n_boundary, 1, device=device)], dim=1).float()
+    return X_bc, normals
 
 def sample_ic(n_initial: int, d: int, sampling_strategy="lhs", device="cpu") -> torch.Tensor:
     return torch.cat([
@@ -79,49 +83,53 @@ def sample_collocation_points(
     
     if n_boundary > 0:
         # Boundary points: spatial coords on boundary, t random in [0,1]
-        X_boundary = sample_bc(n_boundary, d, sampling_strategy=sampling_strategy, device=device)
+        X_boundary, normals_bc = sample_bc(n_boundary, d, sampling_strategy=sampling_strategy, device=device)
     else:
         X_boundary = None
-    
+        normals_bc = None
+
     if n_initial > 0:
         # Initial condition points: spatial coords random in [0,1]^d, t=0
         X_initial = sample_ic(n_initial, d, sampling_strategy=sampling_strategy, device=device)
     else:
         X_initial = None
-    
-    return X_interior, X_boundary, X_initial
+
+    return X_interior, X_boundary, X_initial, normals_bc
 
 
 #@torch.no_grad()
 #with torch.enable_grad():
 def residual_based_adaptive_sampling(d, residual_fn, model, type="pde", n_new=1000, n_candidates=50_000, sampling_strategy="lhs", picking_criterion="multinomial", device="cpu"):
     """
-    sampling_strategy: "lhs" or "uniform" 
-    picking_criterion: "multinomial" or "top_k" 
+    sampling_strategy: "lhs" or "uniform"
+    picking_criterion: "multinomial" or "top_k"
+    Returns (X_selected,) for pde/ic, or (X_selected, normals_selected) for bc.
     """
-
+    normals_cand = None
+    precomputed = {}
     if type == 'pde':
-        #sample_collocation_points(d, n_candidates, 0,0, sampling_strategy=sampling_strategy, )
         X_cand = sample_domain(n_candidates, d+1, sampling_strategy=sampling_strategy, device=device)
         X_cand = X_cand.requires_grad_(True)
     elif type == 'bc':
-        X_cand = sample_bc(n_candidates, d, sampling_strategy=sampling_strategy, device=device)
+        X_cand, normals_cand = sample_bc(n_candidates, d, sampling_strategy=sampling_strategy, device=device)
+        precomputed["normals"] = normals_cand
     elif type == 'ic':
         X_cand = sample_ic(n_candidates, d, sampling_strategy=sampling_strategy, device=device)
 
-    res = residual_fn(X_cand, model).detach()
+    res = residual_fn(X_cand, model, precomputed).detach()
     abs_res = res.abs().squeeze()
-    
+
     if picking_criterion == "top_k":
-        # Pick top-k high-residual points
         _, idx = torch.topk(abs_res, n_new)
-        return X_cand[idx].detach()
     elif picking_criterion == "multinomial":
         probs = abs_res / abs_res.sum()
         idx = torch.multinomial(probs, n_new, replacement=False)
-        return X_cand[idx].detach()
     else:
         raise NameError("Provide a correct picking crierion.")
+
+    if normals_cand is not None:
+        return X_cand[idx].detach(), normals_cand[idx].detach()
+    return X_cand[idx].detach()
 
 
 
@@ -200,25 +208,27 @@ def create_dataloaders(d, num_colloc, bs, model, pde_model, use_rbas=False, samp
             residual_based_adaptive_sampling(d, pde_model.pde_residual, model, type='pde', n_new=2*n_interior//3, n_candidates=4*n_interior, sampling_strategy=sampling_strategy, picking_criterion="multinomial", device=device),
             residual_based_adaptive_sampling(d, pde_model.pde_residual, model, type='pde', n_new=n_interior//3, n_candidates=2*n_interior, sampling_strategy=sampling_strategy, picking_criterion="top_k", device=device)
         ], dim=0)
-        X_bc = torch.cat([
-            residual_based_adaptive_sampling(d, pde_model.bc_residual, model, type='bc', n_new=2*n_boundary//3, n_candidates=4*n_boundary, sampling_strategy=sampling_strategy, picking_criterion="multinomial", device=device),
-            residual_based_adaptive_sampling(d, pde_model.bc_residual, model, type='bc', n_new=n_boundary//3, n_candidates=2*n_boundary, sampling_strategy=sampling_strategy, picking_criterion="top_k", device=device)
-        ], dim=0)
+        X_bc_1, normals_bc_1 = residual_based_adaptive_sampling(d, pde_model.bc_residual, model, type='bc', n_new=2*n_boundary//3, n_candidates=4*n_boundary, sampling_strategy=sampling_strategy, picking_criterion="multinomial", device=device)
+        X_bc_2, normals_bc_2 = residual_based_adaptive_sampling(d, pde_model.bc_residual, model, type='bc', n_new=n_boundary//3, n_candidates=2*n_boundary, sampling_strategy=sampling_strategy, picking_criterion="top_k", device=device)
+        X_bc = torch.cat([X_bc_1, X_bc_2], dim=0)
+        normals_bc = torch.cat([normals_bc_1, normals_bc_2], dim=0)
         X_ic = torch.cat([
             residual_based_adaptive_sampling(d, pde_model.ic_residual, model, type='ic', n_new=2*n_initial//3, n_candidates=4*n_initial, sampling_strategy=sampling_strategy, picking_criterion="multinomial", device=device),
             residual_based_adaptive_sampling(d, pde_model.ic_residual, model, type='ic', n_new=n_initial//3, n_candidates=2*n_initial, sampling_strategy=sampling_strategy, picking_criterion="top_k", device=device)
         ], dim=0)
     else:
-        X_pde, X_bc, X_ic = sample_collocation_points(d, n_interior, n_boundary, n_initial, sampling_strategy=sampling_strategy, device=device)
+        X_pde, X_bc, X_ic, normals_bc = sample_collocation_points(d, n_interior, n_boundary, n_initial, sampling_strategy=sampling_strategy, device=device)
     X_pde[:,:-1] = 4.0 * X_pde[:,:-1] - 2.0
     X_bc[:,:-1] = 4.0 * X_bc[:,:-1] - 2.0
     X_ic[:,:-1] = 4.0 * X_ic[:,:-1] - 2.0
     X_pde[:,-1:] *= 1.5
     X_bc[:,-1:] *= 1.5
-        
-    # dict containing precomputed 
+
+    # dict containing precomputed
     # precomputed = {"pde": {"V_grad": tensor, "V_laplace": tensor}, "ic": {"analytic": tensor}, "bc": {"V_grad": tensor}}
     precomputed = pde_model.precompute(X_pde, X_bc, X_ic)
+    if normals_bc is not None:
+        precomputed["bc"]["normals"] = normals_bc
 
     loader_pde = DataLoader(CollocationDataset(X_pde, precomputed["pde"]), batch_size=bs_pde, shuffle=True)
     loader_bc  = DataLoader(CollocationDataset(X_bc, precomputed["bc"]), batch_size=bs_bc, shuffle=True)
@@ -236,7 +246,7 @@ def create_dataloader_ic(d, n_calloc, bs, model, pde_model, use_rbas=False, samp
             residual_based_adaptive_sampling(d, pde_model.ic_residual, model, type='ic', n_new=n_calloc//3, n_candidates=2*n_calloc, sampling_strategy=sampling_strategy, picking_criterion="top_k", device=device)
         ], dim=0)
     else:
-        _, _, X_ic = sample_collocation_points(d, n_interior=0, n_boundary=0, n_initial=n_calloc, sampling_strategy=sampling_strategy, device=device)
+        _, _, X_ic, _ = sample_collocation_points(d, n_interior=0, n_boundary=0, n_initial=n_calloc, sampling_strategy=sampling_strategy, device=device)
         
     precomputed_ic = {
         "p": pde_model.p_ic(X_ic[:,:-1])

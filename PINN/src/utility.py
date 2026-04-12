@@ -237,7 +237,7 @@ class TestingSuite:
                 torch.cuda.manual_seed_all(seed)
 
             import sampling
-            X, _, _ = sampling.sample_collocation_points(
+            X, _, _, _ = sampling.sample_collocation_points(
                 self.d,
                 n_test_calloc_points,
                 0,

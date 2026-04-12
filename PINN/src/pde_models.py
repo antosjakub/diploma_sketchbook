@@ -465,9 +465,7 @@ class SmoluchowskiBase(PDEModel):
     def bc_residual_dirichlet(self, X, model, precomputed):
         return model(X)
     def bc_residual_neumann(self, X, model, precomputed):
-        n = torch.zeros(X.shape[0], self.d)
-        n[X[:,:-1] == 0.0] = 1.0
-        n[X[:,:-1] == 1.0] = -1.0
+        n = precomputed["normals"]
         X = X.detach().requires_grad_(True)
         p, grad_p, _ = derivatives.compute_derivatives(model, X, compute_laplace=False)
         return ((1/self.beta * grad_p[:,:-1] + self.V_grad(X[:,:-1]) * p) * n).sum(dim=1).unsqueeze(dim=1)
