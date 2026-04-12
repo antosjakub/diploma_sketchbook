@@ -194,15 +194,18 @@ import sampling
 from torch.utils.data import DataLoader
 def create_dataloaders(model, pde_model, n_res_points=10_000, bs=1_000, n_trajs=100, T=1.0, nt_steps=100):
     n_cycles = n_res_points // bs
-    bs_pde = bs // 10 * 9
-    bs_ic =  bs // 10
-    n_pde = bs_pde * n_cycles
-    n_ic = bs_ic * n_cycles
+    bs_segment_size = bs // 16
+    bs_pde = bs_segment_size * 14
+    bs_bc  = bs_segment_size
+    bs_ic  = bs_segment_size
+    n_interior = bs_pde * n_cycles
+    n_boundary =  bs_bc * n_cycles
+    n_initial  =  bs_ic * n_cycles
 
     x0 = pde_model.sample_x0(n_trajs)
     X_ic = torch.cat([
-        x0[:n_ic],
-        torch.zeros(n_ic, 1)],
+        x0[:n_initial],
+        torch.zeros(n_initial, 1)],
     dim=1)
 
     times, traj_bank = euler_maruyama_trajectory_bank(
@@ -218,17 +221,25 @@ def create_dataloaders(model, pde_model, n_res_points=10_000, bs=1_000, n_trajs=
         sample_residual_points_from_bank(
             traj_bank=traj_bank,
             times=times,
-            n_points=n_pde,
+            n_points=n_interior,
             exclude_t0=True,
         ), dim=1
     )
 
+    X_boundary = sampling.sample_bc(n_boundary, d, sampling_strategy='lhs', device=device)
+    #X_pde, X_bc, X_ic = sampling.sample_collocation_points(d, n_interior, n_boundary, n_initial, sampling_strategy='lhs', device=device)
+    #X_pde[:,:-1] = 4.0 * X_pde[:,:-1] - 2.0
+    #X_bc[:,:-1] = 4.0 * X_bc[:,:-1] - 2.0
+    #X_ic[:,:-1] = 4.0 * X_ic[:,:-1] - 2.0
+    #X_pde[:,-1:] *= 1.5
+    #X_bc[:,-1:] *= 1.5
+
 
     precomputed = pde_model.precompute(X_pde, X_ic)
 
-    # change bs here to bs_pde, bs_ic:
-    loader_pde  = DataLoader(sampling.CollocationDataset(X_pde, precomputed["pde"]), batch_size=bs, shuffle=True)
-    loader_ic  = DataLoader(sampling.CollocationDataset(X_ic, precomputed["ic"]), batch_size=bs, shuffle=True)
+    # TD: change bs here to bs_pde, bs_ic:
+    loader_pde  = DataLoader(sampling.CollocationDataset(X_pde, precomputed["pde"]), batch_size=bs_pde, shuffle=True)
+    loader_ic  = DataLoader(sampling.CollocationDataset(X_ic, precomputed["ic"]), batch_size=bs_ic, shuffle=True)
 
     return loader_pde, loader_ic
 

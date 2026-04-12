@@ -425,14 +425,14 @@ class FokkerPlanckLJ(PDEModel):
 
 
 
-
 class SmoluchowskiBase(PDEModel):
-    def __init__(self, d, beta, x_0=None, sigma=None):
+    def __init__(self, d, beta):
         self.d = d
         self.beta = beta  if beta  is not None else 0.2
-        self.x_0 = x_0 if x_0 is not None else 0.5 * torch.ones(self.d)
-        self.sigma = sigma if sigma is not None else torch.ones(self.d)
-
+        x_0 = None
+        #self.x_0 = x_0 if x_0 is not None else 0.5 * torch.ones(self.d)
+        self.x_0 = torch.zeros(self.d)
+        self.sigma = torch.sqrt(torch.tensor(2.0) / self.beta)
 
     def V(self, X):
         raise NotImplementedError
@@ -441,51 +441,50 @@ class SmoluchowskiBase(PDEModel):
     def V_laplace(self, X):
         raise NotImplementedError
 
-    def rho_0(self, x):
+    def p_0(self, x):
         return torch.exp(-((x - self.x_0)**2 / (2 * self.sigma**2)).sum(dim=1)).unsqueeze(dim=1) / (2 * torch.pi * self.sigma**2)**(self.d/2)
-    def rho_infty(self, x):
+    def p_inf(self, x):
         return torch.exp(-self.beta * self.V(x))
     
     def precompute(self, X_pde, X_bc, X_ic):
         return {
             "pde": {
-                "V_grad": self.V_grad(X_pde),
-                "V_laplace": self.V_laplace(X_pde),
+                "V_grad": self.V_grad(X_pde[:,:-1]),
+                "V_laplace": self.V_laplace(X_pde[:,:-1]),
             },
             "bc": {
-                "V_grad": self.V_grad(X_bc),
+                #"V_grad": self.V_grad(X_bc),
             },
             "ic": {
-                "rho": self.rho_0(X_ic[:,:-1]),
+                "p_0": self.p_0(X_ic[:,:-1]),
             },
         }
 
-
-    def ic_residual(self, X, model):
-        return model(X) - self.ic(X[:,:-1])
-
-    def bc_residual_dirichlet(self, X, model):
+    def ic_residual(self, X, model, precomputed):
+        return model(X) - precomputed["p_0"]
+    def bc_residual_dirichlet(self, X, model, precomputed):
         return model(X)
-    def bc_residual_neumann(self, X, model):
+    def bc_residual_neumann(self, X, model, precomputed):
         n = torch.zeros(X.shape[0], self.d)
         n[X[:,:-1] == 0.0] = 1.0
         n[X[:,:-1] == 1.0] = -1.0
         X = X.detach().requires_grad_(True)
-        rho, grad_rho, _ = derivatives.compute_derivatives(model, X, compute_laplace=False)
-        return ((1/self.beta * grad_rho + self.V_grad(X) * rho) * n).sum(dim=1).unsqueeze(dim=1)
-    
-    
-    def pde_residual_base(self, X, rho, grad_rho, spatial_laplace_rho, precomputed):
-        rho_t = grad_rho[:,-1].unsqueeze(dim=1)
-        laplace = spatial_laplace_rho.sum(dim=1).unsqueeze(dim=1)
-        return rho_t - 1/self.beta * laplace + (precomputed["V_grad"] * grad_rho[:,:-1]).sum(dim=1).unsqueeze(dim=1) + rho * precomputed["V_laplace"]
+        p, grad_p, _ = derivatives.compute_derivatives(model, X, compute_laplace=False)
+        return ((1/self.beta * grad_p[:,:-1] + self.V_grad(X[:,:-1]) * p) * n).sum(dim=1).unsqueeze(dim=1)
+    def bc_residual(self, X, model, precomputed):
+        #return self.bc_residual_dirichlet(X, model, precomputed)
+        return self.bc_residual_neumann(X, model, precomputed)
+    def pde_residual_base(self, X, p, grad_p, spatial_laplace_p, precomputed):
+        p_t = grad_p[:,-1].unsqueeze(dim=1)
+        laplace = spatial_laplace_p.sum(dim=1).unsqueeze(dim=1)
+        return p_t - ( 1/self.beta * laplace + (precomputed["V_grad"] * grad_p[:,:-1]).sum(dim=1).unsqueeze(dim=1) + p * precomputed["V_laplace"] )
     def pde_residual(self, X, model, precomputed):
         X = X.detach().requires_grad_(True)
-        rho, grad_rho, spatial_laplace_rho = derivatives.compute_derivatives(model, X)
-        return self.pde_residual_base(_, rho, grad_rho, spatial_laplace_rho, precomputed)
-    def pde_sgsd_single_term_residual(self, X, rho, grad_rho, spatial_laplace_rho, i: int, precomputed):
-        rho_t = grad_rho[:,-1].unsqueeze(dim=1)
-        return 1/self.d * rho_t - 1/self.beta * spatial_laplace_rho[:,i:i+1] + (precomputed["V_grad"][:,i:i+1] * grad_rho[:,i:i+1]) + 1/self.d * rho * precomputed["V_laplace"]
+        p, grad_p, spatial_laplace_p = derivatives.compute_derivatives(model, X)
+        return self.pde_residual_base(None, p, grad_p, spatial_laplace_p, precomputed)
+    def pde_sgsd_single_term_residual(self, X, p, grad_p, spatial_laplace_p, i: int, precomputed):
+        rho_t = grad_p[:,-1].unsqueeze(dim=1)
+        return 1/self.d * rho_t - 1/self.beta * spatial_laplace_p[:,i:i+1] + (precomputed["V_grad"][:,i:i+1] * grad_p[:,i:i+1]) + 1/self.d * p * precomputed["V_laplace"]
 
     def get_pde_metadata(self):
         return {
@@ -496,10 +495,24 @@ class SmoluchowskiBase(PDEModel):
         self.__init__(self.d, **pde_params)
 
 
-
-
-
-
+class SmoluchowskiDoubleWell(SmoluchowskiBase):
+    """
+    V(x) = 1/4 sum_{i=1}^d (x_i^2 - a_i^2)^2
+    V_grad_i(x) = (x_i^2 - a_i^2) * x_i
+    V_laplace_i(x) = 3 x_i^2 - a_i^2
+    V_laplace(x) = 3|x|^2 - |a|^2
+    """
+    def __init__(self, d, beta, a=None):
+        super().__init__(d, beta)
+        self.a = a
+        self.a_l2 = (a**2).sum().item()
+        self.mu = lambda x,t: - 1.0 * self.V_grad(x)
+    def V(self, x):
+        return 0.25 * ( (x**2 - self.a**2)**2 ).sum(dim=1).unsqueeze(1)
+    def V_grad(self, x):
+        return (x**2 - self.a**2) * x
+    def V_laplace(self, x):
+        return 3.0 * (x**2).sum(dim=1).unsqueeze(1) - self.a_l2
 
 
 

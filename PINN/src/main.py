@@ -7,16 +7,16 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--description", default="", type=str, help="Smthg to help identify it in grid search.")
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--d", default=2, type=int, help="Number of spatial dimensions.")
-parser.add_argument("--layers", default="128,128,128", type=str, help="")
-parser.add_argument("--n_steps", default=10_000, type=int, help="")
+parser.add_argument("--layers", default="148,148,148", type=str, help="")
+parser.add_argument("--n_steps", default=950, type=int, help="")
 parser.add_argument("--n_steps_decay", default=2000, type=int, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--gamma", default=0.9, type=float, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--lr", default=1e-3, type=float, help="")
-parser.add_argument("--n_calloc_points", default=5_000, type=int, help="")
-parser.add_argument("--n_test_calloc_points", default=5_000, type=int, help="")
+parser.add_argument("--n_calloc_points", default=10_000, type=int, help="")
+parser.add_argument("--n_test_calloc_points", default=10_000, type=int, help="")
 parser.add_argument("--testing_frequency", default=100, type=int, help="")
-parser.add_argument("--resampling_frequency", default=2000, type=int, help="")
-parser.add_argument("--bs", default=512, type=int, help="")
+parser.add_argument("--resampling_frequency", default=500, type=int, help="")
+parser.add_argument("--bs", default=1024, type=int, help="")
 parser.add_argument("--lambda_pde", default=1.0, type=float, help="")
 parser.add_argument("--lambda_bc", default=10.0, type=float, help="")
 parser.add_argument("--lambda_ic", default=10.0, type=float, help="")
@@ -31,6 +31,9 @@ parser.add_argument("--lr_lbfgs", default=1.0, type=float, help="Learning rate f
 # smart Defaults
 parser.add_argument("--l2_stop_crit", default=0.01, type=float, help="")
 parser.add_argument("--l2_stop_crit_lbfgs", default=0.001, type=float, help="")
+
+parser.add_argument("--enable_testing", action="store_true", help="Compute L2/L1/rel errors during training (requires analytic solution).")
+parser.add_argument("--clear_dir", action="store_true", help="Erase contents of the output_dir before the training starts.")
 # 
 parser.add_argument("--output_dir_name", default="run_latest/", type=str, help="")
 parser.add_argument("--enable_profiler", action="store_true", help="")
@@ -239,20 +242,18 @@ class PINN_Trainer:
 
             # Print progress
             if (si + 1) % testing_frequency == 0:
-                # do not resample - sample at the beggining, then reuse
-                l2_err, l1_err, rel_err = self.testing_suite.test_model(model)
-                l2_errs.append(l2_err)
-                print(f'Step {si+1}/{n_steps}, Loss: {loss_value.item():.6f}, '
-                      f'PDE: {loss_pde:.6f}, '
-                      f'BC: {loss_bc:.6f}, '
-                      f'IC: {loss_ic:.6f}, '
-                      f'lr: {self.optimizer.param_groups[0]["lr"]:.6f}, '
-                      #
-                      f'L2: {l2_err:.6f}, '
-                      f'L1: {l1_err:.6f}, '
-                      f'rel_max: {rel_err:.6f}'
-                )
-                print(l2_errs)
+                log = (f'Step {si+1}/{n_steps}, Loss: {loss_value.item():.6f}, '
+                       f'PDE: {loss_pde:.6f}, '
+                       f'BC: {loss_bc:.6f}, '
+                       f'IC: {loss_ic:.6f}, '
+                       f'lr: {self.optimizer.param_groups[0]["lr"]:.6f}')
+                if self.testing_suite is not None:
+                    l2_err, l1_err, rel_err = self.testing_suite.test_model(self.model)
+                    l2_errs.append(l2_err)
+                    log += (f', L2: {l2_err:.6f}'
+                            f', L1: {l1_err:.6f}'
+                            f', rel_max: {rel_err:.6f}')
+                print(log)
 
         return losses, l2_errs
 
@@ -372,6 +373,20 @@ if __name__ == "__main__":
         dir_name = dir_name[:-1]
     os.makedirs(dir_name, exist_ok=True)    
     
+    import os
+    import shutil
+    if os.path.isdir(dir_name):
+        print(f"Directory already exists: '{dir_name}'")
+        if args.clear_dir:
+            print(f"To the trashbin with you lot...")
+            shutil.rmtree(dir_name)
+            os.makedirs(dir_name)
+    else:
+        print(f"Creating new directory: '{dir_name}'")
+        os.makedirs(dir_name)    
+        if args.clear_dir:
+            print("Why clear the new thing me asky??")
+    print()
 
     # PDE equation
     if False:
@@ -398,8 +413,11 @@ if __name__ == "__main__":
 
     else:
         #pde_model = pde_models.HeatEquationWithSource(d)
-        pde_model = pde_models.TravellingGaussPacket(d, gamma=1)
+        #pde_model = pde_models.TravellingGaussPacket(d, gamma=1)
         #pde_model = pde_models.HeatEquation(d)
+        a = 0.7 + 0.5*torch.rand(d)
+        print(a)
+        pde_model = pde_models.SmoluchowskiDoubleWell(d, beta=1.0, a=a)
 
 
     print(type(pde_model))
@@ -418,9 +436,9 @@ if __name__ == "__main__":
     if args.starting_model:
         model = torch.load(args.starting_model, weights_only=False)
     else:
-        #model = architecture.PINN(D, layers, head_fn=lambda x: torch.sinh(5*x)/100).to(device)
-        #head = lambda X: torch.exp(-X)
-        head_fn = utility.identity_fn
+        #head_fn = utility.identity_fn
+        #head_fn = lambda X: torch.exp(-X)
+        head_fn = torch.nn.Softplus()
         model = architecture.PINN(D, layers, head_fn=head_fn).to(device)
         #model = PINN_SeparableTimes(D, layers).to(device)
         #model = PINN_SepTime(D, layers).to(device)
@@ -455,7 +473,7 @@ if __name__ == "__main__":
 
         import time
         t1 = time.time()
-        if False:
+        if True:
             testing_suite = None
         else:
             testing_suite = utility.TestingSuite(d)
@@ -484,7 +502,7 @@ if __name__ == "__main__":
         train_time_str += f"{m} minutes " if m > 0 else ""
         train_time_str += f"{s} seconds"
         print(train_time_str)
-        torch.save(model, f'{dir_name}/model_adam.pth')
+        #torch.save(model, f'{dir_name}/model_adam.pth')
 
     # --- Phase 2: L-BFGS fine-tuning ---
     if args.n_steps_lbfgs > 0:
@@ -525,9 +543,7 @@ if __name__ == "__main__":
     print(l2_errs)
 
     # Plot results
-    if False:
-        pass
-    else:
+    if args.enable_testing:
         n_steps_log = args.testing_frequency
         n_logged_pnts = len(l2_errs)
         steps = n_steps_log*torch.linspace(1,n_logged_pnts,n_logged_pnts, dtype=torch.int)
@@ -537,30 +553,62 @@ if __name__ == "__main__":
 
     import viz
     model_fn = viz.wrapp_model(model)
-    if False:
-        p_ic = lambda X: pde_model.p_ic(X[:,:-1])
+    p_ic = lambda X: pde_model.p_0(X[:,:-1])
 
-        plotter_ic = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter_ic.add_scalar_fn(model_fn, "PINN")
-        plotter_ic.add_scalar_fn(p_ic, "Initial Condition")
-        plotter_ic.add_scalar_fn(lambda X: torch.abs(model_fn(X) - p_ic(X)), "Error", cmap='hot')
-        plotter_ic.save_plot(f'{dir_name}/pinn_plot_ic.png', t_val = 0.0)
+    options = {
+        "d": d,
+        "plot_dims": [0,1],
+        "fixed_dims_vals": 0.5*torch.ones(d),
+        "device": device,
+        "x_start": -3.0,
+        "x_end": 3.0,
+    }
 
-        plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter.add_scalar_fn(model_fn, "PINN")
-        plotter.save_animation(f'{dir_name}/pinn_anim.gif', num_frames=30, fps=5)
+    os.makedirs(f"{dir_name}/viz/", exist_ok=True)
+    if args.enable_testing:
+        plotter = viz.FunctionPlotter(**options)
+        plotter.add_panel('model_p', title="model_p(x,t)").heatmap(model_fn)
+        plotter.add_panel('p_analytic', title="p_analytic(x,t)").heatmap(pde_model.p_analytic)
+        plotter.add_panel('err', title="err").heatmap(lambda X: model_fn(X) - pde_model.p_analytic(X))
+        plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p_analytic.png', t_val=0.234)
+        plotter.save_animation(f'{dir_name}/viz/anim_model_p_vs_p_analytic.gif', num_frames=30, fps=5)
 
-    else:
-        plotter = viz.FunctionPlotter(d=d, device=device)
-        plotter.add_scalar_fn(model_fn, "PINN Solution")
-        plotter.add_scalar_fn(pde_model.u_analytic, "Analytic Solution")
-        plotter.add_scalar_fn(lambda X: torch.abs(model_fn(X) - pde_model.u_analytic(X)), "Error", cmap='hot')
-        plotter.save_plot(f'{dir_name}/pinn_fig.png', t_val = 0.325)
-        plotter.save_plot(f'{dir_name}/pinn_fig_ic.png', t_val = 0.0)
-        plotter.save_animation(f'{dir_name}/pinn_anim.gif', num_frames=30, fps=5)
+    plotter = viz.FunctionPlotter(**options)
+    plotter.add_panel('model', title="p_theta(x)").heatmap(model_fn)
+    plotter.add_panel('ic', title="p_0(x)").heatmap(p_ic)
+    plotter.add_panel('err', title="err").heatmap(lambda X: model_fn(X) - p_ic(X))
+    plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p0.png', t_val=0.0, cbar={"model": "linked:ic", "err": "linked:ic"})
 
-        #visualize_training_metrics.plot_l2(steps, l2_errs, l2_name)
-        #import visualize_solution_3plots
-        #visualize_solution_3plots.plot_3(model, pde_model.u_analytic, d, dir_name)
-        #import visualize_solution_3anims
-        #visualize_solution_3anims.anim_3(model, pde_model.u_analytic, d, dir_name)
+    plotter = viz.FunctionPlotter(**options)
+    plotter.add_panel('model_p', title="p_nn").heatmap(model_fn)
+    plotter.save_animation(f'{dir_name}/viz/anim_model_p.gif', num_frames=100, fps=5, t_end = 4)
+
+    #import viz
+    #model_fn = viz.wrapp_model(model)
+    #if False:
+    #    p_ic = lambda X: pde_model.p_ic(X[:,:-1])
+
+    #    plotter_ic = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
+    #    plotter_ic.add_scalar_fn(model_fn, "PINN")
+    #    plotter_ic.add_scalar_fn(p_ic, "Initial Condition")
+    #    plotter_ic.add_scalar_fn(lambda X: torch.abs(model_fn(X) - p_ic(X)), "Error", cmap='hot')
+    #    plotter_ic.save_plot(f'{dir_name}/pinn_plot_ic.png', t_val = 0.0)
+
+    #    plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
+    #    plotter.add_scalar_fn(model_fn, "PINN")
+    #    plotter.save_animation(f'{dir_name}/pinn_anim.gif', num_frames=30, fps=5)
+
+    #else:
+    #    plotter = viz.FunctionPlotter(d=d, device=device)
+    #    plotter.add_scalar_fn(model_fn, "PINN Solution")
+    #    plotter.add_scalar_fn(pde_model.u_analytic, "Analytic Solution")
+    #    plotter.add_scalar_fn(lambda X: torch.abs(model_fn(X) - pde_model.u_analytic(X)), "Error", cmap='hot')
+    #    plotter.save_plot(f'{dir_name}/pinn_fig.png', t_val = 0.325)
+    #    plotter.save_plot(f'{dir_name}/pinn_fig_ic.png', t_val = 0.0)
+    #    plotter.save_animation(f'{dir_name}/pinn_anim.gif', num_frames=30, fps=5)
+
+    #    #visualize_training_metrics.plot_l2(steps, l2_errs, l2_name)
+    #    #import visualize_solution_3plots
+    #    #visualize_solution_3plots.plot_3(model, pde_model.u_analytic, d, dir_name)
+    #    #import visualize_solution_3anims
+    #    #visualize_solution_3anims.anim_3(model, pde_model.u_analytic, d, dir_name)

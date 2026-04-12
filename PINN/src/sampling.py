@@ -210,6 +210,11 @@ def create_dataloaders(d, num_colloc, bs, model, pde_model, use_rbas=False, samp
         ], dim=0)
     else:
         X_pde, X_bc, X_ic = sample_collocation_points(d, n_interior, n_boundary, n_initial, sampling_strategy=sampling_strategy, device=device)
+    X_pde[:,:-1] = 4.0 * X_pde[:,:-1] - 2.0
+    X_bc[:,:-1] = 4.0 * X_bc[:,:-1] - 2.0
+    X_ic[:,:-1] = 4.0 * X_ic[:,:-1] - 2.0
+    X_pde[:,-1:] *= 1.5
+    X_bc[:,-1:] *= 1.5
         
     # dict containing precomputed 
     # precomputed = {"pde": {"V_grad": tensor, "V_laplace": tensor}, "ic": {"analytic": tensor}, "bc": {"V_grad": tensor}}

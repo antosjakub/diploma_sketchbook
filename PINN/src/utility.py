@@ -321,3 +321,15 @@ class TestingSuite:
         b = time.time()
         print(f"Testing took: {b-a}s")
         return l2_err, l1_err, rel_err
+
+
+def generate_SPD(d, eps=1e-10):
+    B = torch.randn(d, d)
+    A = torch.mm(B, B.t())
+    # to ensure PD
+    jitter = torch.eye(d) * eps
+    A = A + jitter
+    return A
+
+def make_fn_0_care_t(fn):
+    return lambda X: fn(X[:,:-1])

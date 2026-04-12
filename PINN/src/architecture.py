@@ -131,9 +131,9 @@ class PINN(nn.Module):
                 for layer in self.hidden:
                     z = self.act(layer(h))
                     h = V + z * UmV
-                return self.out_layer(self.head_fn(h))
+                return self.head_fn(self.out_layer(h))
             else:
-                return self.net(self.head_fn(x))
+                return self.head_fn(self.net(x))
 
 
 #d=5:  num_freqs=128, sigma=8, hidden_width=128, num_blocks=4

@@ -14,7 +14,7 @@ parser.add_argument("--gamma", default=0.9, type=float, help="Decay by 0.9 every
 parser.add_argument("--lr", default=1e-3, type=float, help="")
 parser.add_argument("--bs", default=512, type=int, help="")
 
-parser.add_argument("--n_res_points", default=5_000, type=int, help="")
+parser.add_argument("--n_res_points", default=10_000, type=int, help="")
 parser.add_argument("--n_trajs", default=1_000, type=int, help="")
 parser.add_argument("--nt_steps", default=100, type=int, help="")
 parser.add_argument("--T", default=1.0, type=float, help="")
@@ -281,7 +281,7 @@ class Isotropic_OU:
             covariance_matrix=torch.eye(d)
         )
         # the final distribution
-        self.dist_final = torch.distributions.MultivariateNormal(
+        self.dist_inf = torch.distributions.MultivariateNormal(
             loc=torch.zeros(d),
             covariance_matrix=torch.eye(d) * self.Sigma
         )
@@ -302,8 +302,8 @@ class Isotropic_OU:
         return self.gaussian_obj.log_p(X[:,:-1], X[:,-1:])
     def s_analytic(self, X):
         return self.gaussian_obj.s(X[:,:-1], X[:,-1:])
-    def p_final(self, x):
-        return torch.exp(self.dist_final.log_prob(x)).unsqueeze(1)
+    def p_inf(self, x):
+        return torch.exp(self.dist_inf.log_prob(x)).unsqueeze(1)
     
     class Score_PDE:
         def __init__(self, score_sde_model) -> None:
@@ -422,11 +422,11 @@ class SmoluchowskiGeneral:
         return self.dist_initial.rsample((n_samples,))
     def p0(self, x):
         return torch.exp(self.dist_initial.log_prob(x))
-    def p_final(self, x):
+    def p_inf(self, x):
         Z = 1.0
         return torch.exp(-1.0*self.beta*self.V(x)).unsqueeze(1) / Z
     def _precompute_V_grad_V_laplace(self, X) -> dict[str, torch.tensor]:
-        raise NotImplementedError
+        return {}
     
     class Score_PDE:
         def __init__(self, score_sde_model) -> None:
@@ -437,7 +437,7 @@ class SmoluchowskiGeneral:
             x.detach()
             x.requires_grad_(True)
             q = self.dist_initial.log_prob(x).unsqueeze(1)
-            s0 = derivatives.compute_grad(x, q, torch.ones_like(q))
+            s0 = derivatives.compute_grad(x, q, torch.ones_like(q)).detach()
             return s0
         def pde_residual(self, X, model_s, precomputed):
             X.detach()
@@ -506,7 +506,8 @@ class SmoluchowskiGeneral:
 
 
 
-class SmoluchowskiLinearPot(SmoluchowskiGeneral):
+class SmoluchowskiDiffDrift(SmoluchowskiGeneral):
+    "Diffusive drift"
     def __init__(self, d, beta, c):
         super().__init__(d, beta)
         ### other
@@ -526,8 +527,6 @@ class SmoluchowskiLinearPot(SmoluchowskiGeneral):
     def V_laplace(self, x):
         "cause: = 0"
         return torch.zeros((x.shape[0], 1))
-    def _precompute_V_grad_V_laplace(self, X) -> dict[str, torch.tensor]:
-        return {}
 
     class Score_PDE(SmoluchowskiGeneral.Score_PDE):
         def __init__(self, score_sde_model) -> None:
@@ -538,7 +537,7 @@ class SmoluchowskiLinearPot(SmoluchowskiGeneral):
             super().__init__(score_sde_model, model_s)
 
 
-class SmoluchowskiQuadraticPot(SmoluchowskiGeneral):
+class SmoluchowskiHarmonicPot(SmoluchowskiGeneral):
     def __init__(self, d, beta, k=None):
         super().__init__(d, beta)
         ### other
@@ -558,8 +557,6 @@ class SmoluchowskiQuadraticPot(SmoluchowskiGeneral):
     def V_laplace(self, x):
         "cause: = d k**2"
         return torch.ones((x.shape[0], 1)) * d * self.k**2
-    def _precompute_V_grad_V_laplace(self, X) -> dict[str, torch.tensor]:
-        return {}
 
     class Score_PDE(SmoluchowskiGeneral.Score_PDE):
         def __init__(self, score_sde_model) -> None:
@@ -569,6 +566,121 @@ class SmoluchowskiQuadraticPot(SmoluchowskiGeneral):
         def __init__(self, score_sde_model, model_s):
             super().__init__(score_sde_model, model_s)
 
+
+class SmoluchowskiCoupledQuadraticPot(SmoluchowskiGeneral):
+    """
+    V(x) = 1/2 x^T A x
+    A - SPD
+    for example:
+    A = [
+            [a1,g1,0,0,g1]
+            [g2,a2,g2,0,0]
+            [0,g3,a3,g3,0]
+            [0,0,g4,a4,g4]
+            [g5,0,0,g5,a5]
+        ]
+    V_grad = A x
+    V_laplace = Tr(A)
+
+    Final distribution p_inf is basically a highdimensional gaussian elipsoid
+    (the p_inf gaussinal is off-center when the the other dimensions are not 0)
+    """
+    def __init__(self, d, beta, A=None):
+        super().__init__(d, beta)
+        self.A = A
+        self.tr_A = torch.trace(A)
+        ### sde:
+        self.mu = lambda x,t: - 1.0 * self.V_grad(x)
+    def L_functional(self, X, s, s_div, precomputed=None):
+        # - <..,s> - div(..)
+        # V_grad.s + V_laplace
+        return (
+            1/self.beta * ( s_div + (s**2).sum(dim=1).unsqueeze(1) )
+            + (s * self.V_grad(X[:,:-1])).sum(dim=1).unsqueeze(1)
+            + self.tr_A
+        )
+    def V(self, x):
+        "cause: = 1/2 x^T A x"
+        y = x @ self.A.transpose(0,1)
+        return 0.5 * (x * y).sum(dim=1).unsqueeze(1)
+    def V_grad(self, x):
+        "cause: = A x"
+        return x @ self.A.transpose(0,1)
+    def V_laplace(self, x):
+        "cause: = Tr(A)"
+        return torch.ones((x.shape[0], 1)) * self.tr_A
+
+    class Score_PDE(SmoluchowskiGeneral.Score_PDE):
+        def __init__(self, score_sde_model) -> None:
+            super().__init__(score_sde_model)
+
+    class LL_ODE(SmoluchowskiGeneral.LL_ODE):
+        def __init__(self, score_sde_model, model_s):
+            super().__init__(score_sde_model, model_s)
+
+
+class SmoluchowskiDoubleWell(SmoluchowskiGeneral):
+    """
+    V(x) = 1/4 sum_{i=1}^d (x_i^2 - a_i^2)^2
+    V_grad_i(x) = (x_i^2 - a_i^2) * x_i
+    V_laplace_i(x) = 3 x_i^2 - a_i^2
+    V_laplace(x) = 3|x|^2 - |a|^2
+    """
+    def __init__(self, d, beta, a=None):
+        super().__init__(d, beta)
+        self.a = a
+        self.a_l2 = (a**2).sum().item()
+        self.mu = lambda x,t: - 1.0 * self.V_grad(x)
+    def L_functional(self, X, s, s_div, precomputed=None):
+        # - <..,s> - div(..)
+        # V_grad.s + V_laplace
+        return (
+            1/self.beta * ( s_div + (s**2).sum(dim=1).unsqueeze(1) )
+            + (s * self.V_grad(X[:,:-1])).sum(dim=1).unsqueeze(1)
+            + self.V_laplace(X[:,:-1])
+        )
+    def V(self, x):
+        return 0.25 * ( (x**2 - self.a**2)**2 ).sum(dim=1).unsqueeze(1)
+    def V_grad(self, x):
+        return (x**2 - self.a**2) * x
+    def V_laplace(self, x):
+        return 3.0 * (x**2).sum(dim=1).unsqueeze(1) - self.a_l2
+
+    class Score_PDE(SmoluchowskiGeneral.Score_PDE):
+        def __init__(self, score_sde_model) -> None:
+            super().__init__(score_sde_model)
+
+    class LL_ODE(SmoluchowskiGeneral.LL_ODE):
+        def __init__(self, score_sde_model, model_s):
+            super().__init__(score_sde_model, model_s)
+
+
+class SmoluchowskiCoupledDoubleWell(SmoluchowskiGeneral):
+    """
+    V(x) = 1/4 sum_{i=1}^d (x_i^2 - a_i^2)^2 + sum_{i=1}^d gamma_i (x_{i+1} - x_i)**2
+    """
+    def __init__(self, d, beta, a=None, gamma=None):
+        super().__init__(d, beta)
+        self.a = a
+        self.gamma = gamma
+    def V(self, x):
+        return (
+            0.25 * ( (x**2 - self.a**2)**2 ).sum(dim=1).unsqueeze(1)
+            + ((x.roll(-1) - x)**2 * self.gamma).sum(dim=1).unsqueeze(1)
+        )
+
+
+class SmoluchowskiRastigin(SmoluchowskiGeneral):
+    """
+    V(x) = A d - sum_{i=1}^d (x_i^2 - A cos(2pi x_i))
+    """
+    def __init__(self, d, beta, A=None, gamma=None):
+        super().__init__(d, beta)
+        self.A = A if A is not None else 0.3
+        self.gamma = gamma if gamma is not None else 6*torch.pi*torch.ones(d)
+    def V(self, x):
+        #return self.A*self.d + (x**2 - self.A * torch.cos(2.0 * torch.pi * x)).sum(dim=1).unsqueeze(1)
+        return (x**2 - self.A * torch.cos(x * self.gamma)).sum(dim=1).unsqueeze(1)
 
 
 
@@ -718,19 +830,27 @@ if __name__ == "__main__":
     #type_sp = args.mode
     print(f"Training Score-PINN, type: '{type_sp}'\n")
 
+    sde_model_label = 'DW'
     # python main_score_pinn.py --mode="score_pde" --output_dir=run_OU_score_pde --clear_dir --enable_testing
     if type_sp == "score_pde":
-        args.output_dir = f"run_SMLin_{type_sp}"
+        args.output_dir = f"run_SM-{sde_model_label}_{type_sp}"
         args.clear_dir = True
         args.enable_testing = False
     # python main_score_pinn.py --mode="ll_ode" --output_dir=run_OU_ll_ode --clear_dir --starting_model=run_OU_score_pde/model.pth --enable_testing
     elif type_sp == "ll_ode":
-        args.output_dir = f"run_SMLin_{type_sp}"
+        args.output_dir = f"run_SM-{sde_model_label}_{type_sp}"
         args.clear_dir = True
         args.enable_testing = False
-        args.starting_model = "run_SMLin_score_pde/model.pth"
+        args.starting_model = f"run_SM-{sde_model_label}_score_pde/model.pth"
     else:
         raise NameError("Incorrect mode specified.")
+
+    # SDE model
+    #A = utility.generate_SPD(d)
+    #A = 2.3*torch.diag(torch.ones(d)) + torch.diag(torch.ones(d-1), 1) + torch.diag(torch.ones(d-1), -1)
+    a = 0.7 + 0.5*torch.rand(d)
+    print(a)
+    score_sde_model = SmoluchowskiDoubleWell(d=d, beta=1.0, a=a)
 
 
     # Prepare storage
@@ -756,7 +876,7 @@ if __name__ == "__main__":
 
     ### PREP PDE MODEL
     #score_sde_model = Isotropic_OU(d=d)
-    score_sde_model = SmoluchowskiLinearPot(d=d, beta=1.0, c=torch.ones(d))
+    #score_sde_model = SmoluchowskiDiffDrift(d=d, beta=1.0, c=torch.ones(d))
 
     # Score PDE
     if type_sp == "score_pde":
@@ -878,7 +998,17 @@ if __name__ == "__main__":
 
     import viz
     p_ic = lambda X: pde_model.p0(X[:,:-1])
-    p_final = lambda X: pde_model.p_final(X[:,:-1])
+    p_inf = lambda X: pde_model.p_inf(X[:,:-1])
+
+    options = {
+        "d": d,
+        "plot_dims": [0,1],
+        "fixed_dims_vals": 0.5*torch.ones(d),
+        "device": device,
+        "x_start": -3.0,
+        "x_end": 3.0,
+    }
+
 
 
     os.makedirs(f"{dir_name}/viz/", exist_ok=True)
@@ -887,25 +1017,27 @@ if __name__ == "__main__":
         s_ic = lambda X: pde_model.s0(X[:,:-1])
 
         if args.enable_testing:
-            plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-            plotter.add_vector_fn(model_fn_s, "model_s(x,t)")
-            plotter.add_vector_fn(score_sde_model.s_analytic, "s_analytic(x,t)")
-            plotter.add_vector_fn(lambda X: model_fn_s(X) - score_sde_model.s_analytic(X), "err")
+            plotter = viz.FunctionPlotter(**options)
+            plotter.add_panel('model_s', title="model_s(x,t)").quiver(model_fn_s)
+            plotter.add_panel('s_analytic', title="s_analytic(x,t)").quiver(score_sde_model.s_analytic)
+            plotter.add_panel('err', title="err").quiver(lambda X: model_fn_s(X) - score_sde_model.s_analytic(X))
             plotter.save_animation(f'{dir_name}/viz/anim_model_s_vs_s_analytic.gif', num_frames=30, fps=5)
 
-        plotter_ic = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter_ic.add_vector_fn(model_fn_s, "model_s(x,0)")
-        plotter_ic.add_vector_fn(model_fn_s, "s_0(x)")
-        plotter_ic.save_plot(f'{dir_name}/viz/plot_model_s_vs_s0.png', t_val = 0.0)
+        plotter_ic = viz.FunctionPlotter(**options)
+        plotter_ic.add_panel('nn', rf"s_\theta(x,0)").quiver(model_fn_s)
+        plotter_ic.add_panel('ic', "s_0(x)").quiver(s_ic)
+        plotter_ic.add_panel('err', "err(x)").quiver(lambda X: model_fn_s(X) - s_ic(X))
+        plotter_ic.save_plot(f'{dir_name}/viz/plot_s_nn_vs_s0.png', t_val=0.0, cbar={"nn": "linked:ic", "err": "linked:ic"})
 
-        plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter.add_vector_fn(model_fn_s, "model_s(x,t)")
-        plotter.save_animation(f'{dir_name}/viz/anim_model_s.gif', num_frames=30, fps=5)
+        plotter = viz.FunctionPlotter(**options)
+        plotter.add_panel('nn', "s_nn(x,t)").quiver(model_fn_s)
+        plotter.save_animation(f'{dir_name}/viz/anim_s_nn_fixed.gif', cbar='fixed', num_frames=30, fps=5)
+        plotter.save_animation(f'{dir_name}/viz/anim_s_nn_dynamic.gif', cbar='dynamic', num_frames=30, fps=5)
 
-        plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter.add_scalar_fn(p_ic, "p_0(x)")
-        plotter.add_scalar_fn(p_final, "p_T(x)")
-        plotter.save_plot(f'{dir_name}/viz/plot_p0_vs_pT.png', t_val = 0.0)
+        plotter = viz.FunctionPlotter(**options)
+        plotter.add_panel('ic', title="p_0(x)").heatmap(p_ic)
+        plotter.add_panel('final', title="p_inf(x)").heatmap(p_inf)
+        plotter.save_plot(f'{dir_name}/viz/plot_p0_vs_p_inf.png', t_val=0.0)
 
     elif type_sp == "ll_ode":
         model_fn_q = viz.wrapp_model(model)
@@ -915,40 +1047,43 @@ if __name__ == "__main__":
 
         if args.enable_testing:
 
-            plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-            plotter.add_scalar_fn(model_fn_q, "model_q(x,t)")
-            plotter.add_scalar_fn(score_sde_model.q_analytic, "q_analytic(x,t)")
-            plotter.add_scalar_fn(lambda X: model_fn_q(X) - score_sde_model.q_analytic(X), "err")
-            plotter.save_plot(f'{dir_name}/viz/plot_model_q_vs_q_analytic.png', t_val = 0.234)
+            plotter = viz.FunctionPlotter(**options)
+            plotter.add_panel('model_q', title="model_q(x,t)").heatmap(model_fn_q)
+            plotter.add_panel('q_analytic', title="q_analytic(x,t)").heatmap(score_sde_model.q_analytic)
+            plotter.add_panel('err', title="err").heatmap(lambda X: model_fn_q(X) - score_sde_model.q_analytic(X))
+            plotter.save_plot(f'{dir_name}/viz/plot_model_q_vs_q_analytic.png', t_val=0.234)
             plotter.save_animation(f'{dir_name}/viz/anim_model_q_vs_q_analytic.gif', num_frames=30, fps=5)
 
-            plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-            plotter.add_scalar_fn(model_fn_p, "model_p(x,t)")
-            plotter.add_scalar_fn(score_sde_model.p_analytic, "p_analytic(x,t)")
-            plotter.add_scalar_fn(lambda X: model_fn_p(X) - score_sde_model.p_analytic(X), "err")
-            plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p_analytic.png', t_val = 0.234)
+            plotter = viz.FunctionPlotter(**options)
+            plotter.add_panel('model_p', title="model_p(x,t)").heatmap(model_fn_p)
+            plotter.add_panel('p_analytic', title="p_analytic(x,t)").heatmap(score_sde_model.p_analytic)
+            plotter.add_panel('err', title="err").heatmap(lambda X: model_fn_p(X) - score_sde_model.p_analytic(X))
+            plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p_analytic.png', t_val=0.234)
             plotter.save_animation(f'{dir_name}/viz/anim_model_p_vs_p_analytic.gif', num_frames=30, fps=5)
 
+        plotter = viz.FunctionPlotter(**options)
+        plotter.add_panel('model_q', title="model_q(x,0)").heatmap(model_fn_q)
+        plotter.add_panel('q_ic', title="q_0(x)").heatmap(q_ic)
+        plotter.save_plot(f'{dir_name}/viz/plot_model_q_vs_q0.png', t_val=0.0)
 
-        plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter.add_scalar_fn(model_fn_q, "model_q(x,0)")
-        plotter.add_scalar_fn(q_ic, "q_0(x)")
-        plotter.save_plot(f'{dir_name}/viz/plot_model_q_vs_q0.png', t_val = 0.0)
+        plotter = viz.FunctionPlotter(**options)
+        plotter.add_panel('model_p', title="model_p(x,0) = exp(model_q(x,0))").heatmap(model_fn_p)
+        plotter.add_panel('p_ic', title="p_0(x)").heatmap(p_ic)
+        plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p0.png', t_val=0.0)
 
-        plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter.add_scalar_fn(model_fn_p, "model_p(x,0) = exp(model_q(x,0))")
-        plotter.add_scalar_fn(p_ic, "p_0(x)")
-        plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p0.png', t_val = 0.0)
-
-        plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter.add_scalar_fn(model_fn_q, "model_q(x,t)")
+        plotter = viz.FunctionPlotter(**options)
+        plotter.add_panel('model_q', title="model_q(x,t)").heatmap(model_fn_q)
         plotter.save_animation(f'{dir_name}/viz/anim_model_q.gif', num_frames=30, fps=5)
 
-        plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter.add_scalar_fn(model_fn_p, "model_p(x,t) = exp(model_q(x,t))")
+        plotter = viz.FunctionPlotter(**options)
+        plotter.add_panel('model_p', title="model_p(x,t) = exp(model_q(x,t))").heatmap(model_fn_p)
         plotter.save_animation(f'{dir_name}/viz/anim_model_p.gif', num_frames=30, fps=5)
 
-        plotter = viz.FunctionPlotter(d=d, device=device, fixed_dims_vals=0.5*torch.ones(d))
-        plotter.add_vector_fn(model_fn_s, "model_s & model_q", scalar_fn=model_fn_q)
-        plotter.add_vector_fn(model_fn_s, "model_s & model_p", scalar_fn=model_fn_p)
+        plotter = viz.FunctionPlotter(**options)
+        p = plotter.add_panel('sq', title="model_s & model_q")
+        p.heatmap(model_fn_q)
+        p.quiver(model_fn_s, color='k')
+        p = plotter.add_panel('sp', title="model_s & model_p")
+        p.heatmap(model_fn_p)
+        p.quiver(model_fn_s, color='k')
         plotter.save_animation(f'{dir_name}/viz/anim_model_sq_sp.gif', num_frames=30, fps=5)
