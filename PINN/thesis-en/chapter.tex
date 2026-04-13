@@ -176,11 +176,13 @@ physics-informed - PDE in the loss function
 
 crutial in high dim:
 
+- problem formulation
+
 - sampling strategies
 
-- parallelization
+- computing gradients - AD
 
-- computing gradients
+- parallelization ?
 
 
 \section{Grid search}
@@ -213,7 +215,7 @@ b) approx the laplace SDGD, Hutchinson
 c) adapting weighting schemes for residual weights $\lambda$
 d) other
 
-\subsection{a) Sampling strategies}
+\subsection{Domain sampling strategies}
 
 \subsubsection{Latin hypercube sampling}
 In high dimensions, uniform sampling becomes inefficient as it can leave large parts of the domain unsampled, and thus miss key regions.
@@ -223,35 +225,38 @@ In multi dimensional domains, 1-dimensional samples are generated independently 
 
 \subsubsection{Residual-based adaptive sampling}
 The training can be made even more efficient by concentrainng on regions where the networks struggles the most.
-Concretely, the doimain can be sampled proportianally to the residual.
-The stragegy is a follows:
-\begin{itemize}
-\item at the beggining of the trainging sample a fixed set of points $X$
-\item every K epochs:
+
+One frequently used approach is to adaptively sample the domain proportianally to the value of the residual.
+The strategy is a follows:
+\begin{enumerate}
+\item before the training, sampled a fixed set of points $X$
+\item every $K$ epochs:
+\begin{enumerate}
 \item sample a large pools of candidates points $X_{cand}$
 \item evaluate the residual at $X_{cand}$
-\item pick n point from $X_{cand}$ with with probability proportial to the residual
+\item pick $n$ points from $X_{cand}$ with probability proportial to the residual
+\end{enumerate}
 \item update $X$ with thus selected points
-\end{itemize}
+\end{enumerate}
 
-\subsubsection{Langevin dynamics - TD}
-(NeurIPS 2025)
-sample the domain
-treat point movements as langevin dynamics 
-- add noise
-- movements based on residual forces
+%\subsubsection{Langevin dynamics - TD}
+%(NeurIPS 2025)
+%sample the domain
+%treat point movements as langevin dynamics 
+%- add noise
+%- movements based on residual forces
+%
+%\subsubsection{TD}
+%sample using LHC up front - 10,000 - 100,000, bc and ic = pde / 10
+%n epochs = 10,000 - 20,000
+%new sample every 500 epochs
+%    - entire new LHC sample, or
+%    - entire new LHC sample based on residuum (RAR / RAD-distribution)
+%also can try: RAR-D (RAR + Distribution):
+%    - keep top 30percent of highest-residual points, resample the rest with RAD weights.
+%
 
-\subsubsection{TD}
-sample using LHC up front - 10,000 - 100,000, bc and ic = pde / 10
-n epochs = 10,000 - 20,000
-new sample every 500 epochs
-    - entire new LHC sample, or
-    - entire new LHC sample based on residuum (RAR / RAD-distribution)
-also can try: RAR-D (RAR + Distribution):
-    - keep top 30percent of highest-residual points, resample the rest with RAD weights.
-
-
-\subsection{b) Apprixamating the hessian computation}
+\subsection{Appoximating the spatial derivatives}
 
 \subsubsection{Stochastic Dimension Gradient Descent (SDGD)}
 % https://arxiv.org/html/2307.12306v5#S3
@@ -341,7 +346,7 @@ $$
 
 \subsubsection{Hutchinson trace estimation (HTE)}
 % https://arxiv.org/html/2312.14499v2#S3
-Consider symetric positive semidefinite matrix $A\in\mathbb{R}^{n\times n}$.
+Consider a symetric positive semidefinite matrix $A\in\mathbb{R}^{n\times n}$.
 The trace of $A$ can be approximated as an expectation
 $$
 tr(A) = \mathbb{E}_{v\sim\rho}[v^T A v]
@@ -349,8 +354,14 @@ $$
 where $v$ is a random vector satisfying $\mathbb{E}_{v\sim\rho}[vv^T] = I$.
 The distribution $\rho$ can be chosen as normal.
 However, Hutchinson's original paper, and now the standard choice, is a Rademacher distribution, where the entries of a vector $v$ are chosen as $\pm 1$ with probability $\frac{1}{2}$.
+
 The Rademacher distribution is the prefered choice as it gives an optimal variance of this estimator.
-Requires a relatively few samples (on the order of 10s 100s) to converge to within 0.1, 0.01.
+It also requires a relatively few samples, on the order of 10s, 100s, to converge to within a relative error of 0.1, 0.01 respectively.
+
+In the context of PINNs, we can take $A = \text{Hess}(u) := \frac{\partial^2 u}{\partial x_i \partial x_j}$,
+and by approximating $tr(A)$, we get an approximation for $\Delta u$.
+
+
 % variance
 % 1 https://claude.ai/share/4af41507-635c-43b2-8a24-df228ff808fb
 % variance odvozeni:
@@ -366,7 +377,7 @@ Requires a relatively few samples (on the order of 10s 100s) to converge to with
 % Var(v^T A\,v) = 2||A||_F^2 - 2\sum_i A_{ii}^2
 % $$
 
-\subsection{c) Loss weighting}
+\subsection{Loss weighting}
 
 Grad Norm
 - compute grad of norms of loss
@@ -377,7 +388,7 @@ SoftAdapt
 % https://github.com/levimcclenny/SA-PINNs
 - learnable attention params
 
-\subsubsection{Causal weighting}
+\subsection{Causal weighting}
 % Wang et al., "Respecting Causality is All You Need" / experts guide
 
 When training PINNs on time-dependent PDEs, the optimizer minimizes the residual over all time steps simultaneously.
@@ -410,7 +421,8 @@ Note that the weights $w_m$ are computed from the \emph{detached} (non-different
 This ensures that the causal mechanism acts as a curriculum schedule rather than altering the gradient landscape.
 
 
-\subsection{d) Problem specific technique - Capturing physics}
+
+\subsection{Problem specific technique - Capturing physics}
 add additional residuals capturing the physics
 - symmetries, energy conserv, ...
 
@@ -432,13 +444,13 @@ symmetry into the loss function, improving t
 exp(NN) -> u > 0 (prob)
 
 
+
+
+\subsection{Other}
+
 \subsubsection{Hard constrains}
 architectuary enforce IC and BC - nn then need to learn only the pde
 % https://arxiv.org/html/2404.16189v3#:~:text=as%20the%20IC%20data%20is,We%20consider%20the%20following%20transformation
-
-
-
-\subsection{e) Other}
 
 weight intialization (Glorot)
 
@@ -517,13 +529,6 @@ PDE separable? -> sum of product of 1d networks
 
 \subsection{my genious ideas TD}
 - have 3 networks - each focused on different frequency signals
-
-
-
-
-
-
-
 
 
 
