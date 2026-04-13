@@ -8,7 +8,7 @@ parser.add_argument("--description", default="", type=str, help="Smthg to help i
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--d", default=2, type=int, help="Number of spatial dimensions.")
 parser.add_argument("--layers", default="148,148,148", type=str, help="")
-parser.add_argument("--n_steps", default=950, type=int, help="")
+parser.add_argument("--n_steps", default=450, type=int, help="")
 parser.add_argument("--n_steps_decay", default=2000, type=int, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--gamma", default=0.9, type=float, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--lr", default=1e-3, type=float, help="")
@@ -51,11 +51,12 @@ parser.add_argument("--starting_model", default=None, type=str, help="")
 
 
 class PINN_Trainer:
-    def __init__(self, model, optimizer, scheduler, pde_model, loss_weighting, testing_suite, profiler=None, device='cpu'):
+    def __init__(self, model, optimizer, scheduler, pde_model, sampling, loss_weighting, testing_suite, profiler=None, device='cpu'):
         self.model = model
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.pde_model = pde_model
+        self.sampling = sampling
         self.loss_weighting = loss_weighting
         self.profiler = profiler
         self.testing_suite = testing_suite
@@ -79,6 +80,10 @@ class PINN_Trainer:
                 loss_pde = self.pde_model.pde_loss(batch_pde[0], self.model, batch_pde[1])
             loss_bc = self.pde_model.bc_loss(batch_bc[0], self.model, batch_bc[1])
             loss_ic = self.pde_model.ic_loss(batch_ic[0], self.model, batch_ic[1])
+
+            #loss_pde = torch.tensor(0.0)
+            #loss_bc = torch.tensor(0.0)
+            #loss_ic = torch.tensor(0.0)
 
         # Weighted loss
         loss_value = self.loss_weighting.weight_loss([loss_pde, loss_bc, loss_ic])
@@ -193,7 +198,7 @@ class PINN_Trainer:
 
 
 
-    def train_adam_minibatch(self, bs, n_steps, n_steps_decay, n_calloc_points, resampling_frequency=2000, testing_frequency=100, use_rbas=False, use_sdgd=False, sdgd_num_dims=None):
+    def train_adam_minibatch(self, n_steps, n_steps_decay, resampling_frequency=2000, testing_frequency=100, use_sdgd=False, sdgd_num_dims=None):
         """
         Train the model using Adam optimizer.
         """
@@ -202,15 +207,15 @@ class PINN_Trainer:
 
         if self.profiler: self.profiler.make()
 
-        # batches 
-        loader_interior, loader_bc, loader_ic = sampling.create_dataloaders(self.d, n_calloc_points, bs, self.model, self.pde_model)
+        # batches
+        loader_interior, loader_bc, loader_ic = sampling.create_dataloaders(self.model, self.pde_model, **self.sampling)
 
         for si in range(n_steps):
 
             if (si + 1) % resampling_frequency == 0:
                 ## Resample training data
                 print("New training data arrived!")
-                loader_interior, loader_bc, loader_ic = sampling.create_dataloaders(self.d, n_calloc_points, bs, self.model, self.pde_model, use_rbas=use_rbas)
+                loader_interior, loader_bc, loader_ic = sampling.create_dataloaders(self.model, self.pde_model, **self.sampling)
     
             # Start profiler context
             if self.profiler: self.profiler.start(si)
@@ -436,9 +441,9 @@ if __name__ == "__main__":
     if args.starting_model:
         model = torch.load(args.starting_model, weights_only=False)
     else:
-        #head_fn = utility.identity_fn
+        head_fn = utility.identity_fn
         #head_fn = lambda X: torch.exp(-X)
-        head_fn = torch.nn.Softplus()
+        #head_fn = torch.nn.Softplus()
         model = architecture.PINN(D, layers, head_fn=head_fn).to(device)
         #model = PINN_SeparableTimes(D, layers).to(device)
         #model = PINN_SepTime(D, layers).to(device)
@@ -479,16 +484,23 @@ if __name__ == "__main__":
             testing_suite = utility.TestingSuite(d)
             testing_suite.make_test_data(pde_model, args.n_test_calloc_points, f"{dir_name}/testing_data.pt")
             #testing_suite.connect_test_data(f"{dir_name}/testing_data.pt")
-        trainer = PINN_Trainer(model, optimizer, scheduler, pde_model, loss_weighting, testing_suite, profiler, device)
+        
+        L = 3.0
+        spatial_domain = torch.stack([torch.full((d,), -L), torch.full((d,), L)], dim=1)
+        sampling_cfg = {
+            "num_colloc": args.n_calloc_points,
+            "bs": args.bs,
+            "spatial_domain": spatial_domain,
+            "T": 1.5,
+            "use_rbas": args.use_rbas,
+        }
+        trainer = PINN_Trainer(model, optimizer, scheduler, pde_model, sampling_cfg, loss_weighting, testing_suite, profiler, device)
         losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
         #losses_adam, l2_errs_adam = trainer.train_adam_fullbatch(
-            bs=args.bs,
             n_steps=args.n_steps,
             n_steps_decay=args.n_steps_decay,
-            n_calloc_points=args.n_calloc_points,
             resampling_frequency=args.resampling_frequency,
             testing_frequency=args.testing_frequency,
-            use_rbas=args.use_rbas,
             use_sdgd=args.use_sdgd,
             sdgd_num_dims=sdgd_num_dims,
         )
@@ -560,8 +572,8 @@ if __name__ == "__main__":
         "plot_dims": [0,1],
         "fixed_dims_vals": 0.5*torch.ones(d),
         "device": device,
-        "x_start": -3.0,
-        "x_end": 3.0,
+        "x_start": -L,
+        "x_end": L,
     }
 
     os.makedirs(f"{dir_name}/viz/", exist_ok=True)
@@ -577,7 +589,8 @@ if __name__ == "__main__":
     plotter.add_panel('model', title="p_theta(x)").heatmap(model_fn)
     plotter.add_panel('ic', title="p_0(x)").heatmap(p_ic)
     plotter.add_panel('err', title="err").heatmap(lambda X: model_fn(X) - p_ic(X))
-    plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p0.png', t_val=0.0, cbar={"model": "linked:ic", "err": "linked:ic"})
+    plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p0_lnk.png', t_val=0.0, cbar={"model": "linked:ic", "err": "linked:ic"})
+    plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p0_dyn.png', t_val=0.0, cbar='dynamic')
 
     plotter = viz.FunctionPlotter(**options)
     plotter.add_panel('model_p', title="p_nn").heatmap(model_fn)

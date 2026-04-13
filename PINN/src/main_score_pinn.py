@@ -7,24 +7,25 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--description", default="", type=str, help="Smthg to help identify it in grid search.")
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--d", default=2, type=int, help="Number of spatial dimensions.")
-parser.add_argument("--layers", default="128,128,128", type=str, help="")
-parser.add_argument("--n_steps", default=1000, type=int, help="")
+parser.add_argument("--layers", default="148,148,148", type=str, help="")
+parser.add_argument("--n_steps", default=450, type=int, help="")
 parser.add_argument("--n_steps_decay", default=2000, type=int, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--gamma", default=0.9, type=float, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--lr", default=1e-3, type=float, help="")
-parser.add_argument("--bs", default=512, type=int, help="")
+parser.add_argument("--bs", default=1024, type=int, help="")
 
 parser.add_argument("--n_res_points", default=10_000, type=int, help="")
 parser.add_argument("--n_trajs", default=1_000, type=int, help="")
 parser.add_argument("--nt_steps", default=100, type=int, help="")
-parser.add_argument("--T", default=1.0, type=float, help="")
+parser.add_argument("--T", default=1.5, type=float, help="")
 
-parser.add_argument("--n_test_points", default=5_000, type=int, help="Number of test points for the testing suite.")
+parser.add_argument("--n_test_points", default=10_000, type=int, help="Number of test points for the testing suite.")
 parser.add_argument("--testing_frequency", default=100, type=int, help="")
 parser.add_argument("--enable_testing", action="store_true", help="Compute L2/L1/rel errors during training (requires analytic solution).")
 
-parser.add_argument("--resampling_frequency", default=2000, type=int, help="")
+parser.add_argument("--resampling_frequency", default=500, type=int, help="")
 parser.add_argument("--lambda_pde", default=1.0, type=float, help="")
+parser.add_argument("--lambda_bc", default=10.0, type=float, help="")
 parser.add_argument("--lambda_ic", default=10.0, type=float, help="")
 parser.add_argument("--use_adaptive_weights", action="store_true", help="Loss weighting.")
 parser.add_argument("--use_rbas", action="store_true", help="Residual-based adaptive sampling")
@@ -34,7 +35,7 @@ parser.add_argument("--sdgd_num_dims", default=None, type=int, help="Number of d
 parser.add_argument("--output_dir", default="run_score_pinn_latest/", type=str, help="")
 parser.add_argument("--clear_dir", action="store_true", help="Erase contents of the output_dir before the training starts.")
 
-parser.add_argument("--mode", default="score_pde", type=str, help="")
+parser.add_argument("--mode", default="score_pde", type=str, help="score_pde or ll_ode")
 #
 parser.add_argument("--enable_profiler", action="store_true", help="")
 parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
@@ -447,6 +448,9 @@ class SmoluchowskiGeneral:
             assert L.shape == (X.shape[0], 1)
             residual = s_t - derivatives.compute_grad(X, L, torch.ones_like(L))[:,:-1]
             return residual
+        def bc_residual(self, X, model_s, precomputed):
+            n = precomputed["normals"]
+            return ( ( 1/self.beta * model_s(X) + self.V_grad(X[:,:-1]) ) * n ).sum(dim=1).unsqueeze(dim=1)
         def ic_residual(self, X, model_s, precomputed):
             return model_s(X) - precomputed["s0"]
         def __term_loss(self, d_dim_residual):
@@ -455,12 +459,15 @@ class SmoluchowskiGeneral:
         def pde_loss(self, X, model_s, precomputed):
             res = self.pde_residual(X, model_s, precomputed)
             return self.__term_loss(res)
+        def bc_loss(self, X, model_s, precomputed):
+            return torch.mean(self.bc_residual(X, model_s, precomputed)**2)
         def ic_loss(self, X, model_s, precomputed):
             res = self.ic_residual(X, model_s, precomputed)
             return self.__term_loss(res)
-        def precompute(self, X_pde, X_ic):
+        def precompute(self, X_pde, X_bc, X_ic):
             return {
                 "pde": self._precompute_V_grad_V_laplace(X_pde),
+                "bc": {},
                 "ic": {
                     "s0": self.s0(X_ic[:,:-1]).detach()
                 },
@@ -480,17 +487,26 @@ class SmoluchowskiGeneral:
             q = model_q(X)
             q_t = derivatives.compute_grad(X, q, torch.ones_like(q))[:,-1:]
             return q_t - precomputed["L"]
+        def bc_residual(self, X, model_q, precomputed):
+            n = precomputed["normals"]
+            X = X.detach().requires_grad_(True)
+            _, grad_q, _ = derivatives.compute_derivatives(model_q, X, compute_laplace=False)
+            return ( ( 1/self.beta * grad_q[:,:-1] + self.V_grad(X[:,:-1]) ) * n ).sum(dim=1).unsqueeze(dim=1)
+        def ic_residual(self, X, model_q, precomputed):
+            return model_q(X) - precomputed["q0"]
         def pde_loss(self, X, model_q, precomputed):
             res = self.pde_residual(X, model_q, precomputed)
             loss = torch.mean(res**2)
             return loss
-        def ic_residual(self, X, model_q, precomputed):
-            return model_q(X) - precomputed["q0"]
+        def bc_loss(self, X, model_q, precomputed):
+            res = self.bc_residual(X, model_q, precomputed)
+            loss = torch.mean(res**2)
+            return loss
         def ic_loss(self, X, model_q, precomputed):
             res = self.ic_residual(X, model_q, precomputed)
             loss = torch.mean(res**2)
             return loss
-        def precompute(self, X_pde, X_ic):
+        def precompute(self, X_pde, X_bc, X_ic):
             X_pde.detach()
             X_pde.requires_grad_(True)
             s, _, s_div = sp_derivatives.compute_score_dt_div(self.model_s, X_pde)
@@ -499,6 +515,7 @@ class SmoluchowskiGeneral:
                 "pde": {
                     "L": L.detach()
                 },
+                "bc": {},
                 "ic": {
                     "q0": self.q0(X_ic[:,:-1]).detach()
                 },
@@ -713,7 +730,7 @@ class ScorePINN_Trainer:
         self.device = device
         self.d = self.pde_model.d
 
-    def train_adam_step(self, batch_pde, batch_ic, use_sdgd=False, sdgd_num_dims=None):
+    def train_adam_step(self, batch_pde, batch_bc, batch_ic, use_sdgd=False, sdgd_num_dims=None):
         """
         Train a single step of the model.
         """
@@ -726,10 +743,11 @@ class ScorePINN_Trainer:
                 pass
             else:
                 loss_pde = self.pde_model.pde_loss(batch_pde[0], self.model, batch_pde[1])
+            loss_bc = self.pde_model.bc_loss(batch_bc[0], self.model, batch_bc[1])
             loss_ic = self.pde_model.ic_loss(batch_ic[0], self.model, batch_ic[1])
 
         # Weighted loss
-        loss_value = self.loss_weighting.weight_loss([loss_pde, loss_ic])
+        loss_value = self.loss_weighting.weight_loss([loss_pde, loss_bc, loss_ic])
 
         # Backward pass
         with record_function("backward"):
@@ -739,7 +757,7 @@ class ScorePINN_Trainer:
         with record_function("optimizer_step"):
             self.optimizer.step()
 
-        return loss_value, (loss_pde.item(), loss_ic.item())
+        return loss_value, (loss_pde.item(), loss_bc.item(), loss_ic.item())
     
 
 
@@ -754,7 +772,7 @@ class ScorePINN_Trainer:
 
         # batches
         #loader_interior, loader_ic = sp_sampling.create_dataloaders(self.d, self.model_s, n_trajs, nt_steps, n_res_points, bs, self.model, self.pde_model)
-        loader_interior, loader_ic = sp_sampling.create_dataloaders(self.model, self.pde_model, **self.sampling)
+        loader_interior, loader_bc, loader_ic = sp_sampling.create_dataloaders(self.model, self.pde_model, **self.sampling)
 
         for si in range(n_steps):
 
@@ -762,15 +780,15 @@ class ScorePINN_Trainer:
                 ## Resample training data
                 print("New training data arrived!")
                 #loader_interior, loader_ic = sp_sampling.create_dataloaders(self.d, self.model_s, n_trajs, nt_steps, n_res_points, bs, self.model, self.pde_model)
-                loader_interior, loader_ic = sp_sampling.create_dataloaders(self.model, self.pde_model, **self.sampling)
+                loader_interior, loader_bc, loader_ic = sp_sampling.create_dataloaders(self.model, self.pde_model, **self.sampling)
     
             # Start profiler context
             if self.profiler: self.profiler.start(si)
         
             # 1. all barches per step
-            batch_iterator = zip(loader_interior, loader_ic)
-            for batch_pde, batch_ic in batch_iterator:
-                loss_value, (loss_pde, loss_ic) = self.train_adam_step(batch_pde, batch_ic, use_sdgd=use_sdgd, sdgd_num_dims=sdgd_num_dims)
+            batch_iterator = zip(loader_interior, loader_bc, loader_ic)
+            for batch_pde, batch_bc, batch_ic in batch_iterator:
+                loss_value, (loss_pde, loss_bc, loss_ic) = self.train_adam_step(batch_pde, batch_bc, batch_ic, use_sdgd=use_sdgd, sdgd_num_dims=sdgd_num_dims)
             losses.append(loss_value.item())
 
             ## 1. variant: single batch per step
@@ -792,6 +810,7 @@ class ScorePINN_Trainer:
             if (si + 1) % testing_frequency == 0:
                 log = (f'Step {si+1}/{n_steps}, Loss: {loss_value.item():.6f}, '
                        f'PDE: {loss_pde:.6f}, '
+                       f'BC: {loss_bc:.6f}, '
                        f'IC: {loss_ic:.6f}, '
                        f'lr: {self.optimizer.param_groups[0]["lr"]:.6f}')
                 if self.testing_suite is not None:
@@ -825,9 +844,9 @@ if __name__ == "__main__":
     print(f"Domain: [0,1]^{d} x [0,1]")
     print(f"{'='*60}\n")
 
-    type_sp = "score_pde"
-    type_sp = "ll_ode"
-    #type_sp = args.mode
+    #type_sp = "score_pde"
+    #type_sp = "ll_ode"
+    type_sp = args.mode
     print(f"Training Score-PINN, type: '{type_sp}'\n")
 
     sde_model_label = 'DW'
@@ -914,9 +933,9 @@ if __name__ == "__main__":
 
     # Initialize loss weighting and profiler
     if args.use_adaptive_weights:
-        loss_weighting = loss.AdaptiveWeights(weights=torch.tensor([args.lambda_pde, args.lambda_ic]))
+        loss_weighting = loss.AdaptiveWeights(weights=torch.tensor([args.lambda_pde, args.lambda_bc, args.lambda_ic]))
     else:
-        loss_weighting = loss.ConstantWeights(weights=[args.lambda_pde, args.lambda_ic])
+        loss_weighting = loss.ConstantWeights(weights=[args.lambda_pde, args.lambda_bc, args.lambda_ic])
 
     profiler = utility.Profiler(report_filename=f"{dir_name}/{args.profiler_report_filename}.txt", start_step=100, end_step=110) if args.enable_profiler else None
 
@@ -939,12 +958,14 @@ if __name__ == "__main__":
     else:
         testing_suite = None
 
+    L = 7.0
     sampling = {
         "n_trajs": args.n_trajs,
         "nt_steps": args.nt_steps,
-        "T": args.T,
         "n_res_points": args.n_res_points,
         "bs": args.bs,
+        "spatial_domain": torch.stack([torch.full((d,), -L), torch.full((d,), L)], dim=1),
+        "T": args.T,
     }
     # use_rbas??
 
@@ -1005,8 +1026,8 @@ if __name__ == "__main__":
         "plot_dims": [0,1],
         "fixed_dims_vals": 0.5*torch.ones(d),
         "device": device,
-        "x_start": -3.0,
-        "x_end": 3.0,
+        "x_start": -L,
+        "x_end": L,
     }
 
 

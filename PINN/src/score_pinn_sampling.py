@@ -192,7 +192,9 @@ def residual_based_adaptive_sampling(X_cand, residual_fn, model, n_new=1000, pic
 
 import sampling
 from torch.utils.data import DataLoader
-def create_dataloaders(model, pde_model, n_res_points=10_000, bs=1_000, n_trajs=100, T=1.0, nt_steps=100):
+def create_dataloaders(model, pde_model, n_res_points=10_000, bs=1_000, n_trajs=100, T=1.0, nt_steps=100, spatial_domain=None):
+    d = pde_model.d
+
     n_cycles = n_res_points // bs
     bs_segment_size = bs // 16
     bs_pde = bs_segment_size * 14
@@ -226,22 +228,25 @@ def create_dataloaders(model, pde_model, n_res_points=10_000, bs=1_000, n_trajs=
         ), dim=1
     )
 
-    X_boundary, _ = sampling.sample_bc(n_boundary, d, sampling_strategy='lhs', device=device)
-    #X_pde, X_bc, X_ic = sampling.sample_collocation_points(d, n_interior, n_boundary, n_initial, sampling_strategy='lhs', device=device)
-    #X_pde[:,:-1] = 4.0 * X_pde[:,:-1] - 2.0
-    #X_bc[:,:-1] = 4.0 * X_bc[:,:-1] - 2.0
-    #X_ic[:,:-1] = 4.0 * X_ic[:,:-1] - 2.0
-    #X_pde[:,-1:] *= 1.5
-    #X_bc[:,-1:] *= 1.5
+    X_bc, normals_bc = sampling.sample_bc(n_boundary, d, sampling_strategy='lhs', device=x0.device)
+
+    if spatial_domain is not None:
+        lo = spatial_domain[:, 0]
+        hi = spatial_domain[:, 1]
+        # Map [0,1]^d -> [lo, hi]^d spatial, [0,1] -> [0, T] temporal
+        X_bc[:,:-1] = lo + (hi - lo) * X_bc[:,:-1]
+    X_bc[:,-1:] *= T
 
 
-    precomputed = pde_model.precompute(X_pde, X_ic)
+    precomputed = pde_model.precompute(X_pde, X_bc, X_ic)
+    precomputed["bc"]["normals"] = normals_bc
 
     # TD: change bs here to bs_pde, bs_ic:
     loader_pde  = DataLoader(sampling.CollocationDataset(X_pde, precomputed["pde"]), batch_size=bs_pde, shuffle=True)
+    loader_bc  = DataLoader(sampling.CollocationDataset(X_bc, precomputed["bc"]), batch_size=bs_bc, shuffle=True)
     loader_ic  = DataLoader(sampling.CollocationDataset(X_ic, precomputed["ic"]), batch_size=bs_ic, shuffle=True)
 
-    return loader_pde, loader_ic
+    return loader_pde, loader_bc, loader_ic
 
 
 # -------------------------------------------------------------------------

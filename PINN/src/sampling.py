@@ -191,10 +191,14 @@ class CollocationDataset(torch.utils.data.Dataset):
 
 
 from torch.utils.data import TensorDataset, DataLoader
-def create_dataloaders(d, num_colloc, bs, model, pde_model, use_rbas=False, sampling_strategy="lhs", device="cpu"):
-    # bs = 1024...
+def create_dataloaders(model, pde_model, num_colloc=10_000, bs=1_000, spatial_domain=None, T=1.0, use_rbas=False, sampling_strategy="lhs", device="cpu"):
+    """
+    spatial_domain: tensor of shape (d, 2) with [lo, hi] per dimension. Default: [0, 1]^d.
+    T: temporal domain upper bound (time runs from 0 to T). Default: 1.0.
+    """
+    d = pde_model.d
+
     n_cycles = num_colloc // bs
-    #num_colloc = bs * n_cycles
     bs_segment_size = bs // 16
     bs_pde = bs_segment_size * 14
     bs_bc  = bs_segment_size
@@ -218,11 +222,17 @@ def create_dataloaders(d, num_colloc, bs, model, pde_model, use_rbas=False, samp
         ], dim=0)
     else:
         X_pde, X_bc, X_ic, normals_bc = sample_collocation_points(d, n_interior, n_boundary, n_initial, sampling_strategy=sampling_strategy, device=device)
-    X_pde[:,:-1] = 4.0 * X_pde[:,:-1] - 2.0
-    X_bc[:,:-1] = 4.0 * X_bc[:,:-1] - 2.0
-    X_ic[:,:-1] = 4.0 * X_ic[:,:-1] - 2.0
-    X_pde[:,-1:] *= 1.5
-    X_bc[:,-1:] *= 1.5
+
+
+    if spatial_domain is not None:
+        lo = spatial_domain[:, 0]
+        hi = spatial_domain[:, 1]
+        # Map [0,1]^d -> [lo, hi]^d spatial, [0,1] -> [0, T] temporal
+        for X in (X_pde, X_bc, X_ic):
+            X[:,:-1] = lo + (hi - lo) * X[:,:-1]
+
+    X_pde[:,-1:] *= T
+    X_bc[:,-1:] *= T
 
     # dict containing precomputed
     # precomputed = {"pde": {"V_grad": tensor, "V_laplace": tensor}, "ic": {"analytic": tensor}, "bc": {"V_grad": tensor}}
