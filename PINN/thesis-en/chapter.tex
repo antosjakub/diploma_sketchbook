@@ -256,32 +256,88 @@ also can try: RAR-D (RAR + Distribution):
 \subsubsection{Stochastic Dimension Gradient Descent (SDGD)}
 % https://arxiv.org/html/2307.12306v5#S3
 
-- approximates the full gradient of the physics loss by decomposing the PDE operator into dimension-wise terms
-and sampling subsets during training (enabling high-dimensional scalability)
+SDGD approximates the full gradient of the physics loss by decomposing the PDE operator into dimension-wise terms
+and sampling subsets during training, thus dramatically decreasing the memory requirements of AD and unlocking it applicability even in very high dimensions ($\sim 1000$).
+
+Consider a general PDE of the form:
+$$
+\mathcal{L}u(x) = R(x)
+$$
+where, $\mathcal{L}$ is a differential operator, for example,
 
 $$
-\nabla_\theta \ell(\theta) = \left( \sum_{i=1}^{N_L} \mathcal{L}_i u_\theta - R \right) \left( \sum_{i=1}^{N_L} \frac{\partial}{\partial \theta} \mathcal{L}_i u_\theta \right)
+\mathcal{L} = \sum_{i=1}^d\frac{\partial^2}{\partial x_i^2}
+$$
+$$
+\mathcal{L} = \sum_{i,j=1}^d\frac{\partial^2}{\partial x_i \partial x_j} + \sum_{i=1}^d a_i\frac{\partial}{\partial x_i}
 $$
 
-Sample index set $I \subset \{1, \dots, N_L\}$ with $|I| \ll N_L$; compute detached $\mathcal{L}_i u_\theta$ for all i (forward pass), but backpropagate only for $i \in I (memory O(|I|) vs. O(N_L))$.
-
-The unbiased estimator is
+In general, we can split the operator into $n$ independent parts $\mathcal{L} = \sum_{i=1}^n\mathcal{L}_i$.
+For the two examples given above, this could be
 $$
-\nabla_\theta \ell_I(\theta) = \frac{N_L}{|I|} \left( \sum_{i=1}^{N_L} \mathcal{L}_i u_\theta - R \right) \left( \sum_{i \in I} \frac{\partial}{\partial \theta} \mathcal{L}_i u_\theta \right), \quad \mathbb{E}_I [\nabla_\theta \ell_I] = \nabla_\theta \ell.
+\mathcal{L} = \sum_{i=1}^d \mathcal{L}_i
+\quad \text{where}\quad
+\mathcal{L}_i = \frac{\partial^2}{\partial x_i^2}
+\quad \text{and} \quad n=d
 $$
-For multiple points $\{\mathbf{x}_n\}_{n=1}^{N_r}$, normalize $\frac{1}{N_r N_L^2} \sum_n (\cdot)^2$; joint batches B over points, I over terms yield $g_{B,I}(\theta) = \frac{1}{|B| |I| N_L} \sum_{n \in B} (\sum_i \mathcal{L}_i u_\theta(\mathbf{x}_n) - R) \sum_{i \in I} \partial_\theta \mathcal{L}_i u_\theta(\mathbf{x}_n)$
+$$
+\mathcal{L} = \sum_{i,j=1}^d \mathcal{L}_{ij}
+\quad \text{where}\quad
+\mathcal{L}_{ij} = \frac{\partial^2}{\partial x_i\partial x_j} + \frac{a_i}{d} \frac{\partial}{\partial x_i}
+\quad \text{and} \quad n=d^2
+$$
 
-Unbiasedness: Proven via linearity of expectation.
+We can therefore in general write
+$$
+\sum_{i=1}^n\mathcal{L}_i u(x) = R(x)
+$$
 
-Variance: $V_{B,I}[g_{B,I}] = \frac{C_1}{|B|} + \frac{C_2}{|I|} + \frac{C_3}{|B| |I|}$, minimized under fixed memory $|B| \times |I|$ by balancing point/term variance (e.g., equal for comparable $C_1, C_2$).
+Now consider a PINN approximation $u_\theta \approx u$. 
+The pde loss can then be written in the form
 
-Bounded variance/convergence: Under smooth activations ($|\sigma^{(k)}| \leq 1$, Lipschitz), variance $O(h^{2n} N_L R^2 / |B| |I|)$ (h: width, n: order); SGD converges as $\mathcal{O}(1/\sqrt{T})$ with stepsize decay
+$$
+\ell_{pde}(\theta) 
+= \big( \mathcal{L} u_\theta(x) - R(x) \big)^2
+= \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(x) - R(x) \right)^2
+$$
 
-1. Sample I, compute/detach all $\mathcal{L}_i u_\theta$.
+And the corresponding gradient w.r.t. the model weights is then
 
-2. Backprop $i \in I$, form $\nabla_\theta \ell_I$.
+$$
+\nabla_\theta \ell_{pde}(\theta) = \nabla_\theta \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(x) - R(x) \right)^2
+= 2 \left( \sum_{i=1}^n \mathcal{L}_i u_\theta - R \right) \left( \sum_{i=1}^n \nabla_\theta \mathcal{L}_i u_\theta \right)
+$$
 
-3. Update $\theta \leftarrow \theta - \eta \nabla_\theta \ell_I$
+The SDGD framework proceeds now as follows:
+\begin{enumerate}
+\item sample index set $I \subset \{1, \dots, n\}$ with $|I| \ll n$
+\item compute detached $\mathcal{L}_i u_\theta$ for all $i$ (forward pass)
+\item backpropagate only for $i \in I$ (memory $O(|I|)$ vs. $O(n)$)
+\end{enumerate}
+
+The unbiased estimator is then
+$$
+\nabla_\theta \ell_{pde}^I(\theta) = 2\,\frac{n}{|I|} \left( \sum_{i=1}^n \mathcal{L}_i u_\theta - R \right) \left( \sum_{i \in I} \nabla_\theta \mathcal{L}_i u_\theta \right),
+\quad \mathbb{E}_I [\nabla_\theta \ell_{pde}^I] = \nabla_\theta \ell_{pde}
+$$
+
+
+%For multiple points $\{\mathbf{x}_n\}_{n=1}^{N_r}$, normalize $\frac{1}{N_r N_L^2} \sum_n (\cdot)^2$;
+%joint batches B over points,
+%I over terms yield $g_{B,I}(\theta) = \frac{1}{|B| |I| N_L} \sum_{n \in B} (\sum_i \mathcal{L}_i u_\theta(\mathbf{x}_n) - R) \sum_{i \in I} \partial_\theta \mathcal{L}_i u_\theta(\mathbf{x}_n)$
+%
+%Unbiasedness: Proven via linearity of expectation.
+%
+%Variance: $V_{B,I}[g_{B,I}] = \frac{C_1}{|B|} + \frac{C_2}{|I|} + \frac{C_3}{|B| |I|}$, minimized under fixed memory $|B| \times |I|$ by balancing point/term variance (e.g., equal for comparable $C_1, C_2$).
+%
+%Bounded variance/convergence: Under smooth activations ($|\sigma^{(k)}| \leq 1$, Lipschitz), variance $O(h^{2n} N_L R^2 / |B| |I|)$ (h: width, n: order); SGD converges as $\mathcal{O}(1/\sqrt{T})$ with stepsize decay
+%
+%1. Sample I, compute/detach all $\mathcal{L}_i u_\theta$.
+%
+%2. Backprop $i \in I$, form $\nabla_\theta \ell_I$.
+%
+%3. Update $\theta \leftarrow \theta - \eta \nabla_\theta \ell_I$
+
 
 \subsubsection{Hutchinson trace estimation (HTE)}
 % https://arxiv.org/html/2312.14499v2#S3
