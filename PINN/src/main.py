@@ -16,7 +16,7 @@ parser.add_argument("--n_calloc_points", default=10_000, type=int, help="")
 parser.add_argument("--n_test_calloc_points", default=10_000, type=int, help="")
 parser.add_argument("--testing_frequency", default=100, type=int, help="")
 parser.add_argument("--resampling_frequency", default=500, type=int, help="")
-parser.add_argument("--bs", default=1024, type=int, help="")
+parser.add_argument("--bs", default=512, type=int, help="")
 parser.add_argument("--lambda_pde", default=1.0, type=float, help="")
 parser.add_argument("--lambda_bc", default=10.0, type=float, help="")
 parser.add_argument("--lambda_ic", default=10.0, type=float, help="")
@@ -72,7 +72,7 @@ class PINN_Trainer:
 
         # Compute individual losses
         with record_function("loss"):
-            batch_pde[0].requires_grad = True
+            #batch_pde[0].requires_grad = True
             if use_sdgd:
                 loss_pde = loss.sdgd_loss(batch_pde[0], self.model, self.pde_model, batch_pde[1], sdgd_num_dims)
             else:
@@ -208,14 +208,15 @@ class PINN_Trainer:
         if self.profiler: self.profiler.make()
 
         # batches
-        loader_interior, loader_bc, loader_ic = sampling.create_dataloaders(self.model, self.pde_model, **self.sampling)
+        import score_pinn_sampling as sp_sampling
+        loader_interior, loader_bc, loader_ic = sp_sampling.create_dataloaders(self.model, self.pde_model, **self.sampling)
 
         for si in range(n_steps):
 
             if (si + 1) % resampling_frequency == 0:
                 ## Resample training data
                 print("New training data arrived!")
-                loader_interior, loader_bc, loader_ic = sampling.create_dataloaders(self.model, self.pde_model, **self.sampling)
+                loader_interior, loader_bc, loader_ic = sp_sampling.create_dataloaders(self.model, self.pde_model, **self.sampling)
     
             # Start profiler context
             if self.profiler: self.profiler.start(si)

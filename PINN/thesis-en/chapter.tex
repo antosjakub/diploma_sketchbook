@@ -1,5 +1,5 @@
 
-(put this into the diploma introduction itself??)
+[put this into the diploma introduction itself]
 
 In the past few years, solving PDEs using machine and deep learning methods has emerged as a new and rapidly growing field of scientific machine learning.
 Leveraging the universal approximation theorem \cite{uni_approx} and high expressivity of neural networks, the 
@@ -10,55 +10,85 @@ https://www.sciencedirect.com/science/article/abs/pii/S0021999118307125
 
 climate modelling
 
-flexibility
+flexibility of the arch
 
+data + physs loss
+solve inverse problems - value of a fucntion or a coefficient from the data
 
 
 \chapter{Phyics-Informed Neural Networks (PINNs)}
 
-First introduced in 2019 by Karniadakis et al., the Physics-Informed Neural Network combines the architecture and training loop of a traditional neural networks and with a 
-
-data + physs loss
-solve inverse problems - value of a fucntion or a coefficient from the data
+First introduced in 2019 by Karniadakis et. al., Physics-Informed Neural Networks combine the architecture and training loop of traditional neural networks
+with the information about the physics governing the system under consideration.
+This information is most commonly added in in a form of a loss function which the model is then trained to minimize.
+In the context of solving PDEs, the PDE system gets transformed into a language the NN understands.
 
 good integration into the neural network arch - training data sampling, automatic differentiation
 
 We first provide a short introduction into neural networks before moving into the PINNs.
 
+
 \section{Neural Networks}
 
-In general, neural networks can approximate any high-dimensional function given that sufficient training data are supplied. \cite{uni_approx}
-Their advantage lies in their relative simplicity and the ability to adapt the architecture to the specifics of the problem at hand.
-However, this advantege is also a burden - as there are many architectural and parametric choices at each level, and deciding on the best combination of parameters is not a straighforward matter.
-
-- mathematical intro
-    - weights - what we optimize
-    - how we update them - grad descent - variants to make it faster
-    - data
-- training loop of NNs
+Fundamentaly, neural networks are parametric function approximators.
+The universal approximation theorem \cite{uni_approx} guarantees that, under mild assumptions on the activation function, a sufficiently wide feed-forward network can approximate any continuous function on a compact domain to arbitrary accuracy.
+Their power lies in their simplicity and the flexibility with which the architecture can be tailored to the specific problem at hand.
+The downside of such flexibility is that it introduces a large number of architectural and hyperparametric choices, and identifying a good combination is not trivial.
 
 \subsection{Architecture}
-data input -> transformation (nonlin) -> output
-signle hidden layer transformat as
-$$
-y_i = a(W^i x+b_i)
-$$
-final activation
-we stack many after each other to form a neural network $NN_{\theta}: \mathbb{R^D} \to \mathbb{R^n}$
 
+A NN is a composition of affine transformations iterlaced with a pointwise nonlinearities called 'activation functions', denoted as $\sigma$ (e.g.\ $\tanh$, ReLU,...).
+
+A single hidden layer transforms its input $x \in \mathbb{R}^{d_{l-1}}$ as
+$$
+h^{(l)}(x) = \sigma\!\bigl(W^{(l)} x + b^{(l)}\bigr),
+\qquad W^{(l)} \in \mathbb{R}^{d_l \times d_{l-1}}, \; b^{(l)} \in \mathbb{R}^{d_l},
+$$
+where $W^{(l)}$ and $b^{(l)}$ are the \emph{weights} and \emph{biases} of the $l$-th layer.
+
+Stacking $L$ such layers and applying a final activation $a$ gives
+$$
+\mathcal{N}_\theta : \mathbb{R}^{d_{\mathrm{in}}} \to \mathbb{R}^{d_{\mathrm{out}}}
+\qquad
+\mathcal{N}_\theta = a \circ h^{(L)} \circ \cdots \circ h^{(1)}
+$$
+where $\theta = \{W^{(l)}, b^{(l)}\}_{l=1}^{L+1}$ is the set of all trainable parameters.
+
+The nonlinearity $\sigma$ is essential: without it, the above given composition of hidden layes would collapse into a single linear affine map and the network's expressive power would be that of linear regression.
+
+The number of hidden layers $L$ (\emph{depth}) and the layer sizes $d_l$ (\emph{width}) together control the capacity of the model.
 
 \subsection{Training}
-optimization problem in a $\theta$ parameter space
-automatic differentiation - we keep track of all the oprations and compute the derivatives exactlty using chain rule and elementry derivatives (sin -> cos, ...)
-- numerical diff not needed
+
+Training a NN amounts to solving an optimization problem in the parameter space of $\theta$.
+
+Given training data $\{(x_i, y_i)\}_{i=1}^N$ and a loss functional $\mathcal{L}(\theta)$ measuring the difference between network predictions $\mathcal{N}_\theta(x_i)$ and targets $y_i$ (most commonly the mean squared error), one seeks
+$$
+\theta^{\star} = \arg\min_{\theta}\, \mathcal{L}(\theta)
+$$
+Because $\mathcal{L}$ is in general non-convex and high-dimensional (the networks we will consider have on the order of $10^4$--$10^6$ parameters), the minimization is carried out by first-order iterative methods, starting from \emph{(stochastic) gradient descent}
+$$
+\theta \leftarrow \theta - \eta\, \nabla_\theta \mathcal{L}(\theta)
+$$
+with learning rate $\eta > 0$. In practice, more complex variants such as Adam \cite{adam} are preferred, as they converge faster and are less sensitive to the choice of $\eta$.
+
+A core part of the the training pipeline that enables efficient compuation of the gradient w.r.t the network parameters $\theta$ is \emph{automatic differentiation} (AD).
+Since the ouput of $\mathcal{N}_\theta$ is computed from a finite sequence of elementary operations whose derivatives are known analytically ($\frac{d}{dx} x^2 = 2x$, etc.),
+we can simply apply the chain rule to obtain $\nabla_\theta \mathcal{L}$ exactly (up to floating-point round-off).
+
+% note: forward and backpropagation
+
+As we will see in the following section, this very same mechanism is exploited by PINNs to differentiate the network with respect to its spatial and temporal inputs.
+
+The full training algorihm can be summarized as so:
 
 \begin{algorithm}[H]
 \caption{Standard NN Training (Mini-Batch Gradient Descent)}
 \begin{algorithmic}[1]
-    \Require $\mathcal{N}:\mathbb{R}^n\to\mathbb{R}^m$, training data $\{(x_i, y_i)\}_{i=1}^{N}$
+    \Require $\mathcal{N}:\mathbb{R}^{d_{in}}\to\mathbb{R}^{d_{out}}$, training data $\{(x_i, y_i)\}_{i=1}^{N}$
     \State \textbf{Initialize} network parameters $\theta$
     \For{epoch $= 1, \dots, E$}
-        \State Shuffle training data
+        \State Randomly shuffle training data
         \For{each mini-batch $\mathcal{B} \subset \{1,\dots,N\}$, $|\mathcal{B}|=B$}
             \State \textbf{Forward pass:} compute $\hat{y}_i = \mathcal{N}_\theta(x_i)$ for $i\in\mathcal{B}$
             \State \textbf{Compute loss:}
@@ -185,11 +215,11 @@ crutial in high dim:
 - parallelization ?
 
 
-\section{Grid search}
-
-sampling
-
-loss weighting
+%\section{Grid search}
+%
+%sampling
+%
+%loss weighting
 
 
 
@@ -463,6 +493,10 @@ silu(x) = x \cdot \sigma(x)
 $$
 
 NNs learn low freq sol first
+
+
+\subsubsection{Fourier features}
+- for periodic patterns
 - FF embedds?
 $$
 \gamma(x) =
@@ -530,6 +564,8 @@ PDE separable? -> sum of product of 1d networks
 \subsection{my genious ideas TD}
 - have 3 networks - each focused on different frequency signals
 
+- extreme machine learning
+(periodically give a LLM during the training a snapshot of the loss, the l2, l1 errs and give it some params to tweak)
 
 
 

@@ -420,17 +420,20 @@ def plot_score_pde():
     #model.eval()
 
     #A = 2.3*torch.diag(torch.ones(d)) + torch.diag(torch.ones(d-1), 1) + torch.diag(torch.ones(d-1), -1)
-    if False:
+    idx = 3
+    if idx == 0:
         import utility
         A = utility.generate_SPD(d)
         print(A)
         score_sde_model = SmoluchowskiCoupledQuadraticPot(d=d, beta=1.0, A=A)
-
+        name='QP'
+    elif idx == 1:
         a = 0.7 + 0.5*torch.rand(d)
         print(a)
         print(a[:2])
         score_sde_model = SmoluchowskiDoubleWell(d=d, beta=1.0, a=a)
-
+        name='DW'
+    elif idx == 2:
         #a = 0.7 + 0.5*torch.rand(d)
         #gamma = 0.1*torch.rand(d) - 0.05
         a = 0.7 + 0.3*torch.ones(d)
@@ -440,7 +443,8 @@ def plot_score_pde():
         print(a[:2])
         print(gamma[:2])
         score_sde_model = SmoluchowskiCoupledDoubleWell(d=d, beta=1.0, a=a, gamma=gamma)
-    else:
+        name='CDW'
+    elif idx == 3:
         d = 2
         gamma = 6*torch.pi*torch.ones(d)
         A = 0.3
@@ -449,6 +453,7 @@ def plot_score_pde():
         #score_sde_model = SmoluchowskiRastigin(d=d, beta=1.0, A=0.7)
         #score_sde_model = SmoluchowskiRastigin(d=d, beta=1.0, A=A, gamma=gamma)
         score_sde_model = SmoluchowskiRastigin(d=d, beta=1.0)
+        name='Rastigin'
 
     x_max = -2
 
@@ -465,7 +470,7 @@ def plot_score_pde():
     plotter = FunctionPlotter(d=d, device=device, fixed_dims_vals=0.0*torch.ones(d), x_start=-x_max, x_end=x_max)
     plotter.add_panel('p_0').heatmap(p_0)
     plotter.add_panel('p_inf').heatmap(p_inf)
-    plotter.save_plot(f'__0_inf.png')
+    plotter.save_plot(f'__V={name}.png')
 
     #model_fn_s = wrapp_model(model)
     #s_ic = lambda X: pde_model.s0(X[:,:-1])
@@ -487,7 +492,7 @@ def plot_score_pde():
 if __name__ == "__main__":
 
 
-    #plot_score_pde()
+    plot_score_pde()
 
     #main_plot_latest()
 
@@ -564,40 +569,40 @@ if __name__ == "__main__":
     #plotter.add_panel("p_ic").heatmap(p_ic)
     #plotter.save_plot(f'__pinn_solution_plots.png', t_val=0.0)
 
-    # --- cbar mode examples ---
-    fn1 = lambda X: torch.sin(3 * X[:, 0:1]) * torch.exp(-X[:, -1:])
-    fn2 = lambda X: torch.sin(3 * X[:, 0:1]) * torch.exp(-0.5 * X[:, -1:])
-    err = lambda X: torch.abs(fn1(X) - fn2(X))
-    fn_vec = lambda X: X[:, :-1]
+    ## --- cbar mode examples ---
+    #fn1 = lambda X: torch.sin(3 * X[:, 0:1]) * torch.exp(-X[:, -1:])
+    #fn2 = lambda X: torch.sin(3 * X[:, 0:1]) * torch.exp(-0.5 * X[:, -1:])
+    #err = lambda X: torch.abs(fn1(X) - fn2(X))
+    #fn_vec = lambda X: X[:, :-1]
 
-    plotter = FunctionPlotter(d=2)
-    plotter.add_panel("sol", title="Solution").heatmap(fn1)
-    plotter.add_panel("ref", title="Reference").heatmap(fn2)
-    plotter.add_panel("err", title="Error").heatmap(err, cmap='hot')
+    #plotter = FunctionPlotter(d=2)
+    #plotter.add_panel("sol", title="Solution").heatmap(fn1)
+    #plotter.add_panel("ref", title="Reference").heatmap(fn2)
+    #plotter.add_panel("err", title="Error").heatmap(err, cmap='hot')
 
 
-    # explicit range on error, symmetric on solution
-    plotter.save_plot('__cbar_mixed.png', t_val=0.3, cbar={
-        "sol": 'symmetric',
-        "err": (0.0, 0.1),
-    })
-    plotter.save_plot('__cbar_same_cbar.png', t_val=0.3, cbar={
-        "sol": 'linked:ref',
-        "err": 'linked:ref',
-    })
+    ## explicit range on error, symmetric on solution
+    #plotter.save_plot('__cbar_mixed.png', t_val=0.3, cbar={
+    #    "sol": 'symmetric',
+    #    "err": (0.0, 0.1),
+    #})
+    #plotter.save_plot('__cbar_same_cbar.png', t_val=0.3, cbar={
+    #    "sol": 'linked:ref',
+    #    "err": 'linked:ref',
+    #})
 
-    # dynamic (default) — colorbar rescales each frame
-    plotter.save_animation('__cbar_dynamic.gif', num_frames=20, fps=5)
+    ## dynamic (default) — colorbar rescales each frame
+    #plotter.save_animation('__cbar_dynamic.gif', num_frames=20, fps=5)
 
-    # fixed — colorbar pinned to global min/max across all frames
-    plotter.save_animation('__cbar_fixed.gif', num_frames=20, fps=5, cbar='fixed')
+    ## fixed — colorbar pinned to global min/max across all frames
+    #plotter.save_animation('__cbar_fixed.gif', num_frames=20, fps=5, cbar='fixed')
 
-    # per-panel: error linked to Solution's range, rest fixed
-    plotter.save_animation('__cbar_linked.gif', num_frames=20, fps=5, cbar={
-        "sol": 'fixed',
-        "ref": 'linked:sol',
-        "err": 'dynamic',
-    })
+    ## per-panel: error linked to Solution's range, rest fixed
+    #plotter.save_animation('__cbar_linked.gif', num_frames=20, fps=5, cbar={
+    #    "sol": 'fixed',
+    #    "ref": 'linked:sol',
+    #    "err": 'dynamic',
+    #})
 
 
     ## overlay: heatmap + quiver + contour lines

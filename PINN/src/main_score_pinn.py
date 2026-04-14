@@ -12,7 +12,7 @@ parser.add_argument("--n_steps", default=450, type=int, help="")
 parser.add_argument("--n_steps_decay", default=2000, type=int, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--gamma", default=0.9, type=float, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--lr", default=1e-3, type=float, help="")
-parser.add_argument("--bs", default=1024, type=int, help="")
+parser.add_argument("--bs", default=512, type=int, help="")
 
 parser.add_argument("--n_res_points", default=10_000, type=int, help="")
 parser.add_argument("--n_trajs", default=1_000, type=int, help="")
@@ -23,10 +23,10 @@ parser.add_argument("--n_test_points", default=10_000, type=int, help="Number of
 parser.add_argument("--testing_frequency", default=100, type=int, help="")
 parser.add_argument("--enable_testing", action="store_true", help="Compute L2/L1/rel errors during training (requires analytic solution).")
 
-parser.add_argument("--resampling_frequency", default=500, type=int, help="")
+parser.add_argument("--resampling_frequency", default=1000, type=int, help="")
 parser.add_argument("--lambda_pde", default=1.0, type=float, help="")
-parser.add_argument("--lambda_bc", default=10.0, type=float, help="")
-parser.add_argument("--lambda_ic", default=10.0, type=float, help="")
+parser.add_argument("--lambda_bc", default=0.01, type=float, help="")
+parser.add_argument("--lambda_ic", default=100.0, type=float, help="")
 parser.add_argument("--use_adaptive_weights", action="store_true", help="Loss weighting.")
 parser.add_argument("--use_rbas", action="store_true", help="Residual-based adaptive sampling")
 parser.add_argument("--use_sdgd", action="store_true", help="Stochastic dimension gradient-descend (for loss in high dims)")
@@ -701,127 +701,19 @@ class SmoluchowskiRastigin(SmoluchowskiGeneral):
 
 
 
-
-class ScorePINN_Trainer:
-    """
-    1. sampling to obtain X
-        - sample x_0 ~ p_0
-        - collect into X_ic
-        - use x_0 to evolve the trajectories via the SDE
-        - select random points from the trajectories
-        - collect into X_pde
-        - sample once, split into batches, resample every once in a while
-    2. loss
-        - just normal loss with two lambda weights
-    3. residual
-        - 
-    
-
-    """
-    def __init__(self, model, optimizer, scheduler, pde_model, sampling, loss_weighting, testing_suite, profiler=None, device='cpu'):
-        self.model = model
-        self.optimizer = optimizer
-        self.scheduler = scheduler
-        self.pde_model = pde_model
-        self.sampling = sampling
-        self.loss_weighting = loss_weighting
-        self.profiler = profiler
-        self.testing_suite = testing_suite
-        self.device = device
-        self.d = self.pde_model.d
-
-    def train_adam_step(self, batch_pde, batch_bc, batch_ic, use_sdgd=False, sdgd_num_dims=None):
-        """
-        Train a single step of the model.
-        """
-        self.optimizer.zero_grad()
-
-        # Compute individual losses
-        with record_function("loss"):
-            if use_sdgd:
-                #loss_pde = loss.sdgd_loss(batch_pde[0], self.model, self.pde_model, batch_pde[1], sdgd_num_dims)
-                pass
-            else:
-                loss_pde = self.pde_model.pde_loss(batch_pde[0], self.model, batch_pde[1])
-            loss_bc = self.pde_model.bc_loss(batch_bc[0], self.model, batch_bc[1])
-            loss_ic = self.pde_model.ic_loss(batch_ic[0], self.model, batch_ic[1])
-
-        # Weighted loss
-        loss_value = self.loss_weighting.weight_loss([loss_pde, loss_bc, loss_ic])
-
-        # Backward pass
-        with record_function("backward"):
-            loss_value.backward()
-        
-        #torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        with record_function("optimizer_step"):
-            self.optimizer.step()
-
-        return loss_value, (loss_pde.item(), loss_bc.item(), loss_ic.item())
-    
-
-
-    def train_adam_minibatch(self, n_steps, n_steps_decay, resampling_frequency=2000, testing_frequency=100, use_sdgd=False, sdgd_num_dims=None):
-        """
-        Train the model using Adam optimizer.
-        """
-        losses = []
-        l2_errs = []
-
-        if self.profiler: self.profiler.make()
-
-        # batches
-        #loader_interior, loader_ic = sp_sampling.create_dataloaders(self.d, self.model_s, n_trajs, nt_steps, n_res_points, bs, self.model, self.pde_model)
-        loader_interior, loader_bc, loader_ic = sp_sampling.create_dataloaders(self.model, self.pde_model, **self.sampling)
-
-        for si in range(n_steps):
-
-            if (si + 1) % resampling_frequency == 0:
-                ## Resample training data
-                print("New training data arrived!")
-                #loader_interior, loader_ic = sp_sampling.create_dataloaders(self.d, self.model_s, n_trajs, nt_steps, n_res_points, bs, self.model, self.pde_model)
-                loader_interior, loader_bc, loader_ic = sp_sampling.create_dataloaders(self.model, self.pde_model, **self.sampling)
-    
-            # Start profiler context
-            if self.profiler: self.profiler.start(si)
-        
-            # 1. all barches per step
-            batch_iterator = zip(loader_interior, loader_bc, loader_ic)
-            for batch_pde, batch_bc, batch_ic in batch_iterator:
-                loss_value, (loss_pde, loss_bc, loss_ic) = self.train_adam_step(batch_pde, batch_bc, batch_ic, use_sdgd=use_sdgd, sdgd_num_dims=sdgd_num_dims)
-            losses.append(loss_value.item())
-
-            ## 1. variant: single batch per step
-            #try:                                                                                          
-            #    batch_pde, batch_ic = next(batch_iterator)                                                
-            #except StopIteration:                                                                         
-            #    batch_iterator = iter(zip(loader_interior, loader_ic))                                    
-            #    batch_pde, batch_ic = next(batch_iterator)  
-
-
-            # Step scheduler
-            if (si + 1) % n_steps_decay == 0:
-                self.scheduler.step()
-
-            # Exit profiler context after the last profiled step
-            if self.profiler: self.profiler.exit(si)
-
-            # Print progress
-            if (si + 1) % testing_frequency == 0:
-                log = (f'Step {si+1}/{n_steps}, Loss: {loss_value.item():.6f}, '
-                       f'PDE: {loss_pde:.6f}, '
-                       f'BC: {loss_bc:.6f}, '
-                       f'IC: {loss_ic:.6f}, '
-                       f'lr: {self.optimizer.param_groups[0]["lr"]:.6f}')
-                if self.testing_suite is not None:
-                    l2_err, l1_err, rel_err = self.testing_suite.test_model(self.model)
-                    l2_errs.append(l2_err)
-                    log += (f', L2: {l2_err:.6f}'
-                            f', L1: {l1_err:.6f}'
-                            f', rel_max: {rel_err:.6f}')
-                print(log)
-
-        return losses, l2_errs
+"""
+1. sampling to obtain X
+    - sample x_0 ~ p_0
+    - collect into X_ic
+    - use x_0 to evolve the trajectories via the SDE
+    - select random points from the trajectories
+    - collect into X_pde
+    - sample once, split into batches, resample every once in a while
+2. loss
+    - just normal loss with two lambda weights
+3. residual
+    -
+"""
 
 
 
@@ -958,7 +850,7 @@ if __name__ == "__main__":
     else:
         testing_suite = None
 
-    L = 7.0
+    L = 3.0
     sampling = {
         "n_trajs": args.n_trajs,
         "nt_steps": args.nt_steps,
@@ -969,7 +861,8 @@ if __name__ == "__main__":
     }
     # use_rbas??
 
-    trainer = ScorePINN_Trainer(model, optimizer, scheduler, pde_model, sampling, loss_weighting, testing_suite, profiler, device)
+    from main import PINN_Trainer
+    trainer = PINN_Trainer(model, optimizer, scheduler, pde_model, sampling, loss_weighting, testing_suite, profiler, device)
     losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
         n_steps=args.n_steps,
         n_steps_decay=args.n_steps_decay,

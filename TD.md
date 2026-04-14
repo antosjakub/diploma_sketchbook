@@ -1,5 +1,46 @@
 
 
+chapters
+- pinns - arch
+- score pinn
+- sparse grids
+
+
+
+
+
+1
+use bc in score pinn
+
+2
+use general domain & time dimensions - pass in the sampling object
+ex. L_i_min, L_i_max <- tensor of shape (d, 2) & also T
+
+- combine the two trainers into one
+- run only pde, ic, bc
+
+
+
+
+score pinn
+
+vanilla pinn
+- head:
+    - no, exp, softplus
+
+gs:
+    - trajs, lhs, mixed traj & lhs
+    - bc: neuman, dirichlet, no
+    - L = 2.0, 3.0, 4.0
+
+
+
+
+
+
+
+
+
 # focus: pinns and smoluchowski
 
 write background to smoluchowski
