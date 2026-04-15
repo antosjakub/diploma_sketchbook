@@ -1,3 +1,4 @@
+import math
 import torch
 import utility
 import derivatives
@@ -445,6 +446,38 @@ class SmoluchowskiBase(PDEModel):
         return torch.exp(-((x - self.x_0)**2 / (2 * self.sigma**2)).sum(dim=1)).unsqueeze(dim=1) / (2 * torch.pi * self.sigma**2)**(self.d/2)
     def p_inf(self, x):
         return torch.exp(-self.beta * self.V(x))
+
+    def estimate_Z_full(self, spatial_domain, n_samples=200_000, proposal="uniform", gaussian_sigma=None, device='cpu'):
+        """MC estimate of Z = ∫ exp(-beta*V(x)) dx over the box.
+
+        proposal:
+          - "uniform":  x ~ Uniform(Ω),          Z ≈ |Ω| · mean(p_inf(x))
+          - "gaussian": x ~ N(0, gaussian_sigma² I),
+                        Z ≈ mean(p_inf(x) / q(x))
+        gaussian_sigma: scalar std of the isotropic Gaussian proposal.
+                        Default: half the largest side of the box (covers the wells).
+        """
+        lo = spatial_domain[:, 0].to(device)
+        hi = spatial_domain[:, 1].to(device)
+
+        if proposal == "uniform":
+            vol = (hi - lo).prod().item()
+            X = lo + (hi - lo) * torch.rand(n_samples, self.d, device=device)
+            return vol * self.p_inf(X).mean().item()
+
+        elif proposal == "gaussian":
+            if gaussian_sigma is None:
+                gaussian_sigma = 0.5 * (hi - lo).max().item()
+            sigma = float(gaussian_sigma)
+            X = sigma * torch.randn(n_samples, self.d, device=device)
+            # q(x) = (2π σ²)^(-d/2) · exp(-‖x‖² / (2σ²))
+            log_q = -0.5 * self.d * math.log(2 * math.pi * sigma * sigma) \
+                    - 0.5 * (X * X).sum(dim=1) / (sigma * sigma)
+            q = torch.exp(log_q).unsqueeze(1)
+            return (self.p_inf(X) / q).mean().item()
+
+        else:
+            raise ValueError(f"Unknown proposal '{proposal}'. Use 'uniform' or 'gaussian'.")
     
     def precompute(self, X_pde, X_bc, X_ic):
         return {
@@ -511,6 +544,28 @@ class SmoluchowskiDoubleWell(SmoluchowskiBase):
         return (x**2 - self.a**2) * x
     def V_laplace(self, x):
         return 3.0 * (x**2).sum(dim=1).unsqueeze(1) - self.a_l2
+
+    def estimate_Z(self, spatial_domain, n_samples_1d=10_000_000, device='cpu'):
+        """
+        - separate over dimensions
+        - sample each 1d interval
+        - compute integral for that interval
+        - multiply integrals together
+        """
+        V_1d = lambda x,a: 0.25 * (x**2 - a**2)**2
+        p_inf_unnormed = lambda x,a: torch.exp(-self.beta * V_1d(x,a))
+
+        lo = spatial_domain[:, 0].to(device)
+        hi = spatial_domain[:, 1].to(device)
+
+        z = 1.0
+        for i in range(self.d):
+            interval_width = hi[i] - lo[i]
+            x = lo[i] + interval_width * torch.rand(n_samples_1d, device=device)
+            z_1d = interval_width * p_inf_unnormed(x, self.a[i]).mean().item()
+            z *= z_1d
+
+        return z
 
 
 

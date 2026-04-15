@@ -46,7 +46,6 @@ parser.add_argument("--starting_model", default="run_sp_latest/model.pth", type=
 #parser.add_argument("--pde_model_args", default=None, type=str, help="pde_model_args.json")
 
 import score_pinn_derivatives as sp_derivatives
-import score_pinn_sampling as sp_sampling
 import derivatives
 
 #class isotropic_SDE:
