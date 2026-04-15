@@ -18,11 +18,13 @@ parser.add_argument("--testing_frequency", default=100, type=int, help="")
 parser.add_argument("--resampling_frequency", default=500, type=int, help="")
 parser.add_argument("--bs", default=512, type=int, help="")
 parser.add_argument("--lambda_pde", default=1.0, type=float, help="")
-parser.add_argument("--lambda_bc", default=1.0, type=float, help="")
-parser.add_argument("--lambda_ic", default=1.0, type=float, help="")
-parser.add_argument("--lambda_norm", default=1.0, type=float, help="Weight of the ∫p dx = 1 normalization loss.")
+parser.add_argument("--lambda_bc", default=0.01, type=float, help="")
+parser.add_argument("--lambda_ic", default=100, type=float, help="")
+parser.add_argument("--lambda_norm", default=0.0, type=float, help="Weight of the ∫p dx = 1 normalization loss.")
 parser.add_argument("--use_adaptive_weights", action="store_true", help="Loss weighting.")
 parser.add_argument("--use_rbas", action="store_true", help="Residual-based adaptive sampling")
+#parser.add_argument("--n_norm_buffer", default=10_000, type=int, help="Size of the p_inf sample buffer for the normalization loss.")
+#parser.add_argument("--n_norm_batch", default=1_000, type=int, help="Per-step minibatch drawn from the p_inf buffer for the normalization loss.")
 parser.add_argument("--use_sdgd", action="store_true", help="Stochastic dimension gradient-descend (for loss in high dims)")
 parser.add_argument("--sdgd_num_dims", default=None, type=int, help="Number of dimensions to use for SDGD. If None, use all dimensions.")
 # L-BFGS
@@ -67,7 +69,7 @@ class PINN_Trainer:
         self._norm_buf_p_inf = None
         self._norm_Z = None
 
-    def _init_norm_buffer(self, n_samples=10_000, n_steps=2000):
+    def _init_norm_buffer(self, n_steps=1000, n_samples=10_000):
         """
         precompute & store
             - z (using MC)
@@ -79,9 +81,15 @@ class PINN_Trainer:
 
         The Smoluchowski SDE dx = -∇V dt + √(2/β) dW has stationary density p_inf/Z, so running
         the trajectory bank for T >> mixing time and taking the final state gives the samples.
+
+        The buffer is intentionally large (``n_norm_buffer``) — each training step only uses a
+        random minibatch of ``n_norm_batch`` of these, giving an unbiased SGD estimate of the
+        integral without scaling per-step cost with dimension.
         """
-        T = self.sampling["settings"].get("T", 1.0)
-        spatial_domain = self.sampling["settings"]["spatial_domain"]
+        settings = self.sampling["settings"]
+        T = settings.get("T", 1.0)
+        spatial_domain = settings["spatial_domain"]
+        #n_samples = settings.get("n_norm_buffer", 10_000)
         lo = spatial_domain[:, 0].to(self.device)
         hi = spatial_domain[:, 1].to(self.device)
         x0 = lo + (hi - lo) * torch.rand(n_samples, self.d, device=self.device)
@@ -100,25 +108,30 @@ class PINN_Trainer:
         )
         print(f"Z = {self._norm_Z:.6f}")
 
-    @torch.no_grad
-    def p_normalization_loss(self, n_time_slices=4):
+    #@torch.no_grad
+    def p_normalization_loss(self, n_time_slices=4, n_batch=1_000):
         """
         - random time slices
-        - use same x (final traj points)
+        - random minibatch from the p_inf buffer (unbiased SGD estimate of the integral)
         - importance-sampled estimate of (int p(x,t) dx - 1)^2
         - averaged over the random time slices
         """
-        T = self.sampling["settings"].get("T", 1.0)
+        settings = self.sampling["settings"]
+        T = settings.get("T", 1.0)
+        #n_batch = settings.get("n_norm_batch", 1_000)
+
+        buf_N = self._norm_buf_x.shape[0]
+        idx = torch.randint(0, buf_N, (n_batch,), device=self.device)
+        x = self._norm_buf_x[idx]
+        p_inf_x = self._norm_buf_p_inf[idx]
+
         t = T * torch.rand(n_time_slices, 1, device=self.device)
-        x = self._norm_buf_x
-        N = x.shape[0]
-        # Build (K*N, d+1): tile x for each time slice
-        X_rep = x.unsqueeze(0).expand(n_time_slices, N, self.d).reshape(-1, self.d)
-        t_rep = t.unsqueeze(1).expand(n_time_slices, N, 1).reshape(-1, 1)
+        X_rep = x.unsqueeze(0).expand(n_time_slices, n_batch, self.d).reshape(-1, self.d)
+        t_rep = t.unsqueeze(1).expand(n_time_slices, n_batch, 1).reshape(-1, 1)
         X = torch.cat([X_rep, t_rep], dim=1)
-        p = self.model(X).reshape(n_time_slices, N)                # (K, N)
-        p_inf = self._norm_buf_p_inf.squeeze(-1).unsqueeze(0)      # (1, N)
-        integral_est = self._norm_Z * (p / p_inf).mean(dim=1)      # (K,)
+        p = self.model(X).reshape(n_time_slices, n_batch)
+        p_inf = p_inf_x.squeeze(-1).unsqueeze(0)
+        integral_est = self._norm_Z * (p / p_inf).mean(dim=1)
         return ((integral_est - 1.0) ** 2).mean()
 
     def train_adam_step(self, batch_pde, batch_bc, batch_ic, use_sdgd=False, sdgd_num_dims=None):
@@ -135,11 +148,11 @@ class PINN_Trainer:
                 loss_pde = self.pde_model.pde_loss(batch_pde[0], self.model, batch_pde[1])
             loss_bc = self.pde_model.bc_loss(batch_bc[0], self.model, batch_bc[1])
             loss_ic = self.pde_model.ic_loss(batch_ic[0], self.model, batch_ic[1])
-            #loss_p_norm = self.p_normalization_loss() #if self._norm_buf_x is not None else torch.tensor(0.0, device=self.device)
+            loss_p_norm = self.p_normalization_loss() #if self._norm_buf_x is not None else torch.tensor(0.0, device=self.device)
 
         # Weighted loss
-        #loss_value = self.loss_weighting.weight_loss([loss_pde, loss_bc, loss_ic, loss_p_norm])
-        loss_value = self.loss_weighting.weight_loss([loss_pde, loss_bc, loss_ic])
+        loss_value = self.loss_weighting.weight_loss([loss_pde, loss_bc, loss_ic, loss_p_norm])
+        #loss_value = self.loss_weighting.weight_loss([loss_pde, loss_bc, loss_ic])
 
         # Backward pass
         with record_function("backward"):
@@ -148,8 +161,8 @@ class PINN_Trainer:
         with record_function("optimizer_step"):
             self.optimizer.step()
 
-        #return loss_value, (loss_pde.item(), loss_bc.item(), loss_ic.item(), loss_p_norm.item())
-        return loss_value, (loss_pde.item(), loss_bc.item(), loss_ic.item())
+        return loss_value, (loss_pde.item(), loss_bc.item(), loss_ic.item(), loss_p_norm.item())
+        #return loss_value, (loss_pde.item(), loss_bc.item(), loss_ic.item())
     
 
     def train_adam_step_accumulated(self, batch_iterator):
@@ -262,7 +275,7 @@ class PINN_Trainer:
 
         # batches
         loader_pde, loader_bc, loader_ic = sampling.create_dataloaders(self.sampling["type"], self.model, self.pde_model, self.sampling["settings"])
-        #self._init_norm_buffer()
+        self._init_norm_buffer()
 
         for si in range(n_steps):
 
@@ -270,7 +283,7 @@ class PINN_Trainer:
                 ## Resample training data
                 print("New training data arrived!")
                 loader_pde, loader_bc, loader_ic = sampling.create_dataloaders(self.sampling["type"], self.model, self.pde_model, self.sampling["settings"])
-                #self._init_norm_buffer()
+                self._init_norm_buffer()
 
             # Start profiler context
             if self.profiler: self.profiler.start(si)
@@ -279,8 +292,8 @@ class PINN_Trainer:
             batch_iterator = zip(loader_pde, loader_bc, loader_ic)
             if True:
                 for batch_pde, batch_bc, batch_ic in batch_iterator:
-                    #loss_value, (loss_pde, loss_bc, loss_ic, loss_norm) = self.train_adam_step(batch_pde, batch_bc, batch_ic, use_sdgd=use_sdgd, sdgd_num_dims=sdgd_num_dims)
-                    loss_value, (loss_pde, loss_bc, loss_ic) = self.train_adam_step(batch_pde, batch_bc, batch_ic, use_sdgd=use_sdgd, sdgd_num_dims=sdgd_num_dims)
+                    loss_value, (loss_pde, loss_bc, loss_ic, loss_p_norm) = self.train_adam_step(batch_pde, batch_bc, batch_ic, use_sdgd=use_sdgd, sdgd_num_dims=sdgd_num_dims)
+                    #loss_value, (loss_pde, loss_bc, loss_ic) = self.train_adam_step(batch_pde, batch_bc, batch_ic, use_sdgd=use_sdgd, sdgd_num_dims=sdgd_num_dims)
             else:
                 loss_value, (loss_pde, loss_bc, loss_ic, loss_norm) = self.train_adam_step_accumulated(batch_iterator)
             losses.append(loss_value.item())
@@ -296,17 +309,17 @@ class PINN_Trainer:
                     loss_pde_w = self.pde_model.pde_loss(batch_pde[0], self.model, batch_pde[1])
                     loss_bc_w = self.pde_model.bc_loss(batch_bc[0], self.model, batch_bc[1])
                     loss_ic_w = self.pde_model.ic_loss(batch_ic[0], self.model, batch_ic[1])
-                    #loss_norm_w = self.p_normalization_loss()
-                    #self.loss_weighting.update([loss_pde_w, loss_bc_w, loss_ic_w, loss_norm_w], self.model)
-                    self.loss_weighting.update([loss_pde_w, loss_bc_w, loss_ic_w], self.model)
+                    loss_norm_w = self.p_normalization_loss()
+                    self.loss_weighting.update([loss_pde_w, loss_bc_w, loss_ic_w, loss_norm_w], self.model)
+                    #self.loss_weighting.update([loss_pde_w, loss_bc_w, loss_ic_w], self.model)
 
             # Exit profiler context after the last profiled step
             if self.profiler: self.profiler.exit(si)
 
             # Print progress
             if (si + 1) % testing_frequency == 0:
-                self._init_norm_buffer()
-                loss_p_norm = self.p_normalization_loss()
+                #self._init_norm_buffer()
+                #loss_p_norm = self.p_normalization_loss()
 
                 log = (f'Step {si+1}/{n_steps}, Loss: {loss_value.item():.6f}, '
                        f'PDE: {loss_pde:.6f}, '
@@ -504,7 +517,7 @@ if __name__ == "__main__":
         model = torch.load(args.starting_model, weights_only=False)
     else:
         head_fn = utility.identity_fn
-        #head_fn = lambda X: torch.exp(-X)
+        #head_fn = lambda x: torch.exp(x)
         #head_fn = torch.nn.Softplus()
         model = architecture.PINN(D, layers, head_fn=head_fn).to(device)
         #model = PINN_SeparableTimes(D, layers).to(device)
@@ -527,11 +540,11 @@ if __name__ == "__main__":
         # Initialize loss weighting and profiler
         #args.use_adaptive_weights = True
         if args.use_adaptive_weights:
-            #loss_weighting = loss.AdaptiveWeights(weights=torch.tensor([args.lambda_pde, args.lambda_bc, args.lambda_ic, args.lambda_norm]))
-            loss_weighting = loss.AdaptiveWeights(weights=torch.tensor([args.lambda_pde, args.lambda_bc, args.lambda_ic]))
+            loss_weighting = loss.AdaptiveWeights(weights=torch.tensor([args.lambda_pde, args.lambda_bc, args.lambda_ic, args.lambda_norm]))
+            #loss_weighting = loss.AdaptiveWeights(weights=torch.tensor([args.lambda_pde, args.lambda_bc, args.lambda_ic]))
         else:
-            #loss_weighting = loss.ConstantWeights(weights=[args.lambda_pde, args.lambda_bc, args.lambda_ic, args.lambda_norm])
-            loss_weighting = loss.ConstantWeights(weights=[args.lambda_pde, args.lambda_bc, args.lambda_ic])
+            loss_weighting = loss.ConstantWeights(weights=[args.lambda_pde, args.lambda_bc, args.lambda_ic, args.lambda_norm])
+            #loss_weighting = loss.ConstantWeights(weights=[args.lambda_pde, args.lambda_bc, args.lambda_ic])
 
         profiler = utility.Profiler(report_filename=f"{dir_name}/{args.profiler_report_filename}.txt", start_step=100, end_step=110) if args.enable_profiler else None
 
@@ -560,6 +573,8 @@ if __name__ == "__main__":
                 "spatial_domain": spatial_domain,
                 "T": 1.5,
                 "use_rbas": args.use_rbas,
+                #"n_norm_buffer": args.n_norm_buffer,
+                #"n_norm_batch": args.n_norm_batch,
             }
         }
         trainer = PINN_Trainer(model, optimizer, scheduler, pde_model, sampling_cfg, loss_weighting, testing_suite, profiler, device)
