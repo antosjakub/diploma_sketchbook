@@ -719,34 +719,26 @@ class SmoluchowskiRastigin(SmoluchowskiGeneral):
 
 # Main execution
 if __name__ == "__main__":
+    import run_utils
 
-    # cuda or cpu
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
-
-    # Arguments
     args = parser.parse_args([] if "__file__" not in globals() else None)
-    torch.manual_seed(args.seed)
-    d = args.d # space dims
-    D = d + 1 # space + time dims
+
+    d = args.d  # space dims
+    D = d + 1   # space + time dims
     layers = utility.layers_from_string(args.layers)
     print(f"\n{'='*60}")
     print(f"Training PINN for {d}D PDE")
     print(f"Domain: [0,1]^{d} x [0,1]")
     print(f"{'='*60}\n")
 
-    #type_sp = "score_pde"
-    #type_sp = "ll_ode"
     type_sp = args.mode
     print(f"Training Score-PINN, type: '{type_sp}'\n")
 
     sde_model_label = 'DW'
-    # python main_score_pinn.py --mode="score_pde" --output_dir=run_OU_score_pde --clear_dir --enable_testing
     if type_sp == "score_pde":
         args.output_dir = f"run_SM-{sde_model_label}_{type_sp}"
         args.clear_dir = True
         args.enable_testing = False
-    # python main_score_pinn.py --mode="ll_ode" --output_dir=run_OU_ll_ode --clear_dir --starting_model=run_OU_score_pde/model.pth --enable_testing
     elif type_sp == "ll_ode":
         args.output_dir = f"run_SM-{sde_model_label}_{type_sp}"
         args.clear_dir = True
@@ -755,34 +747,13 @@ if __name__ == "__main__":
     else:
         raise NameError("Incorrect mode specified.")
 
-    # SDE model
-    #A = utility.generate_SPD(d)
-    #A = 2.3*torch.diag(torch.ones(d)) + torch.diag(torch.ones(d-1), 1) + torch.diag(torch.ones(d-1), -1)
+    dir_name, device = run_utils.setup_run(args)
+
     a = 0.7 + 0.5*torch.rand(d)
     print(a)
     score_sde_model = SmoluchowskiDoubleWell(d=d, beta=1.0, a=a)
 
 
-    # Prepare storage
-    dir_name = args.output_dir
-    if dir_name[-1] == '/':
-        dir_name = dir_name[:-1]
-
-    import os
-    import shutil
-    if os.path.isdir(dir_name):
-        print(f"Directory already exists: '{dir_name}'")
-        if args.clear_dir:
-            print(f"To the trashbin with you lot...")
-            shutil.rmtree(dir_name)
-            os.makedirs(dir_name)
-    else:
-        print(f"Creating new directory: '{dir_name}'")
-        os.makedirs(dir_name)    
-        if args.clear_dir:
-            print("Why clear the new thing me asky??")
-    print()
-    
 
     ### PREP PDE MODEL
     #score_sde_model = Isotropic_OU(d=d)
@@ -814,21 +785,12 @@ if __name__ == "__main__":
 
 
     # Preparation time
-    losses = [] 
-    l2_errs = [] 
+    losses = run_utils.init_losses()
+    l2_errs = []
 
-    # Initialize optimizer and scheduler
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    # Option 1: ExponentialLR
-    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma)
-
-    # Initialize loss weighting and profiler
-    if args.use_adaptive_weights:
-        loss_weighting = loss.AdaptiveWeights(weights=torch.tensor([args.lambda_pde, args.lambda_bc, args.lambda_ic]))
-    else:
-        loss_weighting = loss.ConstantWeights(weights=[args.lambda_pde, args.lambda_bc, args.lambda_ic])
-
-    profiler = utility.Profiler(report_filename=f"{dir_name}/{args.profiler_report_filename}.txt", start_step=100, end_step=110) if args.enable_profiler else None
+    optimizer, scheduler = run_utils.make_optim(model, args)
+    loss_weighting = run_utils.make_loss_weighting(args, n_losses=3)
+    profiler = run_utils.make_profiler(dir_name, args)
 
     sdgd_num_dims = args.sdgd_num_dims if args.sdgd_num_dims is not None else d
     if args.use_sdgd:
@@ -870,33 +832,14 @@ if __name__ == "__main__":
         use_sdgd=args.use_sdgd,
         sdgd_num_dims=sdgd_num_dims,
     )
-    losses += losses_adam
+    run_utils.merge_losses(losses, losses_adam)
     l2_errs += l2_errs_adam
     print("\nAdam training complete!")
-    t2 = time.time()
-    h,m,s = utility.get_duration(t2-t1)
-    train_time_str = f"Adam training completed in: "
-    train_time_str += f"{h} hours " if h > 0 else ""
-    train_time_str += f"{m} minutes " if m > 0 else ""
-    train_time_str += f"{s} seconds"
-    print(train_time_str)
+    run_utils.print_train_duration(t1, time.time())
 
-    # Dan
     print("\nTraining complete!")
-    
-    import json
-    with open(f'{dir_name}/model_metadata.json', 'w', encoding='utf-8') as f:
-        json.dump({"model_class": type(model).__name__, "args": args.__dict__}, f, ensure_ascii=False, indent=4)
 
-    #pde_model.dump_pde_metadata(f'{dir_name}/pde_metadata.json')
-
-    loss_name = f'{dir_name}/training_loss'
-    l2_name = f'{dir_name}/training_l2_error'
-    # Save the results
-    torch.save(model.state_dict(), f'{dir_name}/model.pth')
-    torch.save(torch.tensor(losses), f'{loss_name}.pth')
-    torch.save(torch.tensor(l2_errs), f'{l2_name}.pth')
-    print("\nResults saved.")
+    loss_name, l2_name = run_utils.save_run(dir_name, model, losses, l2_errs, args)
 
 
     # Plot results
@@ -923,7 +866,7 @@ if __name__ == "__main__":
     }
 
 
-
+    import os
     os.makedirs(f"{dir_name}/viz/", exist_ok=True)
     if type_sp == "score_pde":
         model_fn_s = viz.wrapp_model(model)

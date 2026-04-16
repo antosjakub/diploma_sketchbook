@@ -15,10 +15,18 @@ def plot_l2(steps, l2_error, l2_error_name):
     plt.savefig(f'{l2_error_name}.png', dpi=150)
 
 def plot_loss(loss, loss_name):
-    # Plot training loss
+    # Plot training loss. `loss` may be a list/tensor (total only) or a dict
+    # mapping component name -> per-step values (e.g. {"total", "pde", "bc", "ic", "p_norm"}).
     print(f"Saving: {loss_name}.png")
     plt.figure(figsize=(10, 5))
-    plt.semilogy(loss)
+    if isinstance(loss, dict):
+        for name, series in loss.items():
+            if len(series) == 0:
+                continue
+            plt.semilogy(series, label=name, linewidth=(2.0 if name == "total" else 1.0))
+        plt.legend()
+    else:
+        plt.semilogy(loss)
     plt.xlabel('Step')
     plt.ylabel('Loss')
     plt.title('Training Loss')

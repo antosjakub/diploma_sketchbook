@@ -38,7 +38,7 @@ parser.add_argument("--l2_stop_crit_lbfgs", default=0.001, type=float, help="")
 parser.add_argument("--enable_testing", action="store_true", help="Compute L2/L1/rel errors during training (requires analytic solution).")
 parser.add_argument("--clear_dir", action="store_true", help="Erase contents of the output_dir before the training starts.")
 # 
-parser.add_argument("--output_dir_name", default="run_latest/", type=str, help="")
+parser.add_argument("--output_dir", default="run_latest/", type=str, help="")
 parser.add_argument("--enable_profiler", action="store_true", help="")
 parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
 parser.add_argument("--use_weak_form", action="store_true", help="")
@@ -268,7 +268,7 @@ class PINN_Trainer:
         """
         Train the model using Adam optimizer.
         """
-        losses = []
+        losses = {"total": [], "pde": [], "bc": [], "ic": [], "p_norm": []}
         l2_errs = []
 
         if self.profiler: self.profiler.make()
@@ -295,8 +295,12 @@ class PINN_Trainer:
                     loss_value, (loss_pde, loss_bc, loss_ic, loss_p_norm) = self.train_adam_step(batch_pde, batch_bc, batch_ic, use_sdgd=use_sdgd, sdgd_num_dims=sdgd_num_dims)
                     #loss_value, (loss_pde, loss_bc, loss_ic) = self.train_adam_step(batch_pde, batch_bc, batch_ic, use_sdgd=use_sdgd, sdgd_num_dims=sdgd_num_dims)
             else:
-                loss_value, (loss_pde, loss_bc, loss_ic, loss_norm) = self.train_adam_step_accumulated(batch_iterator)
-            losses.append(loss_value.item())
+                loss_value, (loss_pde, loss_bc, loss_ic, loss_p_norm) = self.train_adam_step_accumulated(batch_iterator)
+            losses["total"].append(loss_value.item())
+            losses["pde"].append(loss_pde)
+            losses["bc"].append(loss_bc)
+            losses["ic"].append(loss_ic)
+            losses["p_norm"].append(loss_p_norm)
 
 
             # Step scheduler
@@ -427,46 +431,18 @@ class PINN_Trainer:
 
 # Main execution
 if __name__ == "__main__":
+    import run_utils
 
-    # cuda or cpu
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
-
-    # Arguments
     args = parser.parse_args([] if "__file__" not in globals() else None)
-    torch.manual_seed(args.seed)
-    if False:
-        d = 6
-    else:
-        d = args.d # space dims
-    D = d + 1 # space + time dims
+    dir_name, device = run_utils.setup_run(args)
+
+    d = args.d  # space dims
+    D = d + 1   # space + time dims
     layers = utility.layers_from_string(args.layers)
     print(f"\n{'='*60}")
     print(f"Training PINN for {d}D PDE")
     print(f"Domain: [0,1]^{d} x [0,1]")
     print(f"{'='*60}\n")
-
-    # Prepare storage
-    import os
-    dir_name = args.output_dir_name
-    if dir_name[-1] == '/':
-        dir_name = dir_name[:-1]
-    os.makedirs(dir_name, exist_ok=True)    
-    
-    import os
-    import shutil
-    if os.path.isdir(dir_name):
-        print(f"Directory already exists: '{dir_name}'")
-        if args.clear_dir:
-            print(f"To the trashbin with you lot...")
-            shutil.rmtree(dir_name)
-            os.makedirs(dir_name)
-    else:
-        print(f"Creating new directory: '{dir_name}'")
-        os.makedirs(dir_name)    
-        if args.clear_dir:
-            print("Why clear the new thing me asky??")
-    print()
 
     # PDE equation
     if False:
@@ -527,26 +503,14 @@ if __name__ == "__main__":
 
 
     # Preparation time
-    losses = [] 
-    l2_errs = [] 
+    losses = run_utils.init_losses()
+    l2_errs = []
 
     # Train the model
     if args.n_steps > 0:
-        # Initialize optimizer and scheduler
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-        # Option 1: ExponentialLR
-        scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma)
-
-        # Initialize loss weighting and profiler
-        #args.use_adaptive_weights = True
-        if args.use_adaptive_weights:
-            loss_weighting = loss.AdaptiveWeights(weights=torch.tensor([args.lambda_pde, args.lambda_bc, args.lambda_ic, args.lambda_norm]))
-            #loss_weighting = loss.AdaptiveWeights(weights=torch.tensor([args.lambda_pde, args.lambda_bc, args.lambda_ic]))
-        else:
-            loss_weighting = loss.ConstantWeights(weights=[args.lambda_pde, args.lambda_bc, args.lambda_ic, args.lambda_norm])
-            #loss_weighting = loss.ConstantWeights(weights=[args.lambda_pde, args.lambda_bc, args.lambda_ic])
-
-        profiler = utility.Profiler(report_filename=f"{dir_name}/{args.profiler_report_filename}.txt", start_step=100, end_step=110) if args.enable_profiler else None
+        optimizer, scheduler = run_utils.make_optim(model, args)
+        loss_weighting = run_utils.make_loss_weighting(args, n_losses=4)
+        profiler = run_utils.make_profiler(dir_name, args)
 
         sdgd_num_dims = args.sdgd_num_dims if args.sdgd_num_dims is not None else d
         if args.use_sdgd:
@@ -587,16 +551,10 @@ if __name__ == "__main__":
             use_sdgd=args.use_sdgd,
             sdgd_num_dims=sdgd_num_dims,
         )
-        losses += losses_adam
+        run_utils.merge_losses(losses, losses_adam)
         l2_errs += l2_errs_adam
         print("\nAdam training complete!")
-        t2 = time.time()
-        h,m,s = utility.get_duration(t2-t1)
-        train_time_str = f"Adam training completed in: "
-        train_time_str += f"{h} hours " if h > 0 else ""
-        train_time_str += f"{m} minutes " if m > 0 else ""
-        train_time_str += f"{s} seconds"
-        print(train_time_str)
+        run_utils.print_train_duration(t1, time.time())
         #torch.save(model, f'{dir_name}/model_adam.pth')
 
     # --- Phase 2: L-BFGS fine-tuning ---
@@ -613,27 +571,15 @@ if __name__ == "__main__":
             compute_laplace=not use_weak_form,
             device=device
         )
-        losses += losses_lbfgs
+        losses["total"] += losses_lbfgs
         l2_errs += l2_errs_lbfgs
         print("\nL-BFGS fine-tuning complete!")
         torch.save(model, f'{dir_name}/model_adam_lbfgs.pth')
     
     # Dan
     print("\nTraining complete!")
-    
-    import json
-    with open(f'{dir_name}/model_metadata.json', 'w', encoding='utf-8') as f:
-        json.dump({"model_class": type(model).__name__, "args": args.__dict__}, f, ensure_ascii=False, indent=4)
 
-    pde_model.dump_pde_metadata(f'{dir_name}/pde_metadata.json')
-
-    loss_name = f'{dir_name}/training_loss'
-    l2_name = f'{dir_name}/training_l2_error'
-    # Save the results
-    torch.save(model.state_dict(), f'{dir_name}/model.pth')
-    torch.save(torch.tensor(losses), f'{loss_name}.pth')
-    torch.save(torch.tensor(l2_errs), f'{l2_name}.pth')
-    print("\nResults saved.")
+    loss_name, l2_name = run_utils.save_run(dir_name, model, losses, l2_errs, args, pde_model)
 
     print(l2_errs)
 
@@ -659,6 +605,7 @@ if __name__ == "__main__":
         "x_end": L,
     }
 
+    import os
     os.makedirs(f"{dir_name}/viz/", exist_ok=True)
     if args.enable_testing:
         plotter = viz.FunctionPlotter(**options)
