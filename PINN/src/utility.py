@@ -102,8 +102,8 @@ def header(dir_name):
     return model, u_analytic, pde_metadata, model_metadata
 
 
-def identity_fn(x):
-    return x
+def identity_fn(y,x):
+    return y
 
 
 import torch

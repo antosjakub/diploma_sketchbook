@@ -784,12 +784,14 @@ if __name__ == "__main__":
     #model = torch.compile(model)
 
 
+    active_losses = ("pde", "bc", "ic")
+
     # Preparation time
-    losses = run_utils.init_losses()
+    losses = run_utils.init_losses(("total",) + active_losses)
     l2_errs = []
 
     optimizer, scheduler = run_utils.make_optim(model, args)
-    loss_weighting = run_utils.make_loss_weighting(args, n_losses=3)
+    loss_weighting = run_utils.make_loss_weighting(args, active_losses)
     profiler = run_utils.make_profiler(dir_name, args)
 
     sdgd_num_dims = args.sdgd_num_dims if args.sdgd_num_dims is not None else d
@@ -812,7 +814,7 @@ if __name__ == "__main__":
         testing_suite = None
 
     L = 3.0
-    sampling = {
+    sampling_settings = {
         "n_trajs": args.n_trajs,
         "nt_steps": args.nt_steps,
         "n_res_points": args.n_res_points,
@@ -823,7 +825,12 @@ if __name__ == "__main__":
     # use_rbas??
 
     from main import PINN_Trainer
-    trainer = PINN_Trainer(model, optimizer, scheduler, pde_model, sampling, loss_weighting, testing_suite, profiler, device)
+    trainer = PINN_Trainer(
+        model, optimizer, scheduler, pde_model,
+        sampling_type="score_pinn", sampling_settings=sampling_settings,
+        loss_weighting=loss_weighting, testing_suite=testing_suite,
+        active_losses=active_losses, profiler=profiler, device=device,
+    )
     losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
         n_steps=args.n_steps,
         n_steps_decay=args.n_steps_decay,

@@ -9,7 +9,7 @@ import loss
 import utility
 
 
-LOSS_KEYS = ("total", "pde", "bc", "ic", "p_norm")
+LOSS_KEYS = ("total", "pde", "bc", "ic", "norm")
 
 
 def setup_run(args):
@@ -44,16 +44,9 @@ def make_optim(model, args):
     return optimizer, scheduler
 
 
-def make_loss_weighting(args, n_losses):
-    """Build Adaptive/Constant weighting with `n_losses` weights.
-    n_losses=3 -> [pde, bc, ic]; n_losses=4 -> [pde, bc, ic, norm]."""
-    if n_losses == 3:
-        weights = [args.lambda_pde, args.lambda_bc, args.lambda_ic]
-    elif n_losses == 4:
-        weights = [args.lambda_pde, args.lambda_bc, args.lambda_ic, args.lambda_norm]
-    else:
-        raise ValueError(f"n_losses must be 3 or 4, got {n_losses}")
-
+def make_loss_weighting(args, active_losses):
+    """Build Adaptive/Constant weighting with one weight per active loss term."""
+    weights = [getattr(args, f"lambda_{k}") for k in active_losses]
     if args.use_adaptive_weights:
         return loss.AdaptiveWeights(weights=torch.tensor(weights))
     return loss.ConstantWeights(weights=weights)

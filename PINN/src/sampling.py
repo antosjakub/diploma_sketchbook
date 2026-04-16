@@ -391,16 +391,18 @@ def residual_based_adaptive_sampling(X_cand, residual_fn, model, n_new=1000, pic
 
 
 
-def split_res_points(n_res_points, bs=512, f_pde=14, f_bc=1, f_ic=1):
+def split_res_points(n_res_points, bs=512, f_pde=14, f_bc=1, f_ic=1, f_norm=16):
     n_cycles = n_res_points // bs
-    bs_segment_size = bs // (f_pde + f_bc + f_ic)
+    bs_segment_size = bs // (f_pde + f_bc + f_ic + f_norm)
     bs_pde = bs_segment_size * f_pde
     bs_bc  = bs_segment_size * f_bc
     bs_ic  = bs_segment_size * f_ic
+    bs_norm  = bs_segment_size * f_norm
     n_interior = bs_pde * n_cycles
     n_boundary =  bs_bc * n_cycles
     n_initial  =  bs_ic * n_cycles
-    return (bs_pde, bs_bc, bs_ic), (n_interior, n_boundary, n_initial)
+    n_norm  =  bs_norm * n_cycles
+    return (bs_pde, bs_bc, bs_ic, bs_norm), (n_interior, n_boundary, n_initial, n_norm)
 
 def contruct_trajs_ic(x0, n_res_points):
     X_ic = torch.cat([
@@ -410,7 +412,7 @@ def contruct_trajs_ic(x0, n_res_points):
     return X_ic
 
 
-def sample_trajs_res_points(pde_model, x0, nt_steps, n_res_points):
+def sample_trajs_res_points(pde_model, x0, T, nt_steps, n_res_points):
     times, traj_bank = euler_maruyama_trajectory_bank(
         x0=x0,
         mu=pde_model.mu,
@@ -443,85 +445,174 @@ def scale_samples__spatial_temporal(X, lo, hi, T):
 
 from torch.utils.data import DataLoader
 
-def create_dataloaders__vanilla_pinn(model, pde_model, n_res_points=10_000, bs=1_000, spatial_domain=None, T=1.0, use_rbas=False, sampling_strategy="lhs", device="cpu"):
-    (bs_pde, bs_bc, bs_ic), (n_interior, n_boundary, n_initial) = split_res_points(n_res_points, bs)
+
+
+def _precompute_active(pde_model, X_pde, X_bc, X_ic, active_losses, device):
+    """Call pde_model.precompute, padding inactive args with a 1-row dummy, then
+    strip keys that weren't requested."""
+    d = pde_model.d
+    dummy = torch.zeros(1, d + 1, device=device)
+    precomputed = pde_model.precompute(
+        X_pde if X_pde is not None else dummy,
+        X_bc  if X_bc  is not None else dummy,
+        X_ic  if X_ic  is not None else dummy,
+    )
+    for k in ("pde", "bc", "ic"):
+        if k not in active_losses:
+            precomputed.pop(k, None)
+    return precomputed
+
+
+def create_dataloaders__vanilla_pinn(
+    model, pde_model, active_losses,
+    n_res_points=10_000, bs=1_000, spatial_domain=None, T=1.0,
+    use_rbas=False, sampling_strategy="lhs", device="cpu",
+):
+    (bs_pde, bs_bc, bs_ic, bs_norm), (n_interior, n_boundary, n_initial, n_norm) = split_res_points(n_res_points, bs,
+        f_pde  = 14 if "pde"  in active_losses else 0,
+        f_bc   =  1 if "bc"   in active_losses else 0,
+        f_ic   =  1 if "ic"   in active_losses else 0,
+        f_norm = 16 if "norm" in active_losses else 0
+    )
     d = pde_model.d
 
+    if "pde" not in active_losses: n_interior = 0
+    if "bc"  not in active_losses: n_boundary = 0
+    if "ic"  not in active_losses: n_initial  = 0
+    if "norm"  not in active_losses: n_norm  = 0
+
+    X_pde = X_bc = X_ic = X_norm = None
+    normals_bc = None
+
+    #vanilla = {"pde": {"sampling_type": "domain/trajs","bs":12}, "bc":{}, "ic":{"sampling_type":"p0/domain"}}
+    #d = {}
+
     if use_rbas:
-        X_pde = torch.cat([
-            residual_based_adaptive_sampling(d, pde_model.pde_residual, model, type='pde', n_new=2*n_interior//3, n_candidates=4*n_interior, sampling_strategy=sampling_strategy, picking_criterion="multinomial", device=device),
-            residual_based_adaptive_sampling(d, pde_model.pde_residual, model, type='pde', n_new=n_interior//3, n_candidates=2*n_interior, sampling_strategy=sampling_strategy, picking_criterion="top_k", device=device)
-        ], dim=0)
-
-        X_bc_1, normals_bc_1 = residual_based_adaptive_sampling(d, pde_model.bc_residual, model, type='bc', n_new=2*n_boundary//3, n_candidates=4*n_boundary, sampling_strategy=sampling_strategy, picking_criterion="multinomial", device=device)
-        X_bc_2, normals_bc_2 = residual_based_adaptive_sampling(d, pde_model.bc_residual, model, type='bc', n_new=n_boundary//3, n_candidates=2*n_boundary, sampling_strategy=sampling_strategy, picking_criterion="top_k", device=device)
-        X_bc = torch.cat([X_bc_1, X_bc_2], dim=0)
-        normals_bc = torch.cat([normals_bc_1, normals_bc_2], dim=0)
-
-        X_ic = torch.cat([
-            residual_based_adaptive_sampling(d, pde_model.ic_residual, model, type='ic', n_new=2*n_initial//3, n_candidates=4*n_initial, sampling_strategy=sampling_strategy, picking_criterion="multinomial", device=device),
-            residual_based_adaptive_sampling(d, pde_model.ic_residual, model, type='ic', n_new=n_initial//3, n_candidates=2*n_initial, sampling_strategy=sampling_strategy, picking_criterion="top_k", device=device)
-        ], dim=0)
+        if "pde" in active_losses:
+            X_pde = torch.cat([
+                residual_based_adaptive_sampling(d, pde_model.pde_residual, model, type='pde', n_new=2*n_interior//3, n_candidates=4*n_interior, sampling_strategy=sampling_strategy, picking_criterion="multinomial", device=device),
+                residual_based_adaptive_sampling(d, pde_model.pde_residual, model, type='pde', n_new=n_interior//3, n_candidates=2*n_interior, sampling_strategy=sampling_strategy, picking_criterion="top_k", device=device),
+            ], dim=0)
+        if "bc" in active_losses:
+            X_bc_1, normals_bc_1 = residual_based_adaptive_sampling(d, pde_model.bc_residual, model, type='bc', n_new=2*n_boundary//3, n_candidates=4*n_boundary, sampling_strategy=sampling_strategy, picking_criterion="multinomial", device=device)
+            X_bc_2, normals_bc_2 = residual_based_adaptive_sampling(d, pde_model.bc_residual, model, type='bc', n_new=n_boundary//3, n_candidates=2*n_boundary, sampling_strategy=sampling_strategy, picking_criterion="top_k", device=device)
+            X_bc = torch.cat([X_bc_1, X_bc_2], dim=0)
+            normals_bc = torch.cat([normals_bc_1, normals_bc_2], dim=0)
+        if "ic" in active_losses:
+            X_ic = torch.cat([
+                residual_based_adaptive_sampling(d, pde_model.ic_residual, model, type='ic', n_new=2*n_initial//3, n_candidates=4*n_initial, sampling_strategy=sampling_strategy, picking_criterion="multinomial", device=device),
+                residual_based_adaptive_sampling(d, pde_model.ic_residual, model, type='ic', n_new=n_initial//3, n_candidates=2*n_initial, sampling_strategy=sampling_strategy, picking_criterion="top_k", device=device),
+            ], dim=0)
     else:
         X_pde, X_bc, X_ic, normals_bc = sample_collocation_points(d, n_interior, n_boundary, n_initial, sampling_strategy=sampling_strategy, device=device)
-    
+
     if spatial_domain is not None:
-        lo = spatial_domain[:,0]
-        hi = spatial_domain[:,1]
-        X_pde = scale_samples__spatial(X_pde, lo, hi)
-        X_bc = scale_samples__spatial(X_bc, lo, hi)
-        X_ic = scale_samples__spatial(X_ic, lo, hi)
+        lo = spatial_domain[:, 0]
+        hi = spatial_domain[:, 1]
+        if X_pde is not None: X_pde = scale_samples__spatial(X_pde, lo, hi)
+        if X_bc  is not None: X_bc  = scale_samples__spatial(X_bc,  lo, hi)
+        if X_ic  is not None: X_ic  = scale_samples__spatial(X_ic,  lo, hi)
     if T != 1.0:
-        X_pde = scale_samples__temporal(X_pde, T)
-        X_bc = scale_samples__temporal(X_bc, T)
+        if X_pde is not None: X_pde = scale_samples__temporal(X_pde, T)
+        if X_bc  is not None: X_bc  = scale_samples__temporal(X_bc,  T)
 
-    precomputed = pde_model.precompute(X_pde, X_bc, X_ic)
-    if normals_bc is not None:
+    if "norm" in active_losses:
+        x0 = lo + (hi - lo) * torch.rand(n_norm, pde_model.d, device=device)
+        _, traj = euler_maruyama_trajectory_bank(
+            x0=x0, mu=pde_model.mu, sigma=pde_model.sigma, T=T, n_steps=1000,
+        )
+        X_norm = traj[:, -1, :]
+
+    precomputed = _precompute_active(pde_model, X_pde, X_bc, X_ic, active_losses, device)
+    if normals_bc is not None and "bc" in active_losses:
         precomputed["bc"]["normals"] = normals_bc
+    if "norm" in active_losses:
+        precomputed["norm"] = {"p_inf": pde_model.p_inf(X_norm)}
 
-    print("Constructing dataset with:")
-    print("dataset_shapes:", X_pde.shape, X_bc.shape, X_ic.shape)
-    print("bs_sizes:", bs_pde, bs_bc, bs_ic)
-    loader_pde = DataLoader(CollocationDataset(X_pde, precomputed["pde"]), batch_size=bs_pde, shuffle=True)
-    loader_bc  = DataLoader(CollocationDataset(X_bc, precomputed["bc"]), batch_size=bs_bc, shuffle=True)
-    loader_ic  = DataLoader(CollocationDataset(X_ic, precomputed["ic"]), batch_size=bs_ic, shuffle=True)
+    Xs = {"pde": X_pde, "bc": X_bc, "ic": X_ic, "norm": X_norm}
+    bss = {"pde": bs_pde, "bc": bs_bc, "ic": bs_ic, "norm": bs_norm}
+    bundle = {}
+    for k in ("pde", "bc", "ic", "norm"):
+        if k in active_losses:
+            bundle[k] = DataLoader(CollocationDataset(Xs[k], precomputed[k]), batch_size=bss[k], shuffle=True)
 
-    return loader_pde, loader_bc, loader_ic
+    print("Constructing dataset:")
+    for k, loader in bundle.items():
+        print(f"  {k}: X.shape = {loader.dataset.X.shape}, bs = {loader.batch_size}")
+
+    return bundle
 
 
-def create_dataloaders__score_pinn(model, pde_model, n_res_points=10_000, bs=1_000, n_trajs=100, T=1.0, nt_steps=100, spatial_domain=None):
-    (bs_pde, bs_bc, bs_ic), (n_interior, n_boundary, n_initial) = split_res_points(n_res_points, bs)
+def create_dataloaders__score_pinn(
+    model, pde_model, active_losses,
+    n_res_points=10_000, bs=1_000, n_trajs=100, T=1.0, nt_steps=100, spatial_domain=None,
+    device="cpu",
+):
+    (bs_pde, bs_bc, bs_ic, bs_norm), (n_interior, n_boundary, n_initial, n_norm) = split_res_points(n_res_points, bs,
+        f_pde  = 14 if "pde"  in active_losses else 0,
+        f_bc   =  1 if "bc"   in active_losses else 0,
+        f_ic   =  1 if "ic"   in active_losses else 0,
+        f_norm = 16 if "norm" in active_losses else 0
+    )
+    d = pde_model.d
+
+    if "pde" not in active_losses: n_interior = 0
+    if "bc"  not in active_losses: n_boundary = 0
+    if "ic"  not in active_losses: n_initial  = 0
+    if "norm"  not in active_losses: n_norm  = 0
+
+    X_pde = X_bc = X_ic = X_norm = None
+    normals_bc = None
 
     x0 = pde_model.sample_x0(n_trajs)
-    X_ic = contruct_trajs_ic(x0, n_initial)
-    X_pde = sample_trajs_res_points(pde_model, x0, nt_steps, n_interior)
+    if "ic" in active_losses:
+        X_ic = contruct_trajs_ic(x0, n_initial)
+    if "pde" in active_losses:
+        X_pde = sample_trajs_res_points(pde_model, x0, T, nt_steps, n_interior)
+    if "bc" in active_losses:
+        X_bc, normals_bc = sample_bc(n_boundary, d, sampling_strategy='lhs', device=x0.device)
+        if spatial_domain is not None:
+            lo = spatial_domain[:, 0]
+            hi = spatial_domain[:, 1]
+            X_bc = scale_samples__spatial(X_bc, lo, hi)
+        if T != 1.0:
+            X_bc = scale_samples__temporal(X_bc, T)
+    if "norm" in active_losses:
+        x0 = lo + (hi - lo) * torch.rand(n_norm, pde_model.d, device=device)
+        _, traj = euler_maruyama_trajectory_bank(
+            x0=x0, mu=pde_model.mu, sigma=pde_model.sigma, T=T, n_steps=1000,
+        )
+        X_norm = traj[:, -1, :]
 
-    X_bc, normals_bc = sample_bc(n_boundary, d, sampling_strategy='lhs', device=x0.device)
-    if spatial_domain is not None:
-        lo = spatial_domain[:,0]
-        hi = spatial_domain[:,1]
-        X_bc = scale_samples__spatial(X_bc, lo, hi)
-    if T != 1.0:
-        X_bc = scale_samples__temporal(X_bc, T)
+    precomputed = _precompute_active(pde_model, X_pde, X_bc, X_ic, active_losses, device)
+    if normals_bc is not None and "bc" in active_losses:
+        precomputed["bc"]["normals"] = normals_bc
+    if "norm" in active_losses:
+        precomputed["norm"]["p_inf"] = pde_model.p_inf(X_norm)
 
-    precomputed = pde_model.precompute(X_pde, X_bc, X_ic)
-    precomputed["bc"]["normals"] = normals_bc
-
-    loader_pde = DataLoader(CollocationDataset(X_pde, precomputed["pde"]), batch_size=bs_pde, shuffle=True)
-    loader_bc  = DataLoader(CollocationDataset(X_bc, precomputed["bc"]), batch_size=bs_bc, shuffle=True)
-    loader_ic  = DataLoader(CollocationDataset(X_ic, precomputed["ic"]), batch_size=bs_ic, shuffle=True)
-
-    return loader_pde, loader_bc, loader_ic
+    Xs = {"pde": X_pde, "bc": X_bc, "ic": X_ic, "norm": X_norm}
+    bss = {"pde": bs_pde, "bc": bs_bc, "ic": bs_ic, "norm": bs_norm}
+    bundle = {}
+    for k in ("pde", "bc", "ic", "norm"):
+        if k in active_losses:
+            bundle[k] = DataLoader(CollocationDataset(Xs[k], precomputed[k]), batch_size=bss[k], shuffle=True)
+    return bundle
 
 
-def create_dataloaders(type, model, pde_model, settings):
+def create_dataloaders(type, model, pde_model, settings, active_losses, device="cpu"):
+    """
+    Build a bundle dict {term_name: loader_or_buffer} for all terms in active_losses.
+    Loader-typed terms ("pde", "bc", "ic") yield DataLoader; "norm" yields the
+    {x, p_inf, Z} buffer dict used by the importance-sampled integral loss.
+    """
     if type == "score_pinn":
-        loader_pde, loader_bc, loader_ic = create_dataloaders__score_pinn(model, pde_model, **settings)
+        bundle = create_dataloaders__score_pinn(model, pde_model, active_losses, device=device, **settings)
     elif type == "vanilla_pinn":
-        loader_pde, loader_bc, loader_ic = create_dataloaders__vanilla_pinn(model, pde_model, **settings)
+        bundle = create_dataloaders__vanilla_pinn(model, pde_model, active_losses, device=device, **settings)
     else:
         raise NameError(f"Incorrect data loader type specified: '{type}'")
-    return loader_pde, loader_bc, loader_ic
+
+    return bundle
 
 
 
