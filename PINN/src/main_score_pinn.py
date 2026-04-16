@@ -27,7 +27,10 @@ parser.add_argument("--resampling_frequency", default=1000, type=int, help="")
 parser.add_argument("--lambda_pde", default=1.0, type=float, help="")
 parser.add_argument("--lambda_bc", default=0.01, type=float, help="")
 parser.add_argument("--lambda_ic", default=100.0, type=float, help="")
+parser.add_argument("--lambda_norm", default=0.1, type=float, help="Weight of the ∫p dx = 1 normalization loss.")
 parser.add_argument("--use_adaptive_weights", action="store_true", help="Loss weighting.")
+parser.add_argument("--active_losses", default="pde,bc,ic", type=str, help="Comma-separated subset of {pde,bc,ic,norm}. 'pde' is required.")
+
 parser.add_argument("--use_rbas", action="store_true", help="Residual-based adaptive sampling")
 parser.add_argument("--use_sdgd", action="store_true", help="Stochastic dimension gradient-descend (for loss in high dims)")
 parser.add_argument("--sdgd_num_dims", default=None, type=int, help="Number of dimensions to use for SDGD. If None, use all dimensions.")
@@ -45,7 +48,6 @@ parser.add_argument("--starting_model", default="run_sp_latest/model.pth", type=
 #parser.add_argument("--pde_model_name", default=None, type=str, help="HeatEquation")
 #parser.add_argument("--pde_model_args", default=None, type=str, help="pde_model_args.json")
 
-import score_pinn_derivatives as sp_derivatives
 import derivatives
 
 #class isotropic_SDE:
@@ -66,12 +68,12 @@ import derivatives
 #            - precomputed["mu_grad"]
 #        )
 #    def ll_ode_redisual(self, model_q, model_s, X, precomputed):
-#        s, _, s_div = sp_derivatives.compute_score_dt_div(model_s, X)
+#        s, _, s_div = derivatives.compute_score_dt_div(model_s, X)
 #        q = model_q(X)
 #        q_t = derivatives.compute_grad(X, q, torch.ones(q))[:,-1:]
 #        return q_t - self.L_functional(s, s_div, precomputed)
 #    def score_pde_residual(self, model, X, precomputed):
-#        s, s_t, s_div = sp_derivatives.compute_score_dt_div(model, X)
+#        s, s_t, s_div = derivatives.compute_score_dt_div(model, X)
 #        L = self.L_functional(s, s_div, precomputed)
 #        assert L.shape == (X.shape[0], 1)
 #        return s_t - derivatives.compute_grad(X, L, torch.ones(L))[:,:-1]
@@ -320,7 +322,7 @@ class Isotropic_OU:
         def pde_residual(self, X, model_s, precomputed):
             X.detach()
             X.requires_grad_(True)
-            s, s_t, s_div = sp_derivatives.compute_score_dt_div(model_s, X)
+            s, s_t, s_div = derivatives.compute_score_dt_div(model_s, X)
             L = self.L_functional(X, s, s_div, precomputed)
             assert L.shape == (X.shape[0], 1)
             residual = s_t - derivatives.compute_grad(X, L, torch.ones_like(L))[:,:-1]
@@ -373,7 +375,7 @@ class Isotropic_OU:
         def precompute(self, X_pde, X_ic):
             X_pde.detach()
             X_pde.requires_grad_(True)
-            s, _, s_div = sp_derivatives.compute_score_dt_div(self.model_s, X_pde)
+            s, _, s_div = derivatives.compute_score_dt_div(self.model_s, X_pde)
             L = self.L_functional(X_pde, s, s_div)
             return {
                 "pde": {
@@ -442,7 +444,7 @@ class SmoluchowskiGeneral:
         def pde_residual(self, X, model_s, precomputed):
             X.detach()
             X.requires_grad_(True)
-            s, s_t, s_div = sp_derivatives.compute_score_dt_div(model_s, X)
+            s, s_t, s_div = derivatives.compute_score_dt_div(model_s, X)
             L = self.L_functional(X, s, s_div, precomputed)
             assert L.shape == (X.shape[0], 1)
             residual = s_t - derivatives.compute_grad(X, L, torch.ones_like(L))[:,:-1]
@@ -508,7 +510,7 @@ class SmoluchowskiGeneral:
         def precompute(self, X_pde, X_bc, X_ic):
             X_pde.detach()
             X_pde.requires_grad_(True)
-            s, _, s_div = sp_derivatives.compute_score_dt_div(self.model_s, X_pde)
+            s, _, s_div = derivatives.compute_score_dt_div(self.model_s, X_pde)
             L = self.L_functional(X_pde, s, s_div, self._precompute_V_grad_V_laplace(X_pde))
             return {
                 "pde": {
@@ -777,14 +779,17 @@ if __name__ == "__main__":
 
     # Select the model architecture
     if type_sp == "score_pde":
-        model = architecture.PINN(D, layers, d).to(device)
+        # NN t - x
+        head_fn = lambda nn_out, X: nn_out * X[:,-1:] - X[:,:-1]
+        model = architecture.PINN(D, layers, d, head_fn=head_fn).to(device)
     elif type_sp == "ll_ode":
         model = architecture.PINN(D, layers, 1).to(device)
     #model = torch.compile(model, mode="reduce-overhead")
     #model = torch.compile(model)
 
 
-    active_losses = ("pde", "bc", "ic")
+    active_losses = tuple(k.strip() for k in args.active_losses.split(",") if k.strip())
+    print(f"Active losses: {active_losses}")
 
     # Preparation time
     losses = run_utils.init_losses(("total",) + active_losses)
@@ -814,20 +819,29 @@ if __name__ == "__main__":
         testing_suite = None
 
     L = 3.0
+    #sampling_settings = {
+    #    "n_trajs": args.n_trajs,
+    #    "nt_steps": args.nt_steps,
+    #    "n_res_points": args.n_res_points,
+    #    "bs": args.bs,
+    #    "spatial_domain": torch.stack([torch.full((d,), -L), torch.full((d,), L)], dim=1),
+    #    "T": args.T,
+    #}
+    T = args.T
+    T = 1.0
     sampling_settings = {
-        "n_trajs": args.n_trajs,
-        "nt_steps": args.nt_steps,
         "n_res_points": args.n_res_points,
         "bs": args.bs,
         "spatial_domain": torch.stack([torch.full((d,), -L), torch.full((d,), L)], dim=1),
-        "T": args.T,
+        "T": T,
+        "use_rbas": args.use_rbas,
     }
-    # use_rbas??
 
     from main import PINN_Trainer
     trainer = PINN_Trainer(
         model, optimizer, scheduler, pde_model,
-        sampling_type="score_pinn", sampling_settings=sampling_settings,
+        #sampling_type="score_pinn", sampling_settings=sampling_settings,
+        sampling_type="vanilla_pinn", sampling_settings=sampling_settings,
         loss_weighting=loss_weighting, testing_suite=testing_suite,
         active_losses=active_losses, profiler=profiler, device=device,
     )
@@ -884,7 +898,7 @@ if __name__ == "__main__":
             plotter.add_panel('model_s', title="model_s(x,t)").quiver(model_fn_s)
             plotter.add_panel('s_analytic', title="s_analytic(x,t)").quiver(score_sde_model.s_analytic)
             plotter.add_panel('err', title="err").quiver(lambda X: model_fn_s(X) - score_sde_model.s_analytic(X))
-            plotter.save_animation(f'{dir_name}/viz/anim_model_s_vs_s_analytic.gif', num_frames=30, fps=5)
+            plotter.save_animation(f'{dir_name}/viz/anim_model_s_vs_s_analytic.gif', num_frames=30, fps=5, t_end=T)
 
         plotter_ic = viz.FunctionPlotter(**options)
         plotter_ic.add_panel('nn', rf"s_\theta(x,0)").quiver(model_fn_s)
@@ -894,8 +908,8 @@ if __name__ == "__main__":
 
         plotter = viz.FunctionPlotter(**options)
         plotter.add_panel('nn', "s_nn(x,t)").quiver(model_fn_s)
-        plotter.save_animation(f'{dir_name}/viz/anim_s_nn_fixed.gif', cbar='fixed', num_frames=30, fps=5)
-        plotter.save_animation(f'{dir_name}/viz/anim_s_nn_dynamic.gif', cbar='dynamic', num_frames=30, fps=5)
+        plotter.save_animation(f'{dir_name}/viz/anim_s_nn_fixed.gif', cbar='fixed', num_frames=30, fps=5, t_end=T)
+        plotter.save_animation(f'{dir_name}/viz/anim_s_nn_dynamic.gif', cbar='dynamic', num_frames=30, fps=5, t_end=T)
 
         plotter = viz.FunctionPlotter(**options)
         plotter.add_panel('ic', title="p_0(x)").heatmap(p_ic)

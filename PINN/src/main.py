@@ -472,7 +472,7 @@ if __name__ == "__main__":
             testing_suite.make_test_data(pde_model, args.n_test_calloc_points, f"{dir_name}/testing_data.pt")
             #testing_suite.connect_test_data(f"{dir_name}/testing_data.pt")
         
-        L = 3.5
+        L = 4.0
         T = 2.0
         spatial_domain = torch.stack([torch.full((d,), -L), torch.full((d,), L)], dim=1)
         pde_model.Z = pde_model.estimate_Z(spatial_domain)
