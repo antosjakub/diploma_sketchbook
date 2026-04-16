@@ -226,7 +226,7 @@ class Isotropic_OU:
         self.d = d
         self.Sigma = Sigma
         # sde terms:
-        self.mu = lambda x: -0.5*x
+        self.mu = lambda x,t: -0.5*x
         self.sigma = torch.sqrt(Sigma)
         # detect whether mu is a constant or a function of x
         self.dist_initial = torch.distributions.MultivariateNormal(
@@ -268,7 +268,7 @@ class Isotropic_OU:
             x.detach()
             x.requires_grad_(True)
             q = self.dist_initial.log_prob(x).unsqueeze(1)
-            s0 = derivatives.compute_grad(x, q, torch.ones_like(q))
+            s0 = derivatives.compute_grad(x, q, torch.ones_like(q)).detach()
             return s0
         def pde_residual(self, X, model_s, precomputed):
             X.detach()
@@ -290,7 +290,7 @@ class Isotropic_OU:
         def ic_loss(self, X, model_s, precomputed):
             res = self.ic_residual(X, model_s, precomputed)
             return self._term_loss(res)
-        def precompute(self, X_pde, X_ic):
+        def precompute(self, X_pde, X_bc, X_ic):
             return {
                 "pde": {},
                 "ic": {
