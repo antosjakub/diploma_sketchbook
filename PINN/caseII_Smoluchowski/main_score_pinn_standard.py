@@ -22,6 +22,11 @@ parser.add_argument("--enable_testing", action="store_true", help="Compute L2/L1
 
 parser.add_argument("--resampling_frequency", default=1000, type=int, help="")
 parser.add_argument("--lambda_pde", default=1.0, type=float, help="")
+parser.add_argument("--lambda_bc", default=0.01, type=float, help="")
+parser.add_argument("--lambda_ic", default=100.0, type=float, help="")
+parser.add_argument("--lambda_norm", default=0.1, type=float, help="Weight of the ∫p dx = 1 normalization loss.")
+parser.add_argument("--use_adaptive_weights", action="store_true", help="Loss weighting.")
+parser.add_argument("--active_losses", default="pde,bc,ic", type=str, help="Comma-separated subset of {pde,bc,ic,norm}. 'pde' is required.")
 
 parser.add_argument("--use_rbas", action="store_true", help="Residual-based adaptive sampling")
 parser.add_argument("--use_sdgd", action="store_true", help="Stochastic dimension gradient-descend (for loss in high dims)")
@@ -31,7 +36,6 @@ parser.add_argument("--output_dir", default="run_score_pinn_latest/", type=str, 
 parser.add_argument("--clear_dir", action="store_true", help="Erase contents of the output_dir before the training starts.")
 
 parser.add_argument("--mode", default="score_pde", type=str, help="score_pde or ll_ode")
-parser.add_argument("--ic_type", default="gauss", type=str, help="gauss, cauchy, laplace")
 #
 parser.add_argument("--enable_profiler", action="store_true", help="")
 parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
@@ -64,6 +68,7 @@ sys.path.append(src_dir)
 
 
 import sampling, loss, architecture, utility
+import pde_models_sde
 import run_utils
 
 
@@ -82,38 +87,37 @@ print(f"{'='*60}\n")
 type_sp = args.mode
 print(f"Training Score-PINN, type: '{type_sp}'\n")
 
-label = args.ic_type
+sde_model_label = 'DW'
 if type_sp == "score_pde":
-    args.output_dir = f"run_{label}_{type_sp}"
+    args.output_dir = f"run_{sde_model_label}_{type_sp}"
     args.clear_dir = True
     args.enable_testing = False
 elif type_sp == "ll_ode":
-    args.output_dir = f"run_{label}_{type_sp}"
+    args.output_dir = f"run_{sde_model_label}_{type_sp}"
     args.clear_dir = True
     args.enable_testing = False
-    args.starting_model = f"run_{label}_score_pde/model.pth"
+    args.starting_model = f"run_{sde_model_label}_score_pde/model.pth"
 else:
     raise NameError("Incorrect mode specified.")
 
 dir_name, device = run_utils.setup_run(args)
 
+a = 0.7 + 0.5*torch.rand(d)
+print(a)
+score_sde_model = pde_models_sde.SmoluchowskiDoubleWell(d=d, beta=1.0, a=a)
+
+
 
 ### PREP PDE MODEL
-import pde_model_sde
-if label == "gauss":
-    score_sde_model = pde_model_sde.Gaussian_OU(d=d)
-elif label == "cauchy":
-    score_sde_model = pde_model_sde.Cauchy_OU(d=d)
-elif label == "laplace":
-    score_sde_model = pde_model_sde.Laplace_OU(d=d)
+#score_sde_model = Isotropic_OU(d=d)
+#score_sde_model = SmoluchowskiDiffDrift(d=d, beta=1.0, c=torch.ones(d))
 
 # Score PDE
 if type_sp == "score_pde":
     pde_model = score_sde_model.Score_PDE(score_sde_model)
 ## LL ODE
 elif type_sp == "ll_ode":
-    head_fn = lambda nn_out, X: nn_out * X[:,-1:] + pde_model.s0(X[:,:-1])
-    model_s = architecture.PINN(D, layers, d, head_fn=head_fn).to(device)
+    model_s = architecture.PINN(D, layers, d).to(device)
     print(f"Loading in a score pde model: '{args.starting_model}'")
     model_s.load_state_dict(torch.load(args.starting_model, weights_only=True))
     model_s.eval()
@@ -126,16 +130,16 @@ print()
 
 # Select the model architecture
 if type_sp == "score_pde":
-    head_fn = lambda nn_out, X: nn_out * X[:,-1:] + pde_model.s0(X[:,:-1])
+    # NN t - x
+    head_fn = lambda nn_out, X: nn_out * X[:,-1:] - X[:,:-1]
     model = architecture.PINN(D, layers, d, head_fn=head_fn).to(device)
 elif type_sp == "ll_ode":
-    head_fn = lambda nn_out, X: nn_out * X[:,-1:] + pde_model.q0(X[:,:-1])
-    model = architecture.PINN(D, layers, 1, head_fn=head_fn).to(device)
+    model = architecture.PINN(D, layers, 1).to(device)
 #model = torch.compile(model, mode="reduce-overhead")
 #model = torch.compile(model)
 
 
-active_losses = ("pde",)
+active_losses = tuple(k.strip() for k in args.active_losses.split(",") if k.strip())
 print(f"Active losses: {active_losses}")
 
 # Preparation time
@@ -143,7 +147,7 @@ losses = run_utils.init_losses(("total",) + active_losses)
 l2_errs = []
 
 optimizer, scheduler = run_utils.make_optim(model, args)
-loss_weighting = loss.ConstantWeights(weights=[1.0])
+loss_weighting = run_utils.make_loss_weighting(args, active_losses)
 profiler = run_utils.make_profiler(dir_name, args)
 
 sdgd_num_dims = args.sdgd_num_dims if args.sdgd_num_dims is not None else d
@@ -165,29 +169,30 @@ if args.enable_testing:
 else:
     testing_suite = None
 
-L = 4.0
-T = args.T
-sampling_settings = {
-    "n_trajs": args.n_trajs,
-    "nt_steps": args.nt_steps,
-    "n_res_points": args.n_res_points,
-    "bs": args.bs,
-    "spatial_domain": torch.stack([torch.full((d,), -L), torch.full((d,), L)], dim=1),
-    "T": args.T,
-}
+L = 3.0
 #sampling_settings = {
+#    "n_trajs": args.n_trajs,
+#    "nt_steps": args.nt_steps,
 #    "n_res_points": args.n_res_points,
 #    "bs": args.bs,
 #    "spatial_domain": torch.stack([torch.full((d,), -L), torch.full((d,), L)], dim=1),
-#    "T": T,
-#    "use_rbas": args.use_rbas,
+#    "T": args.T,
 #}
+T = args.T
+T = 1.0
+sampling_settings = {
+    "n_res_points": args.n_res_points,
+    "bs": args.bs,
+    "spatial_domain": torch.stack([torch.full((d,), -L), torch.full((d,), L)], dim=1),
+    "T": T,
+    "use_rbas": args.use_rbas,
+}
 
 from trainers import PINN_Trainer
 trainer = PINN_Trainer(
     model, optimizer, scheduler, pde_model,
-    sampling_type="score_pinn", sampling_settings=sampling_settings,
-    #sampling_type="vanilla_pinn", sampling_settings=sampling_settings,
+    #sampling_type="score_pinn", sampling_settings=sampling_settings,
+    sampling_type="vanilla_pinn", sampling_settings=sampling_settings,
     loss_weighting=loss_weighting, testing_suite=testing_suite,
     active_losses=active_losses, profiler=profiler, device=device,
 )
@@ -267,7 +272,6 @@ elif type_sp == "ll_ode":
     model_fn_p = lambda X: torch.exp(model_fn_q(X))
     model_fn_s = viz.wrapp_model(model_s)
     q_ic = lambda X: pde_model.q0(X[:,:-1])
-    q_inf = lambda X: torch.log(pde_model.p_inf(X[:,:-1]))
 
     if args.enable_testing:
 
@@ -276,14 +280,14 @@ elif type_sp == "ll_ode":
         plotter.add_panel('q_analytic', title="q_analytic(x,t)").heatmap(score_sde_model.q_analytic)
         plotter.add_panel('err', title="err").heatmap(lambda X: model_fn_q(X) - score_sde_model.q_analytic(X))
         plotter.save_plot(f'{dir_name}/viz/plot_model_q_vs_q_analytic.png', t_val=0.234)
-        plotter.save_animation(f'{dir_name}/viz/anim_model_q_vs_q_analytic.gif', num_frames=30, fps=5, t_end=T)
+        plotter.save_animation(f'{dir_name}/viz/anim_model_q_vs_q_analytic.gif', num_frames=30, fps=5)
 
         plotter = viz.FunctionPlotter(**options)
         plotter.add_panel('model_p', title="model_p(x,t)").heatmap(model_fn_p)
         plotter.add_panel('p_analytic', title="p_analytic(x,t)").heatmap(score_sde_model.p_analytic)
         plotter.add_panel('err', title="err").heatmap(lambda X: model_fn_p(X) - score_sde_model.p_analytic(X))
         plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p_analytic.png', t_val=0.234)
-        plotter.save_animation(f'{dir_name}/viz/anim_model_p_vs_p_analytic.gif', num_frames=30, fps=5, t_end=T)
+        plotter.save_animation(f'{dir_name}/viz/anim_model_p_vs_p_analytic.gif', num_frames=30, fps=5)
 
     plotter = viz.FunctionPlotter(**options)
     plotter.add_panel('model_q', title="model_q(x,0)").heatmap(model_fn_q)
@@ -296,22 +300,12 @@ elif type_sp == "ll_ode":
     plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p0.png', t_val=0.0)
 
     plotter = viz.FunctionPlotter(**options)
-    plotter.add_panel('model_q', title="model_q(x,T)").heatmap(model_fn_q)
-    plotter.add_panel('q_inf', title="q_inf(x)").heatmap(q_inf)
-    plotter.save_plot(f'{dir_name}/viz/plot_model_q_vs_q_inf.png', t_val=T)
-
-    plotter = viz.FunctionPlotter(**options)
-    plotter.add_panel('model_p', title="model_p(x,T)").heatmap(model_fn_p)
-    plotter.add_panel('p_inf', title="p_inf(x)").heatmap(p_inf)
-    plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p_inf.png', t_val=T)
-
-    plotter = viz.FunctionPlotter(**options)
     plotter.add_panel('model_q', title="model_q(x,t)").heatmap(model_fn_q)
-    plotter.save_animation(f'{dir_name}/viz/anim_model_q.gif', num_frames=30, fps=5, t_end=T)
+    plotter.save_animation(f'{dir_name}/viz/anim_model_q.gif', num_frames=30, fps=5)
 
     plotter = viz.FunctionPlotter(**options)
     plotter.add_panel('model_p', title="model_p(x,t) = exp(model_q(x,t))").heatmap(model_fn_p)
-    plotter.save_animation(f'{dir_name}/viz/anim_model_p.gif', num_frames=30, fps=5, t_end=T)
+    plotter.save_animation(f'{dir_name}/viz/anim_model_p.gif', num_frames=30, fps=5)
 
     plotter = viz.FunctionPlotter(**options)
     p = plotter.add_panel('sq', title="model_s & model_q")
@@ -320,4 +314,4 @@ elif type_sp == "ll_ode":
     p = plotter.add_panel('sp', title="model_s & model_p")
     p.heatmap(model_fn_p)
     p.quiver(model_fn_s, color='k')
-    plotter.save_animation(f'{dir_name}/viz/anim_model_sq_sp.gif', num_frames=30, fps=5, t_end=T)
+    plotter.save_animation(f'{dir_name}/viz/anim_model_sq_sp.gif', num_frames=30, fps=5)
