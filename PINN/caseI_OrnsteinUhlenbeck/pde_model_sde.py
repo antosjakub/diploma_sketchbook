@@ -5,6 +5,7 @@ src_dir = os.path.join(os.path.dirname(__file__), '../src/')
 sys.path.append(src_dir)
 
 import derivatives
+import utility
 
 #class isotropic_SDE:
 #    def __init__(self, sigma, mu):
@@ -99,19 +100,25 @@ class GeneralGaussian:
     def __init__(
         self,
         d: int,
-        gamma_strategy="min_max",
         x0 = None,
-        device: Optional[torch.device] = None,
         dtype: torch.dtype = torch.float32,
-        seed: int = 76,
+        device: Optional[torch.device] = None,
     ):
         super().__init__()
-
         self.d = d
-        self.x0 = x0 if (x0 is not None) else torch.zeros(d)
-        self.device = device
+        self.x0 = x0 if (x0 is not None) else torch.zeros(d, dtype=dtype, device=device)
         self.dtype = dtype
+        self.device = device
 
+
+    def random_init_gamma_Q(
+        self,
+        gamma_strategy="min_max",
+        seed: int = 76,
+    ):
+        device = self.device
+        dtype = self.dtype
+        d = self.d
         g = torch.Generator(device=device)
         g.manual_seed(seed)
 
@@ -150,8 +157,14 @@ class GeneralGaussian:
         self.Q = torch.ones((d,d), dtype=dtype)
         self.Q = Q
 
+        self.set_gamma_Q(gamma, Q)
+
+
+    def set_gamma_Q(self, gamma, Q):
         # Sigma = Q^T Gamma Q  and  Sigma^(1/2) = Q^T Gamma^(1/2) Q.
         # (gamma.unsqueeze(1) * Q) applies diag(gamma) on the left before Q.
+        self.gamma = gamma
+        self.Q = Q
         self.Sigma = Q.transpose(0, 1) @ (gamma.unsqueeze(1) * Q)
         self.Sigma_sqrt = Q.transpose(0, 1) @ (torch.sqrt(gamma).unsqueeze(1) * Q)
 
@@ -335,26 +348,64 @@ class Anisotropic_OU:
 
     Only the Gaussian variant has a closed-form solution.
     """
-    def __init__(self, d, initial_dist, seed=76, dtype=torch.float32, device=None):
+    def __init__(self, d, initial_dist, gamma=None, Q=None, seed=76, dtype=torch.float32, device=None):
         self.d = d
         self.dtype = dtype
         self.device = device
 
-        self.gaussian_obj = GeneralGaussian(
-            d, gamma_strategy="min_max", seed=seed, dtype=dtype, device=device
-        )
-        self.Sigma = self.gaussian_obj.Sigma
+        self.gaussian_obj = GeneralGaussian(d, dtype=dtype, device=device)
+        if gamma is not None and Q is not None:
+            gamma_t = torch.as_tensor(gamma, dtype=dtype, device=device)
+            Q_t = torch.as_tensor(Q, dtype=dtype, device=device)
+            self.gaussian_obj.set_gamma_Q(gamma_t, Q_t)
+        else:
+            self.gaussian_obj.random_init_gamma_Q(gamma_strategy="min_max", seed=seed)
+        self._refresh_sde_cache()
 
-        # SDE terms: drift and (matrix) diffusion coefficient consumed by sampling.py.
+        # SDE drift (diffusion is cached in _refresh_sde_cache).
         self.mu = lambda x, t: -0.5 * x
-        self.sigma = self.gaussian_obj.Sigma_sqrt
 
         self.initial_dist = initial_dist
-        # Stationary distribution p_inf = N(0, Sigma) (Gaussian regardless of p_0).
+
+    def _refresh_sde_cache(self):
+        """(Re)build Sigma, sigma, and dist_inf from the current gaussian_obj state."""
+        self.Sigma = self.gaussian_obj.Sigma
+        # Matrix-valued diffusion coefficient consumed by sampling.py.
+        self.sigma = self.gaussian_obj.Sigma_sqrt
         self.dist_inf = torch.distributions.MultivariateNormal(
-            loc=torch.zeros(d, dtype=dtype, device=device),
+            loc=torch.zeros(self.d, dtype=self.dtype, device=self.device),
             covariance_matrix=self.Sigma,
         )
+
+    def get_pde_metadata(self):
+        return {
+            "d": self.d,
+            "initial_dist": type(self.initial_dist).__name__,
+            "gamma": self.gaussian_obj.gamma.detach().cpu().tolist(),
+            "Q": self.gaussian_obj.Q.detach().cpu().tolist(),
+            "Sigma": self.gaussian_obj.Sigma.detach().cpu().tolist(),
+        }
+    def dump_pde_metadata(self, file_path) -> None:
+        pde_params = self.get_pde_metadata()
+        utility.json_dump(file_path, {"pde_class": type(self).__name__, "params": pde_params})
+    def __load_pde_metadata(self, pde_metadata) -> None:
+        pde_class = pde_metadata["pde_class"]
+        assert pde_class == type(self).__name__, f"ERROR: The given .json file specifies parameters for '{pde_class}', but this class is of type '{type(self).__name__}'."
+        return pde_metadata["params"]
+    def load_pde_metadata(self, pde_metadata) -> None:
+        pde_params = self.__load_pde_metadata(pde_metadata)
+        assert pde_params["d"] == self.d, (
+            f"d mismatch: saved d={pde_params['d']}, current d={self.d}"
+        )
+        ic_saved = pde_params["initial_dist"]
+        ic_current = type(self.initial_dist).__name__
+        assert ic_saved == ic_current, (
+            f"initial_dist mismatch: saved '{ic_saved}', current '{ic_current}'"
+        )
+        gamma = torch.tensor(pde_params["gamma"], dtype=self.dtype, device=self.device)
+        Q = torch.tensor(pde_params["Q"], dtype=self.dtype, device=self.device)
+        self.gaussian_obj.set_gamma_Q(gamma, Q)
+        self._refresh_sde_cache()
 
     def p0(self, x):
         return self.initial_dist.p0(x)
@@ -364,6 +415,8 @@ class Anisotropic_OU:
         return self.initial_dist.s0(x)
     def sample_x0(self, n_samples):
         return self.initial_dist.sample(n_samples)
+    def p_inf(self, x):
+        return torch.exp(self.dist_inf.log_prob(x)).unsqueeze(1)
 
     def L_functional(self, X, s, s_jac_spatial, precomputed=None):
         # L = d_t q = 1/2 ( tr(Sigma grad_x s) + s^T Sigma s + x . s + d ).
@@ -372,9 +425,6 @@ class Anisotropic_OU:
         quad = torch.einsum('bi,ij,bj->b', s, self.Sigma, s).unsqueeze(1)
         drift = (X[:, :-1] * s).sum(dim=1).unsqueeze(1)
         return 0.5 * (tr_Sigma_grad_s + quad + drift + self.d)
-
-    def p_inf(self, x):
-        return torch.exp(self.dist_inf.log_prob(x)).unsqueeze(1)
 
     class Score_PDE:
         def __init__(self, score_sde_model) -> None:
@@ -455,9 +505,10 @@ class Anisotropic_OU:
 
 class Gaussian_OU(Anisotropic_OU):
     """p_0 = N(0, I). Closed-form: p_t = N(0, Sigma_t), Sigma_t = e^{-t}I + (1-e^{-t}) Sigma."""
-    def __init__(self, d, seed=76, dtype=torch.float32, device=None):
+    def __init__(self, d, gamma=None, Q=None, seed=76, dtype=torch.float32, device=None):
         super().__init__(
             d, GaussianIC(d, dtype=dtype, device=device),
+            gamma=gamma, Q=Q,
             seed=seed, dtype=dtype, device=device,
         )
 
@@ -471,18 +522,20 @@ class Gaussian_OU(Anisotropic_OU):
 
 class Cauchy_OU(Anisotropic_OU):
     """p_0 = spherical Cauchy. No analytic solution to the Fokker-Planck PDE."""
-    def __init__(self, d, seed=76, dtype=torch.float32, device=None):
+    def __init__(self, d, gamma=None, Q=None, seed=76, dtype=torch.float32, device=None):
         super().__init__(
             d, CauchyIC(d, dtype=dtype, device=device),
+            gamma=gamma, Q=Q,
             seed=seed, dtype=dtype, device=device,
         )
 
 
 class Laplace_OU(Anisotropic_OU):
     """p_0 = product of independent Laplace(0, 1). No analytic solution."""
-    def __init__(self, d, seed=76, dtype=torch.float32, device=None):
+    def __init__(self, d, gamma=None, Q=None, seed=76, dtype=torch.float32, device=None):
         super().__init__(
             d, LaplaceIC(d, dtype=dtype, device=device),
+            gamma=gamma, Q=Q,
             seed=seed, dtype=dtype, device=device,
         )
 

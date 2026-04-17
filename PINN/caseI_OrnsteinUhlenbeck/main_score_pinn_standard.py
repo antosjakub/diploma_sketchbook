@@ -5,22 +5,24 @@ parser.add_argument("--description", default="", type=str, help="Smthg to help i
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--d", default=2, type=int, help="Number of spatial dimensions.")
 parser.add_argument("--layers", default="148,148,148", type=str, help="")
-parser.add_argument("--n_steps", default=450, type=int, help="")
-parser.add_argument("--n_steps_decay", default=2000, type=int, help="Decay by 0.9 every 2000 steps.")
+parser.add_argument("--n_steps", default=1950, type=int, help="")
+parser.add_argument("--n_steps_decay", default=5_000, type=int, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--gamma", default=0.9, type=float, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--lr", default=1e-3, type=float, help="")
-parser.add_argument("--bs", default=512, type=int, help="")
+parser.add_argument("--bs", default=1000, type=int, help="")
 
 parser.add_argument("--n_res_points", default=10_000, type=int, help="")
 parser.add_argument("--n_trajs", default=1_000, type=int, help="")
 parser.add_argument("--nt_steps", default=100, type=int, help="")
 parser.add_argument("--T", default=1.5, type=float, help="")
 
+parser.add_argument("--L", default=4.0, type=float, help="")
+
 parser.add_argument("--n_test_points", default=10_000, type=int, help="Number of test points for the testing suite.")
 parser.add_argument("--testing_frequency", default=100, type=int, help="")
 parser.add_argument("--enable_testing", action="store_true", help="Compute L2/L1/rel errors during training (requires analytic solution).")
 
-parser.add_argument("--resampling_frequency", default=1000, type=int, help="")
+parser.add_argument("--resampling_frequency", default=5_000, type=int, help="")
 
 parser.add_argument("--use_rbas", action="store_true", help="Residual-based adaptive sampling")
 parser.add_argument("--use_sdgd", action="store_true", help="Stochastic dimension gradient-descend (for loss in high dims)")
@@ -36,7 +38,7 @@ parser.add_argument("--sampling_type", default="trajectories", type=str, help="t
 parser.add_argument("--enable_profiler", action="store_true", help="")
 parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
 # enable transfer learning / finetuning
-parser.add_argument("--starting_model", default="run_sp_latest/model.pth", type=str, help="")
+parser.add_argument("--starting_model", default=None, type=str, help="")
 # load the pde mode with default parameters, optionally use the .json file to init the class
 #parser.add_argument("--pde_model_name", default=None, type=str, help="HeatEquation")
 #parser.add_argument("--pde_model_args", default=None, type=str, help="pde_model_args.json")
@@ -91,7 +93,8 @@ elif type_sp == "ll_ode":
     args.output_dir = f"run_{label}_{type_sp}"
     args.clear_dir = True
     args.enable_testing = False
-    args.starting_model = f"run_{label}_score_pde/model.pth"
+    score_pde_dir_name = f"run_{label}_score_pde"
+    args.starting_model = f"{score_pde_dir_name}/model.pth"
 else:
     raise NameError("Incorrect mode specified.")
 
@@ -112,18 +115,22 @@ if type_sp == "score_pde":
     pde_model = score_sde_model.Score_PDE(score_sde_model)
 ## LL ODE
 elif type_sp == "ll_ode":
+    model_metadata = utility.json_load(f'{score_pde_dir_name}/model_metadata.json')
     head_fn = lambda nn_out, X: nn_out * X[:,-1:] + pde_model.s0(X[:,:-1])
-    model_s = architecture.PINN(D, layers, d, head_fn=head_fn).to(device)
-    print(f"Loading in a score pde model: '{args.starting_model}'")
+    layers_s = utility.layers_from_string(model_metadata["args"]["layers"])
+    model_s = architecture.PINN(D, layers_s, d, head_fn=head_fn).to(device)
+    print(f"Loading in trained score pde model: '{args.starting_model}'")
     model_s.load_state_dict(torch.load(args.starting_model, weights_only=True))
     model_s.eval()
     pde_model = score_sde_model.LL_ODE(score_sde_model, model_s)
+    print(f"Loading in score pde model parameters: '{score_pde_dir_name}/pde_metadata.json'")
+    pde_model.load_pde_metadata(utility.json_load(f'{score_pde_dir_name}/pde_metadata.json'))
 
 print(type(pde_model))
 print(pde_model.gaussian_obj.gamma)
 print(pde_model.Sigma)
+pde_model.dump_pde_metadata(f'{dir_name}/pde_metadata.json')
 print()
-#print(pde_model.get_pde_metadata())
 
 
 # Select the model architecture
@@ -167,7 +174,7 @@ if args.enable_testing:
 else:
     testing_suite = None
 
-L = 4.0
+L = args.L
 T = args.T
 sampling_type = args.sampling_type
 if sampling_type == "trajectories":
