@@ -146,6 +146,101 @@ class PINN_Trainer:
 
 
 
+
+
+
+class PINN_Trainer_1k:
+    """Minimal trainer: only the PDE residual loss, single DataLoader.
+
+    Default shape: dataloader holds ~100_000 points, each gradient step
+    consumes bs points (~1000). Sampling mode is chosen per-call:
+      - sampling_type="domain"       → vanilla-PINN-style uniform/LHS
+      - sampling_type="trajectories" → Euler-Maruyama SDE trajectory bank
+    """
+
+    def __init__(
+        self, model, optimizer, scheduler, pde_model,
+        sampling_type, sampling_settings,
+        testing_suite=None, profiler=None, device='cpu',
+    ):
+        self.model = model
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+        self.pde_model = pde_model
+        self.sampling_type = sampling_type
+        self.sampling_settings = sampling_settings
+        self.testing_suite = testing_suite
+        self.profiler = profiler
+        self.device = device
+        self.d = pde_model.d
+        self.loader = None
+        self._loader_iter = None
+
+    def _build_loader(self):
+        self.loader = sampling.create_pde_loader(
+            self.sampling_type, self.pde_model, self.sampling_settings, device=self.device,
+        )
+        self._loader_iter = iter(self.loader)
+
+    def _next_batch(self):
+        """One step = one batch. Reshuffle (re-iter) when the buffer is exhausted."""
+        try:
+            return next(self._loader_iter)
+        except StopIteration:
+            self._loader_iter = iter(self.loader)
+            return next(self._loader_iter)
+
+    def train_adam_step(self, batch, use_sdgd=False, sdgd_num_dims=None):
+        self.optimizer.zero_grad()
+        with record_function("loss"):
+            if use_sdgd:
+                loss_pde = loss.sdgd_loss(batch[0], self.model, self.pde_model, batch[1], sdgd_num_dims)
+            else:
+                loss_pde = self.pde_model.pde_loss(batch[0], self.model, batch[1])
+        with record_function("backward"):
+            loss_pde.backward()
+        with record_function("optimizer_step"):
+            self.optimizer.step()
+        return loss_pde
+
+    def train_adam_minibatch(self, n_steps, n_steps_decay, resampling_frequency=2000, testing_frequency=100, use_sdgd=False, sdgd_num_dims=None):
+        losses = {"total": [], "pde": []}
+        l2_errs = []
+
+        if self.profiler: self.profiler.make()
+        self._build_loader()
+
+        for si in range(n_steps):
+
+            if (si + 1) % resampling_frequency == 0:
+                print("New training data arrived!")
+                self._build_loader()
+
+            if self.profiler: self.profiler.start(si)
+
+            batch = self._next_batch()
+            loss_pde = self.train_adam_step(batch, use_sdgd=use_sdgd, sdgd_num_dims=sdgd_num_dims)
+            loss_val = loss_pde.item()
+            losses["total"].append(loss_val)
+            losses["pde"].append(loss_val)
+
+            if (si + 1) % n_steps_decay == 0:
+                self.scheduler.step()
+
+            if self.profiler: self.profiler.exit(si)
+
+            if (si + 1) % testing_frequency == 0:
+                log = f"Step {si+1}/{n_steps}, Loss: {loss_val:.6f}, pde: {loss_val:.6f}, lr: {self.optimizer.param_groups[0]['lr']:.6f}"
+                if self.testing_suite is not None:
+                    l2_err, l1_err, rel_err = self.testing_suite.test_model(self.model)
+                    l2_errs.append(l2_err)
+                    log += f", L2: {l2_err:.6f}, L1: {l1_err:.6f}, rel_max: {rel_err:.6f}"
+                print(log)
+
+        return losses, l2_errs
+
+
+
     ## --- DEAD CODE (kept for reference) ---------------------------------
     #def train_adam_step_accumulated(self, batch_iterator):
     #    self.optimizer.zero_grad()

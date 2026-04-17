@@ -21,7 +21,6 @@ parser.add_argument("--testing_frequency", default=100, type=int, help="")
 parser.add_argument("--enable_testing", action="store_true", help="Compute L2/L1/rel errors during training (requires analytic solution).")
 
 parser.add_argument("--resampling_frequency", default=1000, type=int, help="")
-parser.add_argument("--lambda_pde", default=1.0, type=float, help="")
 
 parser.add_argument("--use_rbas", action="store_true", help="Residual-based adaptive sampling")
 parser.add_argument("--use_sdgd", action="store_true", help="Stochastic dimension gradient-descend (for loss in high dims)")
@@ -30,8 +29,9 @@ parser.add_argument("--sdgd_num_dims", default=None, type=int, help="Number of d
 parser.add_argument("--output_dir", default="run_score_pinn_latest/", type=str, help="")
 parser.add_argument("--clear_dir", action="store_true", help="Erase contents of the output_dir before the training starts.")
 
-parser.add_argument("--mode", default="score_pde", type=str, help="score_pde or ll_ode")
+parser.add_argument("--mode", default="score_pde", type=str, help="score_pde, ll_ode")
 parser.add_argument("--ic_type", default="gauss", type=str, help="gauss, cauchy, laplace")
+parser.add_argument("--sampling_type", default="trajectories", type=str, help="trajectories, domain")
 #
 parser.add_argument("--enable_profiler", action="store_true", help="")
 parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
@@ -120,6 +120,8 @@ elif type_sp == "ll_ode":
     pde_model = score_sde_model.LL_ODE(score_sde_model, model_s)
 
 print(type(pde_model))
+print(pde_model.gaussian_obj.gamma)
+print(pde_model.Sigma)
 print()
 #print(pde_model.get_pde_metadata())
 
@@ -167,29 +169,30 @@ else:
 
 L = 4.0
 T = args.T
-sampling_settings = {
-    "n_trajs": args.n_trajs,
-    "nt_steps": args.nt_steps,
-    "n_res_points": args.n_res_points,
-    "bs": args.bs,
-    "spatial_domain": torch.stack([torch.full((d,), -L), torch.full((d,), L)], dim=1),
-    "T": args.T,
-}
-#sampling_settings = {
-#    "n_res_points": args.n_res_points,
-#    "bs": args.bs,
-#    "spatial_domain": torch.stack([torch.full((d,), -L), torch.full((d,), L)], dim=1),
-#    "T": T,
-#    "use_rbas": args.use_rbas,
-#}
+sampling_type = args.sampling_type
+if sampling_type == "trajectories":
+    sampling_settings = {
+        "n_trajs": args.n_trajs,
+        "nt_steps": args.nt_steps,
+        "n_res_points": args.n_res_points,
+        "bs": args.bs,
+        "spatial_domain": torch.stack([torch.full((d,), -L), torch.full((d,), L)], dim=1),
+        "T": args.T,
+    }
+elif sampling_type == "domain":
+    sampling_settings = {
+        "n_res_points": args.n_res_points,
+        "bs": args.bs,
+        "spatial_domain": torch.stack([torch.full((d,), -L), torch.full((d,), L)], dim=1),
+        "T": T,
+        "use_rbas": args.use_rbas,
+    }
 
-from trainers import PINN_Trainer
-trainer = PINN_Trainer(
+from trainers import PINN_Trainer_1k
+trainer = PINN_Trainer_1k(
     model, optimizer, scheduler, pde_model,
-    sampling_type="score_pinn", sampling_settings=sampling_settings,
-    #sampling_type="vanilla_pinn", sampling_settings=sampling_settings,
-    loss_weighting=loss_weighting, testing_suite=testing_suite,
-    active_losses=active_losses, profiler=profiler, device=device,
+    sampling_type=sampling_type, sampling_settings=sampling_settings,
+    testing_suite=testing_suite, profiler=profiler, device=device,
 )
 losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
     n_steps=args.n_steps,

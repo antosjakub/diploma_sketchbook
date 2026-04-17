@@ -117,8 +117,8 @@ class GeneralGaussian:
 
         # Construct Gamma diagonal
         if gamma_strategy == "min_max":
-            gamma_min = 1.3
-            gamma_max = 5.2
+            gamma_min = 1.5
+            gamma_max = 3.5
             gamma = gamma_min + (gamma_max - gamma_min) * torch.rand(
                 d, generator=g, device=device, dtype=dtype
             )
@@ -341,7 +341,7 @@ class Anisotropic_OU:
         self.device = device
 
         self.gaussian_obj = GeneralGaussian(
-            d, gamma_strategy="paper", seed=seed, dtype=dtype, device=device
+            d, gamma_strategy="min_max", seed=seed, dtype=dtype, device=device
         )
         self.Sigma = self.gaussian_obj.Sigma
 

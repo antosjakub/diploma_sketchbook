@@ -463,7 +463,7 @@ def _precompute_active(pde_model, X_pde, X_bc, X_ic, active_losses, device):
     return precomputed
 
 
-def create_dataloaders__vanilla_pinn(
+def create_dataloaders__domain(
     model, pde_model, active_losses,
     n_res_points=10_000, bs=1_000, spatial_domain=None, T=1.0,
     use_rbas=False, sampling_strategy="lhs", device="cpu",
@@ -543,7 +543,7 @@ def create_dataloaders__vanilla_pinn(
     return bundle
 
 
-def create_dataloaders__score_pinn(
+def create_dataloaders__trajectories(
     model, pde_model, active_losses,
     n_res_points=10_000, bs=1_000, n_trajs=100, T=1.0, nt_steps=100, spatial_domain=None,
     device="cpu",
@@ -599,16 +599,63 @@ def create_dataloaders__score_pinn(
     return bundle
 
 
-def create_dataloaders(type, model, pde_model, settings, active_losses, device="cpu"):
+def create_pde_loader(sampling_type, pde_model, settings, device="cpu"):
+    """Build a single DataLoader of PDE collocation points only.
+
+    sampling_type:
+      - "domain":       uniform / LHS over spatial_domain x [0, T]
+      - "trajectories": Euler-Maruyama SDE trajectory bank, residual points
+                        sampled uniformly from (traj_idx, time_idx)
+
+    settings keys:
+      - n_res_points: total points in the buffer (default 100_000)
+      - bs:           points per gradient step (default 1_000)
+      - spatial_domain: (d, 2) tensor of [lo, hi] per spatial dim (optional)
+      - T:            final time (default 1.0)
+      - sampling_strategy: "lhs" | "uniform" (only used for "domain")
+      - n_trajs:      number of trajectories (only used for "trajectories",
+                      default n_res_points // 100)
+      - nt_steps:     SDE steps per trajectory (default 100)
+    """
+    n_res = settings.get("n_res_points", 100_000)
+    bs = settings.get("bs", 1_000)
+    spatial_domain = settings.get("spatial_domain")
+    T = settings.get("T", 1.0)
+    d = pde_model.d
+
+    if sampling_type == "domain":
+        strategy = settings.get("sampling_strategy", "lhs")
+        X_pde = sample_domain(n_res, d + 1, sampling_strategy=strategy, device=device)
+        if spatial_domain is not None:
+            lo = spatial_domain[:, 0]
+            hi = spatial_domain[:, 1]
+            X_pde = scale_samples__spatial(X_pde, lo, hi)
+        if T != 1.0:
+            X_pde = scale_samples__temporal(X_pde, T)
+    elif sampling_type == "trajectories":
+        n_trajs = settings.get("n_trajs", max(1, n_res // 100))
+        nt_steps = settings.get("nt_steps", 100)
+        x0 = pde_model.sample_x0(n_trajs)
+        X_pde = sample_trajs_res_points(pde_model, x0, T, nt_steps, n_res)
+    else:
+        raise NameError(f"Unknown sampling_type '{sampling_type}' (expected 'domain' or 'trajectories')")
+
+    precomputed = _precompute_active(pde_model, X_pde, None, None, active_losses=("pde",), device=device)
+    loader = DataLoader(CollocationDataset(X_pde, precomputed["pde"]), batch_size=bs, shuffle=True)
+    print(f"PDE-only loader ({sampling_type}): X.shape = {X_pde.shape}, bs = {bs}")
+    return loader
+
+
+def create_dataloaders(sampling_type, model, pde_model, settings, active_losses, device="cpu"):
     """
     Build a bundle dict {term_name: loader_or_buffer} for all terms in active_losses.
     Loader-typed terms ("pde", "bc", "ic") yield DataLoader; "norm" yields the
     {x, p_inf, Z} buffer dict used by the importance-sampled integral loss.
     """
-    if type == "score_pinn":
-        bundle = create_dataloaders__score_pinn(model, pde_model, active_losses, device=device, **settings)
-    elif type == "vanilla_pinn":
-        bundle = create_dataloaders__vanilla_pinn(model, pde_model, active_losses, device=device, **settings)
+    if sampling_type == "trajectories":
+        bundle = create_dataloaders__trajectories(model, pde_model, active_losses, device=device, **settings)
+    elif sampling_type == "domain":
+        bundle = create_dataloaders__domain(model, pde_model, active_losses, device=device, **settings)
     else:
         raise NameError(f"Incorrect data loader type specified: '{type}'")
 
