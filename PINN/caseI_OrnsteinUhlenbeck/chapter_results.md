@@ -84,6 +84,14 @@ $$
 p_0(x) = \alpha_d\,  \prod_i e^{-|x_i|}\:, \quad \alpha_d = 2^{-d}
 $$
 
+
+### Vanilla PINN
+
+
+### Score PINN
+
+We get
+
 $$
 q_0(x) = \log p_0(x) = \log \alpha_d - \sum_i |x_i|
 $$
@@ -94,3 +102,18 @@ $$
 
 where $\operatorname{sign}(x)$ for $x\in\R^d$ is acting component-wise, that is
 $\operatorname{sign}(x)|_i := \operatorname{sign}(x_i)$
+
+note: p,q,s discontinuous 
+
+
+We consider the following variants:
+
+- original score pinn formulation
+    - with hardcoded bc ic
+    - trajs sampling
+- variants
+    - full domain - not only trajs
+    - with loss in bc ic
+    - with loss in bc
+    - 1k per epoch
+    - looping batches

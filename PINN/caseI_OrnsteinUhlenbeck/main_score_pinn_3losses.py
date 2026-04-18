@@ -23,7 +23,8 @@ parser.add_argument("--n_trajs", default=1_000, type=int, help="")
 parser.add_argument("--nt_steps", default=100, type=int, help="")
 parser.add_argument("--T", default=1.5, type=float, help="")
 
-parser.add_argument("--L", default=4.0, type=float, help="")
+parser.add_argument("--L_min", default=-4.0, type=float, help="")
+parser.add_argument("--L_max", default=4.0, type=float, help="")
 
 parser.add_argument("--n_test_points", default=10_000, type=int, help="Number of test points for the testing suite.")
 parser.add_argument("--testing_frequency", default=100, type=int, help="")
@@ -178,7 +179,6 @@ if args.enable_testing:
 else:
     testing_suite = None
 
-L = args.L
 T = args.T
 sampling_type = args.sampling_type
 if sampling_type == "trajectories":
@@ -187,14 +187,14 @@ if sampling_type == "trajectories":
         "nt_steps": args.nt_steps,
         "n_res_points": args.n_res_points,
         "bs": args.bs,
-        "spatial_domain": torch.stack([torch.full((d,), -L), torch.full((d,), L)], dim=1),
+        "spatial_domain": torch.stack([torch.full((d,), args.L_min), torch.full((d,), args.L_max)], dim=1),
         "T": args.T,
     }
 elif sampling_type == "domain":
     sampling_settings = {
         "n_res_points": args.n_res_points,
         "bs": args.bs,
-        "spatial_domain": torch.stack([torch.full((d,), -L), torch.full((d,), L)], dim=1),
+        "spatial_domain": torch.stack([torch.full((d,), args.L_min), torch.full((d,), args.L_max)], dim=1),
         "T": T,
         "use_rbas": args.use_rbas,
     }
@@ -222,118 +222,12 @@ run_utils.print_train_duration(t1, time.time())
 
 print("\nTraining complete!")
 
-loss_name, l2_name = run_utils.save_run(dir_name, model, losses, l2_errs, args)
+loss_name, l2_name = run_utils.save_run(dir_name, model, losses, l2_errs, args, head_fn=None)
 
 
-# Plot results
-import visualize_training_metrics
-visualize_training_metrics.plot_loss(losses, loss_name)
-if args.enable_testing:
-    n_steps_log = args.testing_frequency
-    n_logged_pnts = len(l2_errs)
-    steps = n_steps_log*torch.linspace(1,n_logged_pnts,n_logged_pnts, dtype=torch.int)
-    visualize_training_metrics.plot_l2(steps, l2_errs, l2_name)
-
-
-import viz
-p_ic = lambda X: pde_model.p0(X[:,:-1])
-p_inf = lambda X: pde_model.p_inf(X[:,:-1])
-
-options = {
-    "d": d,
-    "plot_dims": [0,1],
-    "fixed_dims_vals": 0.5*torch.ones(d),
-    "device": device,
-    "x_start": -L,
-    "x_end": L,
-}
-
-
-import os
-os.makedirs(f"{dir_name}/viz/", exist_ok=True)
-if type_sp == "score_pde":
-    model_fn_s = viz.wrapp_model(model)
-    s_ic = lambda X: pde_model.s0(X[:,:-1])
-
-    if args.enable_testing:
-        plotter = viz.FunctionPlotter(**options)
-        plotter.add_panel('model_s', title="model_s(x,t)").quiver(model_fn_s)
-        plotter.add_panel('s_analytic', title="s_analytic(x,t)").quiver(score_sde_model.s_analytic)
-        plotter.add_panel('err', title="err").quiver(lambda X: model_fn_s(X) - score_sde_model.s_analytic(X))
-        plotter.save_animation(f'{dir_name}/viz/anim_model_s_vs_s_analytic.gif', num_frames=30, fps=5, t_end=T)
-
-    plotter_ic = viz.FunctionPlotter(**options)
-    plotter_ic.add_panel('nn', rf"s_\theta(x,0)").quiver(model_fn_s)
-    plotter_ic.add_panel('ic', "s_0(x)").quiver(s_ic)
-    plotter_ic.add_panel('err', "err(x)").quiver(lambda X: model_fn_s(X) - s_ic(X))
-    plotter_ic.save_plot(f'{dir_name}/viz/plot_s_nn_vs_s0.png', t_val=0.0, cbar={"nn": "linked:ic", "err": "linked:ic"})
-
-    plotter = viz.FunctionPlotter(**options)
-    plotter.add_panel('nn', "s_nn(x,t)").quiver(model_fn_s)
-    plotter.save_animation(f'{dir_name}/viz/anim_s_nn_fixed.gif', cbar='fixed', num_frames=30, fps=5, t_end=T)
-    plotter.save_animation(f'{dir_name}/viz/anim_s_nn_dynamic.gif', cbar='dynamic', num_frames=30, fps=5, t_end=T)
-
-    plotter = viz.FunctionPlotter(**options)
-    plotter.add_panel('ic', title="p_0(x)").heatmap(p_ic)
-    plotter.add_panel('final', title="p_inf(x)").heatmap(p_inf)
-    plotter.save_plot(f'{dir_name}/viz/plot_p0_vs_p_inf.png', t_val=0.0)
-
-elif type_sp == "ll_ode":
-    model_fn_q = viz.wrapp_model(model)
-    model_fn_p = lambda X: torch.exp(model_fn_q(X))
-    model_fn_s = viz.wrapp_model(model_s)
-    q_ic = lambda X: pde_model.q0(X[:,:-1])
-    q_inf = lambda X: torch.log(pde_model.p_inf(X[:,:-1]))
-
-    if args.enable_testing:
-
-        plotter = viz.FunctionPlotter(**options)
-        plotter.add_panel('model_q', title="model_q(x,t)").heatmap(model_fn_q)
-        plotter.add_panel('q_analytic', title="q_analytic(x,t)").heatmap(score_sde_model.q_analytic)
-        plotter.add_panel('err', title="err").heatmap(lambda X: model_fn_q(X) - score_sde_model.q_analytic(X))
-        plotter.save_plot(f'{dir_name}/viz/plot_model_q_vs_q_analytic.png', t_val=0.234)
-        plotter.save_animation(f'{dir_name}/viz/anim_model_q_vs_q_analytic.gif', num_frames=30, fps=5, t_end=T)
-
-        plotter = viz.FunctionPlotter(**options)
-        plotter.add_panel('model_p', title="model_p(x,t)").heatmap(model_fn_p)
-        plotter.add_panel('p_analytic', title="p_analytic(x,t)").heatmap(score_sde_model.p_analytic)
-        plotter.add_panel('err', title="err").heatmap(lambda X: model_fn_p(X) - score_sde_model.p_analytic(X))
-        plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p_analytic.png', t_val=0.234)
-        plotter.save_animation(f'{dir_name}/viz/anim_model_p_vs_p_analytic.gif', num_frames=30, fps=5, t_end=T)
-
-    plotter = viz.FunctionPlotter(**options)
-    plotter.add_panel('model_q', title="model_q(x,0)").heatmap(model_fn_q)
-    plotter.add_panel('q_ic', title="q_0(x)").heatmap(q_ic)
-    plotter.save_plot(f'{dir_name}/viz/plot_model_q_vs_q0.png', t_val=0.0)
-
-    plotter = viz.FunctionPlotter(**options)
-    plotter.add_panel('model_p', title="model_p(x,0) = exp(model_q(x,0))").heatmap(model_fn_p)
-    plotter.add_panel('p_ic', title="p_0(x)").heatmap(p_ic)
-    plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p0.png', t_val=0.0)
-
-    plotter = viz.FunctionPlotter(**options)
-    plotter.add_panel('model_q', title="model_q(x,T)").heatmap(model_fn_q)
-    plotter.add_panel('q_inf', title="q_inf(x)").heatmap(q_inf)
-    plotter.save_plot(f'{dir_name}/viz/plot_model_q_vs_q_inf.png', t_val=T)
-
-    plotter = viz.FunctionPlotter(**options)
-    plotter.add_panel('model_p', title="model_p(x,T)").heatmap(model_fn_p)
-    plotter.add_panel('p_inf', title="p_inf(x)").heatmap(p_inf)
-    plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p_inf.png', t_val=T)
-
-    plotter = viz.FunctionPlotter(**options)
-    plotter.add_panel('model_q', title="model_q(x,t)").heatmap(model_fn_q)
-    plotter.save_animation(f'{dir_name}/viz/anim_model_q.gif', num_frames=30, fps=5, t_end=T)
-
-    plotter = viz.FunctionPlotter(**options)
-    plotter.add_panel('model_p', title="model_p(x,t) = exp(model_q(x,t))").heatmap(model_fn_p)
-    plotter.save_animation(f'{dir_name}/viz/anim_model_p.gif', num_frames=30, fps=5, t_end=T)
-
-    plotter = viz.FunctionPlotter(**options)
-    p = plotter.add_panel('sq', title="model_s & model_q")
-    p.heatmap(model_fn_q)
-    p.quiver(model_fn_s, color='k')
-    p = plotter.add_panel('sp', title="model_s & model_p")
-    p.heatmap(model_fn_p)
-    p.quiver(model_fn_s, color='k')
-    plotter.save_animation(f'{dir_name}/viz/anim_model_sq_sp.gif', num_frames=30, fps=5, t_end=T)
+import plot_results
+plot_results.plot_run(
+    dir_name, model, pde_model, score_sde_model, args, device,
+    model_s=model_s if type_sp == "ll_ode" else None,
+    losses=losses, l2_errs=l2_errs,
+)

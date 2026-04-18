@@ -80,11 +80,20 @@ def print_train_duration(t1, t2, label="Adam training"):
     print(" ".join(parts))
 
 
-def save_run(dir_name, model, losses, l2_errs, args, pde_model=None):
-    """Dump model state, loss dict, l2 errors, model metadata and (optionally) pde metadata."""
+def save_run(dir_name, model, losses, l2_errs, args, pde_model=None, head_fn=None):
+    """Dump model state, loss dict, l2 errors, model metadata and (optionally) pde metadata.
+
+    `head_fn`: optional tag identifying the architectural head (e.g. "hardcoded_ic"),
+    stored at the top level of model_metadata.json so reloaders can rebuild the model
+    without string-sniffing the output directory. `None` means the default PINN head.
+    """
     with open(f'{dir_name}/model_metadata.json', 'w', encoding='utf-8') as f:
         json.dump(
-            {"model_class": type(model).__name__, "args": args.__dict__},
+            {
+                "model_class": type(model).__name__,
+                "head_fn": head_fn,
+                "args": args.__dict__,
+            },
             f,
             ensure_ascii=False,
             indent=4,
