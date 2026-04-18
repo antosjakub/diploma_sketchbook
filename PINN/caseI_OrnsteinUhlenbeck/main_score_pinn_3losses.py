@@ -11,6 +11,13 @@ parser.add_argument("--gamma", default=0.9, type=float, help="Decay by 0.9 every
 parser.add_argument("--lr", default=1e-3, type=float, help="")
 parser.add_argument("--bs", default=1000, type=int, help="")
 
+parser.add_argument("--lambda_pde", default=1.0, type=float, help="")
+parser.add_argument("--lambda_bc", default=10.0, type=float, help="")
+parser.add_argument("--lambda_ic", default=10.0, type=float, help="")
+parser.add_argument("--lambda_norm", default=0.1, type=float, help="Weight of the ∫p dx = 1 normalization loss.")
+parser.add_argument("--use_adaptive_weights", action="store_true", help="Loss weighting.")
+parser.add_argument("--active_losses", default="pde,bc,ic", type=str, help="Comma-separated subset of {pde,bc,ic,norm}. 'pde' is required.")
+
 parser.add_argument("--n_res_points", default=10_000, type=int, help="")
 parser.add_argument("--n_trajs", default=1_000, type=int, help="")
 parser.add_argument("--nt_steps", default=100, type=int, help="")
@@ -86,14 +93,14 @@ print(f"Training Score-PINN, type: '{type_sp}'\n")
 
 label = args.ic_type
 if type_sp == "score_pde":
-    args.output_dir = f"run_{label}_{type_sp}"
+    args.output_dir = f"{label}/run_3losses_{type_sp}"
     args.clear_dir = True
     args.enable_testing = False
 elif type_sp == "ll_ode":
-    args.output_dir = f"run_{label}_{type_sp}"
+    args.output_dir = f"{label}/run_3losses_{type_sp}"
     args.clear_dir = True
     args.enable_testing = False
-    score_pde_dir_name = f"run_{label}_score_pde"
+    score_pde_dir_name = f"{label}/run_3losses_score_pde"
     args.starting_model = f"{score_pde_dir_name}/model.pth"
 else:
     raise NameError("Incorrect mode specified.")
@@ -116,9 +123,8 @@ if type_sp == "score_pde":
 ## LL ODE
 elif type_sp == "ll_ode":
     model_metadata = utility.json_load(f'{score_pde_dir_name}/model_metadata.json')
-    head_fn = lambda nn_out, X: nn_out * X[:,-1:] + pde_model.s0(X[:,:-1])
     layers_s = utility.layers_from_string(model_metadata["args"]["layers"])
-    model_s = architecture.PINN(D, layers_s, d, head_fn=head_fn).to(device)
+    model_s = architecture.PINN(D, layers_s, d).to(device)
     print(f"Loading in trained score pde model: '{args.starting_model}'")
     model_s.load_state_dict(torch.load(args.starting_model, weights_only=True))
     model_s.eval()
@@ -135,16 +141,14 @@ print()
 
 # Select the model architecture
 if type_sp == "score_pde":
-    head_fn = lambda nn_out, X: nn_out * X[:,-1:] + pde_model.s0(X[:,:-1])
-    model = architecture.PINN(D, layers, d, head_fn=head_fn).to(device)
+    model = architecture.PINN(D, layers, d).to(device)
 elif type_sp == "ll_ode":
-    head_fn = lambda nn_out, X: nn_out * X[:,-1:] + pde_model.q0(X[:,:-1])
-    model = architecture.PINN(D, layers, 1, head_fn=head_fn).to(device)
+    model = architecture.PINN(D, layers, 1).to(device)
 #model = torch.compile(model, mode="reduce-overhead")
 #model = torch.compile(model)
 
 
-active_losses = ("pde",)
+active_losses = tuple(k.strip() for k in args.active_losses.split(",") if k.strip())
 print(f"Active losses: {active_losses}")
 
 # Preparation time
@@ -152,7 +156,7 @@ losses = run_utils.init_losses(("total",) + active_losses)
 l2_errs = []
 
 optimizer, scheduler = run_utils.make_optim(model, args)
-loss_weighting = loss.ConstantWeights(weights=[1.0])
+loss_weighting = run_utils.make_loss_weighting(args, active_losses)
 profiler = run_utils.make_profiler(dir_name, args)
 
 sdgd_num_dims = args.sdgd_num_dims if args.sdgd_num_dims is not None else d
@@ -195,11 +199,12 @@ elif sampling_type == "domain":
         "use_rbas": args.use_rbas,
     }
 
-from trainers import PINN_Trainer_1k
-trainer = PINN_Trainer_1k(
+from trainers import PINN_Trainer
+trainer = PINN_Trainer(
     model, optimizer, scheduler, pde_model,
     sampling_type=sampling_type, sampling_settings=sampling_settings,
-    testing_suite=testing_suite, profiler=profiler, device=device,
+    loss_weighting=loss_weighting, testing_suite=testing_suite,
+    active_losses=active_losses, profiler=profiler, device=device,
 )
 losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
     n_steps=args.n_steps,
@@ -208,6 +213,7 @@ losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
     testing_frequency=args.testing_frequency,
     use_sdgd=args.use_sdgd,
     sdgd_num_dims=sdgd_num_dims,
+    one_batch_per_epoch = True,
 )
 run_utils.merge_losses(losses, losses_adam)
 l2_errs += l2_errs_adam

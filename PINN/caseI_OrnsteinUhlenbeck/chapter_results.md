@@ -12,6 +12,23 @@ The Brownian noise is correlated with the covariance matrix $\Sigma\in\mathbb{R}
 - $\Sigma$’s eigenvalues $\Gamma = diag(\lambda_1, \lambda_2, · · · , \lambda_d)$ where $\lambda_{2i} ∼ Uniform([1, 1.1])$ and $\lambda_{2i+1} = 1/\lambda_{2i}$.
 - Finally, $\Sigma = Q^T \Gamma Q$
 
+We have
+$$
+\mu = -\frac{1}{2} x \\ 
+\sigma = \Sigma^\frac{1}{2}
+$$
+Thus the corresponding PDE then reads
+$$
+\partial_t p - \frac{1}{2} \nabla\cdot (\Sigma\nabla p + x\,p) = 0\\
+\partial_t p + \nabla\cdot J = 0\\
+$$
+bc:
+$$
+J\cdot n = 0\\
+(\Sigma\nabla p + x\,p)\cdot n = 0
+$$
+
+
 
 We consider 3 distribution for the initial condition:
 

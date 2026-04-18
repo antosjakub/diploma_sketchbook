@@ -444,6 +444,11 @@ class Anisotropic_OU:
             assert L.shape == (X.shape[0], 1)
             residual = s_t - derivatives.compute_grad(X, L, torch.ones_like(L))[:,:-1]
             return residual
+        def bc_residual(self, X, model_s, precomputed):
+            # (Sigma s + x).n = 0
+            n = precomputed["normals"]
+            Sigma_s = torch.einsum('ij,bj->bi', self.Sigma, model_s(X))
+            return ( ( Sigma_s + X[:,:-1] ) * n ).sum(dim=1).unsqueeze(1)
         def ic_residual(self, X, model_s, precomputed):
             return model_s(X) - precomputed["s0"]
 
@@ -453,12 +458,16 @@ class Anisotropic_OU:
         def pde_loss(self, X, model_s, precomputed):
             res = self.pde_residual(X, model_s, precomputed)
             return self._term_loss(res)
+        def bc_loss(self, X, model_s, precomputed):
+            res = self.bc_residual(X, model_s, precomputed)
+            return torch.mean(res**2)
         def ic_loss(self, X, model_s, precomputed):
             res = self.ic_residual(X, model_s, precomputed)
             return self._term_loss(res)
         def precompute(self, X_pde, X_bc, X_ic):
             return {
                 "pde": {},
+                "bc": {},
                 "ic": {
                     "s0": self.s0(X_ic[:,:-1]).detach()
                 },
@@ -479,11 +488,23 @@ class Anisotropic_OU:
             q = model_q(X)
             q_t = derivatives.compute_grad(X, q, torch.ones_like(q))[:,-1:]
             return q_t - precomputed["L"]
+        def bc_residual(self, X, model_q, precomputed):
+            # (Sigma grad q + x).n = 0
+            X = X.detach().requires_grad_(True)
+            q = model_q(X)
+            grad_q = derivatives.compute_grad(X, q, torch.ones_like(q))[:,-1:]
+            n = precomputed["normals"]
+            Sigma_grad_q = torch.einsum('ij,bj->ib', self.Sigma, grad_q).unsqueeze(1)
+            return ( ( Sigma_grad_q + X[:,:-1] ) * n ).sum(dim=1).unsqueeze(1)
+        def ic_residual(self, X, model_q, precomputed):
+            return model_q(X) - precomputed["q0"]
+
         def pde_loss(self, X, model_q, precomputed):
             res = self.pde_residual(X, model_q, precomputed)
             return torch.mean(res**2)
-        def ic_residual(self, X, model_q, precomputed):
-            return model_q(X) - precomputed["q0"]
+        def bc_loss(self, X, model_q, precomputed):
+            res = self.bc_residual(X, model_q, precomputed)
+            return torch.mean(res**2)
         def ic_loss(self, X, model_q, precomputed):
             res = self.ic_residual(X, model_q, precomputed)
             return torch.mean(res**2)
@@ -497,6 +518,7 @@ class Anisotropic_OU:
                 "pde": {
                     "L": L.detach()
                 },
+                "bc": {},
                 "ic": {
                     "q0": self.q0(X_ic[:,:-1]).detach()
                 },

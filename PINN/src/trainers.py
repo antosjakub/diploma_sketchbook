@@ -86,35 +86,59 @@ class PINN_Trainer:
 
 
     def _build_bundle(self):
-        return sampling.create_dataloaders(
+        self.bundle = sampling.create_dataloaders(
             self.sampling_type, self.model, self.pde_model,
             self.sampling_settings, self.active_losses, device=self.device,
         )
+        self._bundle_iters = {k: iter(self.bundle[k]) for k in self.bundle}
+        return self.bundle
 
-    def train_adam_minibatch(self, n_steps, n_steps_decay, resampling_frequency=2000, testing_frequency=100, use_sdgd=False, sdgd_num_dims=None):
-        """Train the model using Adam optimizer."""
+    def _next_batches(self, loader_keys):
+        """Pull one batch per active loader. Reshuffle (re-iter) on exhaustion."""
+        batches = {}
+        for k in loader_keys:
+            try:
+                batches[k] = next(self._bundle_iters[k])
+            except StopIteration:
+                self._bundle_iters[k] = iter(self.bundle[k])
+                batches[k] = next(self._bundle_iters[k])
+        return batches
+
+    def train_adam_minibatch(self, n_steps, n_steps_decay, resampling_frequency=2000, testing_frequency=100, use_sdgd=False, sdgd_num_dims=None, one_batch_per_epoch=False):
+        """Train the model using Adam optimizer.
+
+        If one_batch_per_epoch=True, each `si` performs a single gradient step
+        (one batch from each active loader). Otherwise iterates over all batches
+        of the bundle per `si`.
+        """
         losses = {"total": [], **{k: [] for k in self.active_losses}}
         l2_errs = []
 
         if self.profiler: self.profiler.make()
 
-        self.bundle = self._build_bundle()
+        self._build_bundle()
         loader_keys = [k for k in self.LOADER_KEYS if k in self.active_losses]
 
         for si in range(n_steps):
 
             if (si + 1) % resampling_frequency == 0:
                 print("New training data arrived!")
-                self.bundle = self._build_bundle()
+                self._build_bundle()
 
             if self.profiler: self.profiler.start(si)
 
-            loaders = [self.bundle[k] for k in loader_keys]
-            for batches in zip(*loaders):
-                batches_by_name = dict(zip(loader_keys, batches))
+            if one_batch_per_epoch:
+                batches_by_name = self._next_batches(loader_keys)
                 loss_value, last_losses = self.train_adam_step(
                     batches_by_name, use_sdgd=use_sdgd, sdgd_num_dims=sdgd_num_dims
                 )
+            else:
+                loaders = [self.bundle[k] for k in loader_keys]
+                for batches in zip(*loaders):
+                    batches_by_name = dict(zip(loader_keys, batches))
+                    loss_value, last_losses = self.train_adam_step(
+                        batches_by_name, use_sdgd=use_sdgd, sdgd_num_dims=sdgd_num_dims
+                    )
             losses["total"].append(loss_value.item())
             for k in self.active_losses:
                 losses[k].append(last_losses[k])

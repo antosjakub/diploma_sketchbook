@@ -127,4 +127,4 @@ class AdaptiveWeights(ConstantWeights):
         weights_new /= grad_norms + 1e-8
         # exponential moving average
         self.weights = self.momentum * self.weights + (1 - self.momentum) * weights_new
-        print(self.weights)
+        print(f"- updated loss weights: {self.weights.tolist()}")
