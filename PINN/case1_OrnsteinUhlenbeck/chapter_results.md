@@ -88,7 +88,7 @@ $$
 ### Vanilla PINN
 
 
-### Score PINN
+### Score-PINN
 
 We get
 
@@ -105,12 +105,17 @@ $\operatorname{sign}(x)|_i := \operatorname{sign}(x_i)$
 
 note: p,q,s discontinuous 
 
+#### Original Score-PINN
 
-We consider the following variants:
+- hardcoded bc ic
+- trajs sampling
 
-- original score pinn formulation
-    - with hardcoded bc ic
-    - trajs sampling
+plot
+
+we see...
+
+
+#### Score-PINN variants
 - variants
     - full domain - not only trajs
     - with loss in bc ic

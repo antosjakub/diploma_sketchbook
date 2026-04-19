@@ -1,0 +1,17 @@
+--layers=128,128,128,128
+--n_steps=19_950
+--active_losses=pde,ic
+--T=2.0
+--L=4.0
+--ic_type=laplace
+--mode=score_pde
+--use_adaptive_weights
+--sampling_type=domain
+--nt_steps=1_000
+--resample_frequency=500
+
+
+
+ Now, I dont really like the argparse command line way of handling parameters. I always have to list of lot of     
+  args and it is not quite nicely reproducible. What about passing in a json file that will list some of those      
+  parametrs and the other ones will be set as some defaults?   

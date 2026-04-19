@@ -110,8 +110,25 @@ class GeneralGaussian:
         self.dtype = dtype
         self.device = device
 
+    def get_random_Q(self, seed: int = 76):
+        device = self.device
+        dtype = self.dtype
+        d = self.d
+        g = torch.Generator(device=device)
+        g.manual_seed(seed)
+        # Random orthogonal matrix Q from QR of a Gaussian matrix.
+        A = torch.randn(d, d, generator=g, device=device, dtype=dtype)
+        Q, R = torch.linalg.qr(A, mode="reduced")
 
-    def random_init_gamma_Q(
+        # Fix signs for a more uniform-looking orthogonal draw.
+        # Makes diag(R) positive.
+        signs = torch.sign(torch.diag(R))
+        signs = torch.where(signs == 0, torch.ones_like(signs), signs)
+        Q = Q * signs.unsqueeze(0)
+        #Q = torch.ones((d,d), dtype=dtype)
+        return Q
+
+    def get_random_gamma(
         self,
         gamma_strategy="min_max",
         seed: int = 76,
@@ -124,15 +141,15 @@ class GeneralGaussian:
 
         # Construct Gamma diagonal
         if gamma_strategy == "min_max":
-            gamma_min = 1.5
-            gamma_max = 3.5
+            gamma_min = 1.0
+            gamma_max = 3.0
             gamma = gamma_min + (gamma_max - gamma_min) * torch.rand(
                 d, generator=g, device=device, dtype=dtype
             )
-            self.gamma = gamma
+            return gamma
         elif gamma_strategy == "constant":
             gamma = 10*torch.ones(d)
-            self.gamma = gamma
+            return gamma
         elif gamma_strategy == "paper":
             # Eigenvalues: pairs lambda_{2i} ~ U([1, 1.1]), lambda_{2i+1} = 1/lambda_{2i}.
             gamma = torch.empty(d, dtype=dtype, device=device)
@@ -143,21 +160,7 @@ class GeneralGaussian:
                 gamma[1:2*n_pairs:2] = 1.0 / pair_vals
             if d % 2 == 1:
                 gamma[-1] = 1.0 + 0.1 * torch.rand((), generator=g, dtype=dtype, device=device)
-            self.gamma = gamma
-
-        # Random orthogonal matrix Q from QR of a Gaussian matrix.
-        A = torch.randn(d, d, generator=g, device=device, dtype=dtype)
-        Q, R = torch.linalg.qr(A, mode="reduced")
-
-        # Fix signs for a more uniform-looking orthogonal draw.
-        # Makes diag(R) positive.
-        signs = torch.sign(torch.diag(R))
-        signs = torch.where(signs == 0, torch.ones_like(signs), signs)
-        Q = Q * signs.unsqueeze(0)
-        self.Q = torch.ones((d,d), dtype=dtype)
-        self.Q = Q
-
-        self.set_gamma_Q(gamma, Q)
+            return gamma
 
 
     def set_gamma_Q(self, gamma, Q):
@@ -175,6 +178,11 @@ class GeneralGaussian:
         #self.Sigma = (QT * gamma.unsqueeze(1)) @ Q
         #self.Sigma_sqrt = (QT * torch.sqrt(gamma).unsqueeze(1)) @ Q
 
+    
+    def random_init_gamma_Q(self, gamma_strategy="min_max", seed:int=76):
+        gamma = self.get_random_gamma(gamma_strategy, seed)
+        Q = self.get_random_Q(seed)
+        self.set_gamma_Q(gamma, Q)
 
     def _check_inputs(self, x: torch.Tensor, t: torch.Tensor):
         if x.ndim != 2 or x.shape[1] != self.d:
@@ -354,12 +362,15 @@ class Anisotropic_OU:
         self.device = device
 
         self.gaussian_obj = GeneralGaussian(d, dtype=dtype, device=device)
-        if gamma is not None and Q is not None:
+        if gamma is not None:
             gamma_t = torch.as_tensor(gamma, dtype=dtype, device=device)
-            Q_t = torch.as_tensor(Q, dtype=dtype, device=device)
-            self.gaussian_obj.set_gamma_Q(gamma_t, Q_t)
         else:
-            self.gaussian_obj.random_init_gamma_Q(gamma_strategy="min_max", seed=seed)
+            gamma_t = self.gaussian_obj.get_random_gamma(gamma_strategy="min_max", seed=seed)
+        if Q is not None:
+            Q_t = torch.as_tensor(Q, dtype=dtype, device=device)
+        else:
+            Q_t = self.gaussian_obj.get_random_Q(seed=seed)
+        self.gaussian_obj.set_gamma_Q(gamma_t, Q_t)
         self._refresh_sde_cache()
 
         # SDE drift (diffusion is cached in _refresh_sde_cache).

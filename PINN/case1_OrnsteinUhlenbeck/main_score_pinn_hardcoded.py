@@ -1,6 +1,7 @@
 import argparse
 
 parser = argparse.ArgumentParser()
+parser.add_argument("--config", default=None, type=str, help="Path to a JSON file with parameter values.")
 parser.add_argument("--description", default="", type=str, help="Smthg to help identify it in grid search.")
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--d", default=2, type=int, help="Number of spatial dimensions.")
@@ -29,8 +30,7 @@ parser.add_argument("--use_rbas", action="store_true", help="Residual-based adap
 parser.add_argument("--use_sdgd", action="store_true", help="Stochastic dimension gradient-descend (for loss in high dims)")
 parser.add_argument("--sdgd_num_dims", default=None, type=int, help="Number of dimensions to use for SDGD. If None, use all dimensions.")
 # smart Defaults
-parser.add_argument("--output_dir", default="run_score_pinn_latest/", type=str, help="")
-parser.add_argument("--clear_dir", action="store_true", help="Erase contents of the output_dir before the training starts.")
+parser.add_argument("--output_dir", default=None, type=str, help="")
 
 parser.add_argument("--mode", default="score_pde", type=str, help="score_pde, ll_ode")
 parser.add_argument("--ic_type", default="gauss", type=str, help="gauss, cauchy, laplace")
@@ -39,7 +39,8 @@ parser.add_argument("--sampling_type", default="trajectories", type=str, help="t
 parser.add_argument("--enable_profiler", action="store_true", help="")
 parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
 # enable transfer learning / finetuning
-parser.add_argument("--starting_model", default=None, type=str, help="")
+parser.add_argument("--linked_score_pde_dir", default=None, type=str, help="")
+#parser.add_argument("--starting_model", default=None, type=str, help="")
 # load the pde mode with default parameters, optionally use the .json file to init the class
 #parser.add_argument("--pde_model_name", default=None, type=str, help="HeatEquation")
 #parser.add_argument("--pde_model_args", default=None, type=str, help="pde_model_args.json")
@@ -72,7 +73,9 @@ import run_utils
 
 # Main execution
 
-args = parser.parse_args([] if "__file__" not in globals() else None)
+args = run_utils.parse_args_with_config(
+    parser, [] if "__file__" not in globals() else None
+)
 
 d = args.d  # space dims
 D = d + 1   # space + time dims
@@ -82,50 +85,51 @@ print(f"Training PINN for {d}D PDE")
 print(f"Domain: [0,1]^{d} x [0,1]")
 print(f"{'='*60}\n")
 
-type_sp = args.mode
-print(f"Training Score-PINN, type: '{type_sp}'\n")
+mode_sp = args.mode
+print(f"Training Score-PINN, type: '{mode_sp}'\n")
 
-label = args.ic_type
-if type_sp == "score_pde":
-    args.output_dir = f"{label}/run_hardcoded_{type_sp}"
-    args.clear_dir = True
-    args.enable_testing = False
-elif type_sp == "ll_ode":
-    args.output_dir = f"{label}/run_hardcoded_{type_sp}"
-    args.clear_dir = True
-    args.enable_testing = False
-    score_pde_dir_name = f"{label}/run_hardcoded_score_pde"
-    args.starting_model = f"{score_pde_dir_name}/model.pth"
-else:
-    raise NameError("Incorrect mode specified.")
+ic_type = args.ic_type
+if mode_sp == "score_pde" and args.output_dir is None:
+    args.output_dir = f"{ic_type}/run_latest_hardcoded_{mode_sp}"
+elif mode_sp == "ll_ode":
+    if args.output_dir is None:
+        args.output_dir = f"{ic_type}/run_latest_hardcoded_{mode_sp}"
+
+    if args.linked_score_pde_dir is None:
+        score_pde_dir = f"{ic_type}/run_latest_hardcoded_score_pde"
+    else:
+        score_pde_dir = args.linked_score_pde_dir
+    model_s_path = f"{score_pde_dir}/model.pth"
 
 dir_name, device = run_utils.setup_run(args)
+run_utils.save_input_config(dir_name, args)
 
 
 ### PREP PDE MODEL
+gamma = torch.tensor([1.3, 2.5, 2.1, 1.6, 3.1, 1.8])[:d]
 import pde_model_sde
-if label == "gauss":
-    score_sde_model = pde_model_sde.Gaussian_OU(d=d)
-elif label == "cauchy":
-    score_sde_model = pde_model_sde.Cauchy_OU(d=d)
-elif label == "laplace":
-    score_sde_model = pde_model_sde.Laplace_OU(d=d)
+if ic_type == "gauss":
+    score_sde_model = pde_model_sde.Gaussian_OU(d=d, gamma=gamma)
+elif ic_type == "cauchy":
+    score_sde_model = pde_model_sde.Cauchy_OU(d=d, gamma=gamma)
+elif ic_type == "laplace":
+    score_sde_model = pde_model_sde.Laplace_OU(d=d, gamma=gamma)
 
 # Score PDE
-if type_sp == "score_pde":
+if mode_sp == "score_pde":
     pde_model = score_sde_model.Score_PDE(score_sde_model)
 ## LL ODE
-elif type_sp == "ll_ode":
-    model_metadata = utility.json_load(f'{score_pde_dir_name}/model_metadata.json')
-    head_fn = lambda nn_out, X: nn_out * X[:,-1:]/args.T + pde_model.s0(X[:,:-1])
+elif mode_sp == "ll_ode":
+    model_metadata = utility.json_load(f'{score_pde_dir}/model_metadata.json')
+    head_fn = lambda nn_out, X: nn_out * X[:,-1:]/args.T + score_sde_model.s0(X[:,:-1])
     layers_s = utility.layers_from_string(model_metadata["args"]["layers"])
     model_s = architecture.PINN(D, layers_s, d, head_fn=head_fn).to(device)
-    print(f"Loading in trained score pde model: '{args.starting_model}'")
-    model_s.load_state_dict(torch.load(args.starting_model, weights_only=True))
+    print(f"Loading in trained score pde model: '{model_s_path}'")
+    model_s.load_state_dict(torch.load(model_s_path, weights_only=True))
     model_s.eval()
     pde_model = score_sde_model.LL_ODE(score_sde_model, model_s)
-    print(f"Loading in score pde model parameters: '{score_pde_dir_name}/pde_metadata.json'")
-    pde_model.load_pde_metadata(utility.json_load(f'{score_pde_dir_name}/pde_metadata.json'))
+    print(f"Loading in score pde model parameters: '{score_pde_dir}/pde_metadata.json'")
+    pde_model.load_pde_metadata(utility.json_load(f'{score_pde_dir}/pde_metadata.json'))
 
 print(type(pde_model))
 print(pde_model.gaussian_obj.gamma)
@@ -135,10 +139,10 @@ print()
 
 
 # Select the model architecture
-if type_sp == "score_pde":
+if mode_sp == "score_pde":
     head_fn = lambda nn_out, X: nn_out * X[:,-1:]/args.T + pde_model.s0(X[:,:-1])
     model = architecture.PINN(D, layers, d, head_fn=head_fn).to(device)
-elif type_sp == "ll_ode":
+elif mode_sp == "ll_ode":
     head_fn = lambda nn_out, X: nn_out * X[:,-1:]/args.T + pde_model.q0(X[:,:-1])
     model = architecture.PINN(D, layers, 1, head_fn=head_fn).to(device)
 #model = torch.compile(model, mode="reduce-overhead")
@@ -164,13 +168,13 @@ else:
 import time
 t1 = time.time()
 if args.enable_testing:
-    if type_sp == "score_pde":
+    if mode_sp == "score_pde":
         analytic_fn = score_sde_model.s_analytic
-    elif type_sp == "ll_ode":
+    elif mode_sp == "ll_ode":
         analytic_fn = score_sde_model.q_analytic
     testing_suite = utility.ScorePINNTestingSuite(d, analytic_fn)
     testing_suite.make_test_data(score_sde_model, args.n_test_points)
-    print(f"Testing suite ready ({args.n_test_points} points, mode='{type_sp}').")
+    print(f"Testing suite ready ({args.n_test_points} points, mode='{mode_sp}').")
 else:
     testing_suite = None
 
@@ -221,6 +225,6 @@ loss_name, l2_name = run_utils.save_run(dir_name, model, losses, l2_errs, args, 
 import plot_results
 plot_results.plot_run(
     dir_name, model, pde_model, score_sde_model, args, device,
-    model_s=model_s if type_sp == "ll_ode" else None,
+    model_s=model_s if mode_sp == "ll_ode" else None,
     losses=losses, l2_errs=l2_errs,
 )

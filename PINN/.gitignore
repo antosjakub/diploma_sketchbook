@@ -1,5 +1,6 @@
 *.pth
 __pycache__
+.codex
 
 *.gif
 *.png
@@ -10,3 +11,6 @@ _*
 # experiments
 *.log
 time.txt
+return_code.txt
+model_metadata.json
+pde_metadata.json
