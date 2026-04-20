@@ -60,13 +60,15 @@ def setup_run(args):
 
     if os.path.isdir(dir_name):
         print(f"Directory already exists: '{dir_name}'")
-        print("To the trashbin with you lot...")
-        shutil.rmtree(dir_name)
-        os.makedirs(dir_name)
+        if args.clear_dir:
+            print("To the trashbin with you lot...")
+            shutil.rmtree(dir_name)
+            os.makedirs(dir_name)
     else:
         print(f"Creating new directory: '{dir_name}'")
         os.makedirs(dir_name)
-        print("Why clear the new thing me asky??")
+        if args.clear_dir:
+            print("Why clear the new thing me asky??")
     print()
 
     return dir_name, device
@@ -104,14 +106,6 @@ def merge_losses(dst, src):
     for k in dst:
         dst[k] += src.get(k, [])
 
-
-def print_train_duration(t1, t2, label="Adam training"):
-    h, m, s = utility.get_duration(t2 - t1)
-    parts = [f"{label} completed in:"]
-    if h > 0: parts.append(f"{h} hours")
-    if m > 0: parts.append(f"{m} minutes")
-    parts.append(f"{s} seconds")
-    print(" ".join(parts))
 
 
 def save_run(dir_name, model, losses, l2_errs, args, pde_model=None, head_fn=None):

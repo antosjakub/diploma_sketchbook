@@ -505,7 +505,7 @@ class Anisotropic_OU:
             q = model_q(X)
             grad_q = derivatives.compute_grad(X, q, torch.ones_like(q))[:,-1:]
             n = precomputed["normals"]
-            Sigma_grad_q = torch.einsum('ij,bj->ib', self.Sigma, grad_q).unsqueeze(1)
+            Sigma_grad_q = torch.einsum('ij,bj->bi', self.Sigma, grad_q)
             return ( ( Sigma_grad_q + X[:,:-1] ) * n ).sum(dim=1).unsqueeze(1)
         def ic_residual(self, X, model_q, precomputed):
             return model_q(X) - precomputed["q0"]

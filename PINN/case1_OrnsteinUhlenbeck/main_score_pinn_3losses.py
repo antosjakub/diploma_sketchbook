@@ -48,6 +48,8 @@ parser.add_argument("--profiler_report_filename", default="profiler_report", typ
 # enable transfer learning / finetuning
 parser.add_argument("--linked_score_pde_dir", default=None, type=str, help="")
 parser.add_argument("--starting_model", default=None, type=str, help="")
+
+parser.add_argument("--clear_dir", action="store_true", help="Erase contents of the output_dir before the training starts.")
 # load the pde mode with default parameters, optionally use the .json file to init the class
 #parser.add_argument("--pde_model_name", default=None, type=str, help="HeatEquation")
 #parser.add_argument("--pde_model_args", default=None, type=str, help="pde_model_args.json")
@@ -106,13 +108,7 @@ elif mode_sp == "ll_ode":
         score_pde_dir = f"{ic_type}/run_latest_3losses_score_pde"
     else:
         score_pde_dir = args.linked_score_pde_dir
-
-    if args.starting_model is None:
-        starting_model = f"{score_pde_dir}/model.pth"
-    else:
-        starting_model = args.starting_model
-else:
-    raise NameError("Incorrect mode specified.")
+    model_s_path = f"{score_pde_dir}/model.pth"
 
 dir_name, device = run_utils.setup_run(args)
 run_utils.save_input_config(dir_name, args)
@@ -136,8 +132,8 @@ elif mode_sp == "ll_ode":
     model_metadata = utility.json_load(f'{score_pde_dir}/model_metadata.json')
     layers_s = utility.layers_from_string(model_metadata["args"]["layers"])
     model_s = architecture.PINN(D, layers_s, d).to(device)
-    print(f"Loading in trained score pde model: '{starting_model}'")
-    model_s.load_state_dict(torch.load(starting_model, weights_only=True))
+    print(f"Loading in trained score pde model: '{model_s_path}'")
+    model_s.load_state_dict(torch.load(model_s_path, weights_only=True))
     model_s.eval()
     pde_model = score_sde_model.LL_ODE(score_sde_model, model_s)
     print(f"Loading in score pde model parameters: '{score_pde_dir}/pde_metadata.json'")
@@ -228,7 +224,7 @@ losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
 run_utils.merge_losses(losses, losses_adam)
 l2_errs += l2_errs_adam
 print("\nAdam training complete!")
-run_utils.print_train_duration(t1, time.time())
+utility.print_duration_h_m_s(t1, time.time(), "Adam training")
 
 print("\nTraining complete!")
 

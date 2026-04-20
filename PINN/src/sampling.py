@@ -566,7 +566,8 @@ def create_dataloaders__trajectories(
 
     x0 = pde_model.sample_x0(n_trajs)
     if "ic" in active_losses:
-        X_ic = contruct_trajs_ic(x0, n_initial)
+        x0_ic = pde_model.sample_x0(n_initial) if n_trajs < n_initial else x0
+        X_ic = contruct_trajs_ic(x0_ic, n_initial)
     if "pde" in active_losses:
         X_pde = sample_trajs_res_points(pde_model, x0, T, nt_steps, n_interior)
     if "bc" in active_losses:

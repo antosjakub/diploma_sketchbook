@@ -40,6 +40,8 @@ parser.add_argument("--enable_profiler", action="store_true", help="")
 parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
 # enable transfer learning / finetuning
 parser.add_argument("--linked_score_pde_dir", default=None, type=str, help="")
+
+parser.add_argument("--clear_dir", action="store_true", help="Erase contents of the output_dir before the training starts.")
 #parser.add_argument("--starting_model", default=None, type=str, help="")
 # load the pde mode with default parameters, optionally use the .json file to init the class
 #parser.add_argument("--pde_model_name", default=None, type=str, help="HeatEquation")
@@ -215,7 +217,7 @@ losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
 run_utils.merge_losses(losses, losses_adam)
 l2_errs += l2_errs_adam
 print("\nAdam training complete!")
-run_utils.print_train_duration(t1, time.time())
+utility.print_duration_h_m_s(t1, time.time(), "Adam training")
 
 print("\nTraining complete!")
 

@@ -17,6 +17,14 @@ def get_duration(dt):
     s = dt - 3600 * h - 60 * m
     return int(h),int(m),s
 
+def print_duration_h_m_s(t1, t2, label="Smthg"):
+    h, m, s = get_duration(t2 - t1)
+    parts = [f"{label} completed in:"]
+    if h > 0: parts.append(f"{h} hours")
+    if m > 0: parts.append(f"{m} minutes")
+    parts.append(f"{s} seconds")
+    print(" ".join(parts))
+
 
 from torch.profiler import profile, ProfilerActivity
 from contextlib import nullcontext

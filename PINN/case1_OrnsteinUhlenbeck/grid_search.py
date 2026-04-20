@@ -5,16 +5,21 @@ import time
 from pathlib import Path
 
 
+import os, sys
+src_dir = os.path.join(os.path.dirname(__file__), '../src/')
+sys.path.append(src_dir)
+import utility
+
 CASE_DIR = Path(__file__).resolve().parent
 
 
 # Choose which training entrypoint to use.
 # Supported values: "hardcoded", "3losses"
-VARIANT = "hardcoded"
+VARIANT = "3losses"
 
 
 FIXED_PARAMS = {
-    #"ic_type": "gauss",
+    "ic_type": "laplace",
     "description": "OU IC grid search",
     "seed": 42,
     "layers": "128,128,128,128",
@@ -28,8 +33,13 @@ FIXED_PARAMS = {
     "T": 1.0,
     "n_test_points": 10_000,
     "testing_frequency": 100,
-    "L_min": -4.0,
-    "L_max": 4.0
+    "lambda_pde": 1.0,
+    "lambda_bc": 10.0,
+    "lambda_ic": 10.0,
+    "clear_dir": False,
+    "L_min": -6.0,
+    "L_max": 6.0,
+    #"sampling_type": "domain",
 }
 
 
@@ -38,8 +48,8 @@ FIXED_PARAMS = {
 # - scalars, which set one parameter with the axis name
 # - dicts, for grouped parameters such as trajectory sampling settings
 SEARCH_AXES = {
-    "ic_type": ["gauss", "cauchy", "laplace"],
-    "d": [2, 4],
+    #"ic_type": ["gauss", "cauchy", "laplace"],
+    #"d": [2, 4],
     #"box": [
     #    {"L_min": -4.0, "L_max": 4.0},
     #    {"L_min": -6.0, "L_max": 6.0},
@@ -54,6 +64,8 @@ SEARCH_AXES = {
             "sampling_type": "domain",
         },
     ],
+    #"use_adaptive_weights": [True, False],
+    "active_losses": ["pde,bc,ic", "pde,ic"]
 }
 
 
@@ -195,6 +207,7 @@ def main():
     n_fail = 0
     run_records = []
 
+    gs_start_time = time.time()
     for combo_index, base_combo in enumerate(base_combos, start=1):
         combo_dir = search_root / combo_name(base_combo)
         combo_dir.mkdir(parents=True, exist_ok=True)
@@ -261,6 +274,7 @@ def main():
         else:
             n_fail += 1
 
+
     summary = {
         "n_ok": n_ok,
         "n_fail": n_fail,
@@ -269,7 +283,8 @@ def main():
     json_dump(search_root / "summary.json", summary)
 
     print()
-    print(f"Completed. ok={n_ok}, failed={n_fail}")
+    utility.print_duration_h_m_s(gs_start_time, time.time(), label="Grid search")
+    print(f"ok={n_ok}, failed={n_fail}")
     print(f"Summary: {search_root.relative_to(CASE_DIR) / 'summary.json'}")
 
 
