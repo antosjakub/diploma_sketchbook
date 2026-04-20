@@ -19,11 +19,11 @@ VARIANT = "3losses"
 
 
 FIXED_PARAMS = {
-    "ic_type": "laplace",
+    "ic_type": "gauss",
     "description": "OU IC grid search",
     "seed": 42,
     "layers": "128,128,128,128",
-    "n_steps": 9950,
+    "n_steps": 49_999,
     "n_steps_decay": 5_000,
     "gamma": 0.9,
     "lr": 1e-3,
@@ -34,13 +34,29 @@ FIXED_PARAMS = {
     "n_test_points": 10_000,
     "testing_frequency": 100,
     "lambda_pde": 1.0,
-    "lambda_bc": 10.0,
     "lambda_ic": 10.0,
     "clear_dir": False,
-    "L_min": -6.0,
-    "L_max": 6.0,
-    #"sampling_type": "domain",
+    "L_min": -5.0,
+    "L_max": 5.0,
+    "sampling_type": "domain_and_trajectories",
+    "n_trajs": 1_000,
+    "nt_steps": 1_000,
+    "active_losses": "pde,ic",
+    "use_adaptive_weights": True,
+    "f_pde_full_domain": 3,
+    "f_pde_trajs": 1,
 }
+
+# Set this when running only `ll_ode` against one already-trained score-PDE
+# model. The exact same directory is used for every ll_ode combo.
+#LINKED_SCORE_PDE_DIR = "gridsearch__3losses__2026-04-20--11-45-40/use_adaptive_weights=False__active_losses=pde_ic/score_pde"
+#LINKED_SCORE_PDE_DIR = None
+LINKED_SCORE_PDE_DIR = "gridsearch__3losses__2026-04-20--21-02-15/ic_type=gauss__d=2/score_pde/"
+
+# `ll_ode` depends on a matching `score_pde` run, so modes are run in order
+# for each base combo instead of being treated as an independent search axis.
+#MODES = ["score_pde", "ll_ode"]
+MODES = ["ll_ode"]
 
 
 # Add or remove search axes here.
@@ -54,24 +70,39 @@ SEARCH_AXES = {
     #    {"L_min": -4.0, "L_max": 4.0},
     #    {"L_min": -6.0, "L_max": 6.0},
     #],
-    "sampling": [
-        {
-            "sampling_type": "trajectories",
-            "n_trajs": 1_000,
-            "nt_steps": 1_000,
-        },
-        {
-            "sampling_type": "domain",
-        },
-    ],
-    #"use_adaptive_weights": [True, False],
-    "active_losses": ["pde,bc,ic", "pde,ic"]
+    #"layers": [
+    #    "128,128,128,128",
+    #    "148,148,148,148"
+    #]
+    #"sampling": [
+    #    {
+    #        "f_pde_full_domain": 1,
+    #        "f_pde_trajs": 1,
+    #    },
+    #    {
+    #        "f_pde_full_domain": 2,
+    #        "f_pde_trajs": 1,
+    #    },
+    #    {
+    #        "f_pde_full_domain": 1,
+    #        "f_pde_trajs": 2,
+    #    }
+    #]
+    #"sampling": [
+    #    {
+    #        "sampling_type": "trajectories",
+    #        "n_trajs": 1_000,
+    #        "nt_steps": 1_000,
+    #    },
+    #    {
+    #        "sampling_type": "domain",
+    #    },
+    #],
+    #"use_adaptive_weights": [False, True],
+    #"active_losses": ["pde,bc,ic", "pde,ic"]
 }
 
 
-# `ll_ode` depends on a matching `score_pde` run, so modes are run in order
-# for each base combo instead of being treated as an independent search axis.
-MODES = ["score_pde", "ll_ode"]
 
 
 def json_dump(file_path: Path, obj) -> None:
@@ -136,6 +167,26 @@ def build_run_config(base_combo: dict, mode: str, output_dir: Path, linked_score
     return config
 
 
+def as_case_relative(path: Path) -> str:
+    if not path.is_absolute():
+        return str(path)
+    return str(path.relative_to(CASE_DIR))
+
+
+def resolve_linked_score_pde_dir(base_combo: dict, local_score_run_dir: Path) -> Path:
+    if "score_pde" in MODES:
+        return local_score_run_dir
+    if LINKED_SCORE_PDE_DIR is None:
+        raise ValueError(
+            "ll_ode-only grid searches need LINKED_SCORE_PDE_DIR to locate "
+            "the already-trained score_pde run."
+        )
+    linked_dir = Path(LINKED_SCORE_PDE_DIR)
+    if linked_dir.is_absolute():
+        return linked_dir
+    return CASE_DIR / linked_dir
+
+
 def run_one(entrypoint: str, run_dir: Path, config: dict) -> int:
     run_dir.mkdir(parents=True, exist_ok=True)
     config_path = run_dir / "config.json"
@@ -176,8 +227,11 @@ def validate_search_setup():
     unknown_modes = sorted(set(MODES) - allowed_modes)
     if unknown_modes:
         raise ValueError(f"Unsupported modes in MODES: {unknown_modes}")
-    if "ll_ode" in MODES and "score_pde" not in MODES:
-        raise ValueError("ll_ode requires score_pde because it depends on the trained score model.")
+    if "ll_ode" in MODES and "score_pde" not in MODES and LINKED_SCORE_PDE_DIR is None:
+        raise ValueError(
+            "ll_ode requires score_pde in MODES or LINKED_SCORE_PDE_DIR "
+            "pointing to an existing score_pde run."
+        )
 
 
 def main():
@@ -194,6 +248,7 @@ def main():
         "fixed_params": FIXED_PARAMS,
         "search_axes": SEARCH_AXES,
         "modes": MODES,
+        "linked_score_pde_dir": LINKED_SCORE_PDE_DIR,
     }
     json_dump(search_root / "manifest.json", manifest)
 
@@ -241,7 +296,7 @@ def main():
 
         if "ll_ode" not in MODES:
             continue
-        if score_rc != 0:
+        if "score_pde" in MODES and score_rc != 0:
             print("Skipping ll_ode because score_pde failed.")
             run_records.append(
                 {
@@ -254,11 +309,27 @@ def main():
             )
             continue
 
+        linked_score_pde_dir = resolve_linked_score_pde_dir(base_combo, score_run_dir)
+        if not (linked_score_pde_dir / "model_metadata.json").is_file():
+            print(f"Skipping ll_ode because linked score_pde is missing: {as_case_relative(linked_score_pde_dir)}")
+            run_records.append(
+                {
+                    "combo": base_combo,
+                    "mode": "ll_ode",
+                    "run_dir": str(ll_run_dir.relative_to(CASE_DIR)),
+                    "return_code": None,
+                    "skipped": "linked_score_pde_missing",
+                    "linked_score_pde_dir": as_case_relative(linked_score_pde_dir),
+                }
+            )
+            n_fail += 1
+            continue
+
         ll_config = build_run_config(
             base_combo=base_combo,
             mode="ll_ode",
             output_dir=ll_run_dir,
-            linked_score_pde_dir=score_run_dir,
+            linked_score_pde_dir=linked_score_pde_dir,
         )
         ll_rc = run_one(entrypoint, ll_run_dir, ll_config)
         run_records.append(

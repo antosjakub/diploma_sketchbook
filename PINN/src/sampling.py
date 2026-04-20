@@ -647,6 +647,88 @@ def create_pde_loader(sampling_type, pde_model, settings, device="cpu"):
     return loader
 
 
+def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settings, device="cpu"):
+    T = settings.get("T", 1.0)
+    spatial_domain = settings.get("spatial_domain")
+    n_res_points = settings.get("n_res_points", 100_000)
+    bs = settings.get("bs", 1_000)
+    n_trajs = settings.get("n_trajs", 1_000)
+    nt_steps = settings.get("nt_steps", 1_000)
+    d = pde_model.d
+
+    X_ic = None
+    if "ic" in active_losses:
+        (bs_pde, _, bs_ic, _), (n_interior, _, n_initial, _) = split_res_points(n_res_points, bs,
+            f_pde  =  9,
+            f_bc   =  0,
+            f_ic   =  1,
+            f_norm =  0,
+        )
+        x0_ic = pde_model.sample_x0(n_initial)
+        X_ic = contruct_trajs_ic(x0_ic, n_initial)
+    else:
+        bs_pde = bs
+        n_interior = n_res_points
+
+    f_pde_full_domain = settings.get("f_pde_full_domain", 1)
+    f_pde_trajs = settings.get("f_pde_trajs", 1)
+    use_full_domain_sampling = f_pde_full_domain != 0
+    use_trajs_sampling = f_pde_trajs != 0
+
+    if not use_full_domain_sampling and not use_trajs_sampling:
+        raise ValueError("At least one of f_pde_full_domain or f_pde_trajs must be nonzero.")
+
+    use_dual_sampling = use_full_domain_sampling and use_trajs_sampling 
+    if use_dual_sampling:
+        if f_pde_full_domain < 0 or f_pde_trajs < 0:
+            raise ValueError("f_pde_full_domain and f_pde_trajs must be non-negative.")
+        n_interior_full_domain = f_pde_full_domain * n_interior // (f_pde_full_domain + f_pde_trajs)
+        n_interior_trajs = n_interior - n_interior_full_domain
+    elif use_full_domain_sampling:
+        n_interior_full_domain = n_interior
+        n_interior_trajs = 0
+    elif use_trajs_sampling:
+        n_interior_full_domain = 0
+        n_interior_trajs = n_interior
+
+    X_pde_1 = X_pde_2 = None
+    if use_full_domain_sampling:
+        strategy = settings.get("sampling_strategy", "lhs")
+        X_pde_1 = sample_domain(n_interior_full_domain, d + 1, sampling_strategy=strategy, device=device)
+        if spatial_domain is not None:
+            lo = spatial_domain[:, 0]
+            hi = spatial_domain[:, 1]
+            X_pde_1 = scale_samples__spatial(X_pde_1, lo, hi)
+        if T != 1.0:
+            X_pde_1 = scale_samples__temporal(X_pde_1, T)
+
+    if use_trajs_sampling:
+        x0 = pde_model.sample_x0(n_trajs)
+        X_pde_2 = sample_trajs_res_points(pde_model, x0, T, nt_steps, n_interior_trajs)
+
+    if use_dual_sampling:
+        X_pde = torch.cat([
+            X_pde_1,
+            X_pde_2
+        ], dim=0)
+        print(f"PDE loader (X.shape = {X_pde.shape}, bs = {bs_pde})")
+        print(f" - full_domain sampling (X.shape = {X_pde_1.shape})")
+        print(f" - trajs sampling (X.shape = {X_pde_2.shape})")
+    elif use_full_domain_sampling:
+        X_pde = X_pde_1
+        print(f"PDE loader (X_full_domain.shape = {X_pde.shape}, bs = {bs_pde})")
+    elif use_trajs_sampling:
+        X_pde = X_pde_2
+        print(f"PDE loader (X_trajs.shape = {X_pde.shape}, bs = {bs_pde})")
+
+    precomputed = _precompute_active(pde_model, X_pde, None, X_ic, active_losses=active_losses, device=device)
+    bundle = {}
+    bundle["pde"] = DataLoader(CollocationDataset(X_pde, precomputed["pde"]), batch_size=bs_pde, shuffle=True)
+    if "ic" in active_losses:
+        print(f"IC loader: X.shape = {X_ic.shape}, bs = {bs_ic}")
+        bundle["ic"] = DataLoader(CollocationDataset(X_ic, precomputed["ic"]), batch_size=bs_ic, shuffle=True)
+    return bundle
+
 def create_dataloaders(sampling_type, model, pde_model, settings, active_losses, device="cpu"):
     """
     Build a bundle dict {term_name: loader_or_buffer} for all terms in active_losses.
@@ -657,8 +739,10 @@ def create_dataloaders(sampling_type, model, pde_model, settings, active_losses,
         bundle = create_dataloaders__trajectories(model, pde_model, active_losses, device=device, **settings)
     elif sampling_type == "domain":
         bundle = create_dataloaders__domain(model, pde_model, active_losses, device=device, **settings)
+    elif sampling_type == "domain_and_trajectories":
+        bundle = create_dataloaders__domain_and_trajectories(pde_model, active_losses, settings, device=device)
     else:
-        raise NameError(f"Incorrect data loader type specified: '{type}'")
+        raise NameError(f"Incorrect data loader type specified: '{sampling_type}'")
 
     return bundle
 

@@ -17,7 +17,7 @@ parser.add_argument("--lambda_bc", default=10.0, type=float, help="")
 parser.add_argument("--lambda_ic", default=10.0, type=float, help="")
 parser.add_argument("--lambda_norm", default=0.1, type=float, help="Weight of the ∫p dx = 1 normalization loss.")
 parser.add_argument("--use_adaptive_weights", action="store_true", help="Loss weighting.")
-parser.add_argument("--active_losses", default="pde,bc,ic", type=str, help="Comma-separated subset of {pde,bc,ic,norm}. 'pde' is required.")
+parser.add_argument("--active_losses", default="pde,ic", type=str, help="Comma-separated subset of {pde,bc,ic,norm}. 'pde' is required.")
 
 parser.add_argument("--n_res_points", default=10_000, type=int, help="")
 parser.add_argument("--n_trajs", default=1_000, type=int, help="")
@@ -41,7 +41,10 @@ parser.add_argument("--output_dir", default=None, type=str, help="")
 
 parser.add_argument("--mode", default="score_pde", type=str, help="score_pde, ll_ode")
 parser.add_argument("--ic_type", default="gauss", type=str, help="gauss, cauchy, laplace")
-parser.add_argument("--sampling_type", default="trajectories", type=str, help="trajectories, domain")
+parser.add_argument("--sampling_type", default="domain_and_trajectories", type=str, help="trajectories, domain")
+parser.add_argument("--f_pde_full_domain", default=1, type=int, help="")
+parser.add_argument("--f_pde_trajs", default=2, type=int, help="")
+
 #
 parser.add_argument("--enable_profiler", action="store_true", help="")
 parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
@@ -189,20 +192,32 @@ T = args.T
 sampling_type = args.sampling_type
 if sampling_type == "trajectories":
     sampling_settings = {
-        "n_trajs": args.n_trajs,
-        "nt_steps": args.nt_steps,
+        "T": args.T,
+        "spatial_domain": torch.stack([torch.full((d,), args.L_min), torch.full((d,), args.L_max)], dim=1),
         "n_res_points": args.n_res_points,
         "bs": args.bs,
-        "spatial_domain": torch.stack([torch.full((d,), args.L_min), torch.full((d,), args.L_max)], dim=1),
-        "T": args.T,
+        "n_trajs": args.n_trajs,
+        "nt_steps": args.nt_steps,
     }
 elif sampling_type == "domain":
     sampling_settings = {
+        "T": T,
+        "spatial_domain": torch.stack([torch.full((d,), args.L_min), torch.full((d,), args.L_max)], dim=1),
         "n_res_points": args.n_res_points,
         "bs": args.bs,
-        "spatial_domain": torch.stack([torch.full((d,), args.L_min), torch.full((d,), args.L_max)], dim=1),
-        "T": T,
         "use_rbas": args.use_rbas,
+    }
+elif sampling_type == "domain_and_trajectories":
+    sampling_settings = {
+        "T": args.T,
+        "spatial_domain": torch.stack([torch.full((d,), args.L_min), torch.full((d,), args.L_max)], dim=1),
+        "n_res_points": args.n_res_points,
+        "bs": args.bs,
+        "n_trajs": args.n_trajs,
+        "nt_steps": args.nt_steps,
+        "use_rbas": args.use_rbas,
+        "f_pde_full_domain": args.f_pde_full_domain,
+        "f_pde_trajs": args.f_pde_trajs,
     }
 
 from trainers import PINN_Trainer
