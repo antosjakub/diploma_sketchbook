@@ -118,7 +118,7 @@ run_utils.save_input_config(dir_name, args)
 
 
 ### PREP PDE MODEL
-gamma = torch.tensor([1.3, 2.5, 2.1, 1.6, 3.1, 1.8])[:d]
+gamma = torch.tensor([1.3, 2.5, 2.1, 1.6, 3.1, 1.8, 2.7])[:d]
 import pde_model_sde
 if ic_type == "gauss":
     score_sde_model = pde_model_sde.Gaussian_OU(d=d, gamma=gamma)
@@ -226,6 +226,7 @@ trainer = PINN_Trainer(
     sampling_type=sampling_type, sampling_settings=sampling_settings,
     loss_weighting=loss_weighting, testing_suite=testing_suite,
     active_losses=active_losses, profiler=profiler, device=device,
+    dir_name=dir_name
 )
 losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
     n_steps=args.n_steps,

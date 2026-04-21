@@ -12,7 +12,7 @@ class PINN_Trainer:
         self, model, optimizer, scheduler, pde_model,
         sampling_type, sampling_settings,
         loss_weighting, testing_suite, active_losses=("pde", "bc", "ic", "norm"),
-        profiler=None, device='cpu',
+        profiler=None, device='cpu', dir_name=None,
     ):
         self.model = model
         self.optimizer = optimizer
@@ -25,6 +25,7 @@ class PINN_Trainer:
         self.testing_suite = testing_suite
         self.device = device
         self.d = self.pde_model.d
+        self.dir_name = dir_name
 
         for k in active_losses:
             if k not in self.VALID_LOSS_KEYS:
@@ -166,6 +167,16 @@ class PINN_Trainer:
                     log += f", L2: {l2_err:.6f}, L1: {l1_err:.6f}, rel_max: {rel_err:.6f}"
                 print(log)
 
+            
+            #if si == 130:
+            #    loss_name = f'{self.dir_name}/training_loss'
+            #    l2_name = f'{self.dir_name}/training_l2_error'
+            #    torch.save(self.model.state_dict(), f'{self.dir_name}/model_.pth')
+            #    torch.save({k: torch.tensor(v) for k, v in losses.items()}, f'{loss_name}_.pth')
+            #    torch.save(torch.tensor(l2_errs), f'{l2_name}_.pth')
+            #    print("\nResults saved.")
+
+
         return losses, l2_errs
 
 
@@ -185,7 +196,7 @@ class PINN_Trainer_1k:
     def __init__(
         self, model, optimizer, scheduler, pde_model,
         sampling_type, sampling_settings,
-        testing_suite=None, profiler=None, device='cpu',
+        testing_suite=None, profiler=None, device='cpu', dir_name=None
     ):
         self.model = model
         self.optimizer = optimizer
@@ -198,7 +209,8 @@ class PINN_Trainer_1k:
         self.device = device
         self.d = pde_model.d
         self.loader = None
-        self._loader_iter = None
+        self._loader_iter = None,
+        self.dir_name = dir_name
 
     def _build_loader(self):
         self.loader = sampling.create_pde_loader(
@@ -260,6 +272,14 @@ class PINN_Trainer_1k:
                     l2_errs.append(l2_err)
                     log += f", L2: {l2_err:.6f}, L1: {l1_err:.6f}, rel_max: {rel_err:.6f}"
                 print(log)
+
+            #if si == 29_999 or si == 49_999 or si == 69_999 or si == 89_999:
+            #    loss_name = f'{self.dir_name}/training_loss'
+            #    l2_name = f'{self.dir_name}/training_l2_error'
+            #    torch.save(self.model.state_dict(), f'{self.dir_name}/model_{si}.pth')
+            #    torch.save({k: torch.tensor(v) for k, v in losses.items()}, f'{loss_name}_{si}.pth')
+            #    torch.save(torch.tensor(l2_errs), f'{l2_name}_{si}.pth')
+            #    print("\nResults saved.")
 
         return losses, l2_errs
 

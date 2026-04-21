@@ -437,6 +437,29 @@ class Anisotropic_OU:
         drift = (X[:, :-1] * s).sum(dim=1).unsqueeze(1)
         return 0.5 * (tr_Sigma_grad_s + quad + drift + self.d)
 
+    class q_PDE:
+        def __init__(self, score_sde_model) -> None:
+            self.score_sde_model = score_sde_model
+        def __getattr__(self, name):
+            return getattr(self.score_sde_model, name)
+        def pde_residual(self, X, model_q, precomputed):
+            # L = d_t q = 1/2 ( tr(Sigma grad_x s) + s^T Sigma s + x . s + d ).
+            # Reduces to the isotropic form when Sigma = sigma^2 I.
+            X.detach()
+            X.requires_grad_(True)
+            q = model_q(X)
+            q_grad = derivatives.compute_grad(X, q, torch.ones_like(q))
+            q_t = q_grad[:,-1:]
+            q_jac = q_grad[:,:-1]
+            model_s = lambda X_in: q_jac
+            s, jac = derivatives.compute_score_and_jacobian(model_s, X)
+            s_jac_spatial = jac[:, :, :-1]        # (bs, d, d)
+            L = self.L_functional(X, s, s_jac_spatial, precomputed)
+            assert L.shape == (X.shape[0], 1)
+            residual = q_t - L
+            return residual
+    
+
     class Score_PDE:
         def __init__(self, score_sde_model) -> None:
             self.score_sde_model = score_sde_model

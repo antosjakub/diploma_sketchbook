@@ -15,48 +15,54 @@ CASE_DIR = Path(__file__).resolve().parent
 
 # Choose which training entrypoint to use.
 # Supported values: "hardcoded", "3losses"
-VARIANT = "3losses"
+VARIANT = "hardcoded"
 
 
 FIXED_PARAMS = {
     "ic_type": "gauss",
+    "d": 4,
     "description": "OU IC grid search",
     "seed": 42,
-    "layers": "128,128,128,128",
-    "n_steps": 49_999,
-    "n_steps_decay": 5_000,
+    #"layers": "128,128,128,128",
+    #"layers": "192,192,192,192",
+    #"layers": "256,256,256,256",
+    #"layers": "512,512,512,512",
+    "n_steps": 19_999,
+    #"n_steps_decay": 2_000,
     "gamma": 0.9,
     "lr": 1e-3,
     "bs": 1_000,
     "n_res_points": 100_000,
-    "resampling_frequency": 500,
+    #"resampling_frequency": 500,
     "T": 1.0,
     "n_test_points": 10_000,
     "testing_frequency": 100,
-    "lambda_pde": 1.0,
-    "lambda_ic": 10.0,
+    #"lambda_pde": 1.0,
+    #"lambda_ic": 10.0,
     "clear_dir": False,
     "L_min": -5.0,
     "L_max": 5.0,
-    "sampling_type": "domain_and_trajectories",
+    "sampling_type": "trajectories",
     "n_trajs": 1_000,
     "nt_steps": 1_000,
-    "active_losses": "pde,ic",
-    "use_adaptive_weights": True,
-    "f_pde_full_domain": 3,
-    "f_pde_trajs": 1,
+    #"active_losses": "pde,ic",
+    #"use_adaptive_weights": True,
+    #"f_pde_full_domain": 3,
+    #"f_pde_trajs": 1,
+    #"enable_testing": False
 }
 
 # Set this when running only `ll_ode` against one already-trained score-PDE
 # model. The exact same directory is used for every ll_ode combo.
 #LINKED_SCORE_PDE_DIR = "gridsearch__3losses__2026-04-20--11-45-40/use_adaptive_weights=False__active_losses=pde_ic/score_pde"
-#LINKED_SCORE_PDE_DIR = None
-LINKED_SCORE_PDE_DIR = "gridsearch__3losses__2026-04-20--21-02-15/ic_type=gauss__d=2/score_pde/"
+#LINKED_SCORE_PDE_DIR = "gridsearch__3losses__2026-04-20--21-02-15/ic_type=gauss__d=2/score_pde/"
+#LINKED_SCORE_PDE_DIR = "gridsearch__hardcoded__2026-04-21--08-36-32/ic_type=cauchy__d=4/score_pde/"
+LINKED_SCORE_PDE_DIR = None
 
 # `ll_ode` depends on a matching `score_pde` run, so modes are run in order
 # for each base combo instead of being treated as an independent search axis.
-#MODES = ["score_pde", "ll_ode"]
-MODES = ["ll_ode"]
+MODES = ["score_pde", "ll_ode"]
+#MODES = ["ll_ode"]
 
 
 # Add or remove search axes here.
@@ -64,16 +70,23 @@ MODES = ["ll_ode"]
 # - scalars, which set one parameter with the axis name
 # - dicts, for grouped parameters such as trajectory sampling settings
 SEARCH_AXES = {
-    #"ic_type": ["gauss", "cauchy", "laplace"],
-    #"d": [2, 4],
+    #"ic_type": ["cauchy", "gauss"],
+    #"d": [4, 6, 8],
     #"box": [
     #    {"L_min": -4.0, "L_max": 4.0},
     #    {"L_min": -6.0, "L_max": 6.0},
     #],
-    #"layers": [
-    #    "128,128,128,128",
+    "layers": [
+        #"128,128,128,128",
+        "64,64,64,64",
+        "256,256,256,256",
     #    "148,148,148,148"
-    #]
+    ],
+    "resampling_frequency": [100, 1000],
+    "n_steps_decay": [
+        200,
+        2_000,
+    ],
     #"sampling": [
     #    {
     #        "f_pde_full_domain": 1,

@@ -198,17 +198,23 @@ def _build_pinn(D, layers, out_dim, device, head_fn=None):
     return architecture.PINN(D, layers, out_dim).to(device)
 
 
-def load_run(dir_name, device=None):
+def load_run(dir_name, device=None, specific_paths={}):
     """Reconstruct everything needed to replot from a saved run directory.
 
     Returns: (model, pde_model, score_sde_model, args, losses, l2_errs, device, model_s)
     `model_s` is None for score_pde mode.
     """
+    model_metadata_path = specific_paths.get("model_metadata_path", f"{dir_name}/model_metadata.json")
+    pde_metadata_path = specific_paths.get("pde_metadata_path", f"{dir_name}/pde_metadata.json")
+    training_loss_path = specific_paths.get("training_loss_path", f"{dir_name}/training_loss.pth")
+    training_l2_error_path = specific_paths.get("training_l2_error_path", f"{dir_name}/training_l2_error.pth")
+    model_path = specific_paths.get("model_path", f"{dir_name}/model.pth")
+
     if device is None:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    model_metadata = utility.json_load(f"{dir_name}/model_metadata.json")
-    pde_metadata = utility.json_load(f"{dir_name}/pde_metadata.json")
+    model_metadata = utility.json_load(model_metadata_path)
+    pde_metadata = utility.json_load(pde_metadata_path)
     args = argparse.Namespace(**model_metadata["args"])
 
     d = args.d
@@ -226,7 +232,7 @@ def load_run(dir_name, device=None):
         pde_model.load_pde_metadata(pde_metadata)
     elif type_sp == "ll_ode":
         # Parent score_pde run is identified by args.starting_model, not by naming convention.
-        parent_dir = os.path.dirname(args.starting_model)
+        parent_dir = os.path.dirname(args.linked_score_pde_dir+"/")
         parent_metadata = utility.json_load(f"{parent_dir}/model_metadata.json")
         parent_args = argparse.Namespace(**parent_metadata["args"])
         parent_head_fn_tag = parent_metadata["head_fn"]
@@ -246,31 +252,57 @@ def load_run(dir_name, device=None):
     head_fn = _make_head_fn(head_fn_tag, type_sp, score_sde_model, args.T)
 
     model = _build_pinn(D, layers, out_dim, device, head_fn=head_fn)
-    model.load_state_dict(torch.load(f"{dir_name}/model.pth", weights_only=True, map_location=device))
+    model.load_state_dict(torch.load(model_path, weights_only=True, map_location=device))
     model.eval()
 
-    losses = torch.load(f"{dir_name}/training_loss.pth", weights_only=True)
-    l2_errs = torch.load(f"{dir_name}/training_l2_error.pth", weights_only=True)
+    losses = torch.load(training_loss_path, weights_only=True)
+    l2_errs = torch.load(training_l2_error_path, weights_only=True)
 
     return model, pde_model, score_sde_model, args, losses, l2_errs, device, model_s
 
 
-def replot(dir_name, device=None):
+def replot_src_out(src_dir_name, out_dir_name, device=None):
     """Load a saved run directory and regenerate all plots."""
-    model, pde_model, score_sde_model, args, losses, l2_errs, device, model_s = load_run(dir_name, device)
+    model, pde_model, score_sde_model, args, losses, l2_errs, device, model_s = load_run(src_dir_name, device)
     plot_run(
-        dir_name, model, pde_model, score_sde_model, args, device,
+        out_dir_name, model, pde_model, score_sde_model, args, device,
         model_s=model_s, losses=losses, l2_errs=l2_errs,
     )
+def replot(dir_name, device=None):
+    return replot_src_out(dir_name, dir_name, device)
 
 
 if __name__ == "__main__":
+    #parser = argparse.ArgumentParser(description="Regenerate plots from a saved run directory.")
+    #parser.add_argument("dir_name", type=str,
+    #                    help="Run directory, e.g. 'gauss/run_3losses_score_pde' or 'laplace/run_hardcoded_ll_ode'")
+    #cli_args = parser.parse_args()
+    #dir_name = cli_args.dir_name.rstrip('/')
+    #replot(dir_name)
+
     parser = argparse.ArgumentParser(description="Regenerate plots from a saved run directory.")
-    parser.add_argument("dir_name", type=str,
-                        help="Run directory, e.g. 'gauss/run_3losses_score_pde' or 'laplace/run_hardcoded_ll_ode'")
+    parser.add_argument("--src_dir_name", type=str, help="Run directory, e.g. 'gauss/run_3losses_score_pde' or 'laplace/run_hardcoded_ll_ode'")
+    parser.add_argument("--out_dir_name", type=str, help="Output directory")
     cli_args = parser.parse_args()
-    dir_name = cli_args.dir_name.rstrip('/')
-    replot(dir_name)
+    src_dir_name = cli_args.src_dir_name.rstrip('/')
+    out_dir_name = cli_args.out_dir_name.rstrip('/')
+
+    replot_src_out(src_dir_name, out_dir_name)
+
+
+    #device = None
+    #src_dir_name = "gridsearch__hardcoded__2026-04-21--09-52-10/ll_ode"
+    #suffs = ["_29999", "_49999", "_69999", "_89999"]
+    #for suff in suffs:
+    #    #out_dir_name = f"gridsearch__hardcoded__2026-04-21--09-52-10/ll_ode/viz{suff}"
+    #    out_dir_name = f"gridsearch__hardcoded__viz/{suff}"
+    #    model, pde_model, score_sde_model, args, _, _, device, model_s = load_run(src_dir_name, device, {
+    #        "model_path": f"{src_dir_name}/model{suff}.pth"
+    #    })
+    #    plot_run(
+    #        out_dir_name, model, pde_model, score_sde_model, args, device,
+    #        model_s=model_s, losses=None, l2_errs=None,
+    #    )
 
 # run as:
 # python plot_results.py gauss/run_3losses_score_pde
