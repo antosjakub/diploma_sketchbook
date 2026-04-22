@@ -19,11 +19,11 @@ VARIANT = "hardcoded"
 
 
 FIXED_PARAMS = {
-    "ic_type": "gauss",
-    #"d": 4,
+    #"ic_type": "gauss",
+    "d": 4,
     "description": "OU IC grid search",
     "seed": 42,
-    #"layers": "64,64,64,64",
+    "layers": "64,64,64,64",
     #"layers": "128,128,128,128",
     #"layers": "192,192,192,192",
     #"layers": "256,256,256,256",
@@ -51,9 +51,9 @@ FIXED_PARAMS = {
     #"lambda_ic": 10.0,
     "clear_dir": False,
 
-    "sampling_type": "trajectories",
-    "n_trajs": 1_000,
-    "nt_steps": 1_000,
+    #"sampling_type": "trajectories",
+    #"n_trajs": 1_000,
+    #"nt_steps": 1_000,
     #"active_losses": "pde,ic",
     #"use_adaptive_weights": True,
     #"f_pde_full_domain": 3,
@@ -79,8 +79,8 @@ MODES = ["score_pde", "ll_ode"]
 # - scalars, which set one parameter with the axis name
 # - dicts, for grouped parameters such as trajectory sampling settings
 SEARCH_AXES = {
-    #"ic_type": ["cauchy", "gauss"],
-    "d": [8, 10],
+    "ic_type": ["cauchy", "gauss"],
+    #"d": [8, 10],
     #"box": [
     #    {"L_min": -4.0, "L_max": 4.0},
     #    {"L_min": -6.0, "L_max": 6.0},
@@ -97,12 +97,12 @@ SEARCH_AXES = {
     #        "n_res_points": 1_000_000,
     #    },
     #],
-    "layers": [
-        #"64,64,64,64",
-        "128,128,128,128",
-        #"148,148,148,148"
-        "256,256,256,256",
-    ],
+    #"layers": [
+    #    #"64,64,64,64",
+    #    "128,128,128,128",
+    #    #"148,148,148,148"
+    #    "256,256,256,256",
+    #],
     #"n_steps": [
     #    9_999,
     #    19_999
@@ -127,16 +127,16 @@ SEARCH_AXES = {
     #        "f_pde_trajs": 2,
     #    }
     #]
-    #"sampling": [
-    #    {
-    #        "sampling_type": "trajectories",
-    #        "n_trajs": 1_000,
-    #        "nt_steps": 1_000,
-    #    },
-    #    {
-    #        "sampling_type": "domain",
-    #    },
-    #],
+    "sampling": [
+        {
+            "sampling_type": "domain",
+        },
+        {
+            "sampling_type": "trajectories",
+            "n_trajs": 1_000,
+            "nt_steps": 1_000,
+        },
+    ],
     #"use_adaptive_weights": [False, True],
     #"active_losses": ["pde,bc,ic", "pde,ic"]
 }
