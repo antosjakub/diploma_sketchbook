@@ -53,8 +53,8 @@ FIXED_PARAMS = {
 
     #"sampling_type": "trajectories",
     "sampling_type": "domain_and_trajectories",
-    #"f_pde_full_domain": 9,
-    #"f_pde_trajs": 1,
+    "f_pde_full_domain": 1,
+    "f_pde_trajs": 1,
     #"n_trajs": 1_000,
     #"nt_steps": 1_000,
     #"active_losses": "pde,ic",
@@ -68,7 +68,10 @@ FIXED_PARAMS = {
 #LINKED_SCORE_PDE_DIR = "gridsearch__3losses__2026-04-20--11-45-40/use_adaptive_weights=False__active_losses=pde_ic/score_pde"
 #LINKED_SCORE_PDE_DIR = "gridsearch__3losses__2026-04-20--21-02-15/ic_type=gauss__d=2/score_pde/"
 #LINKED_SCORE_PDE_DIR = "gridsearch__hardcoded__2026-04-21--08-36-32/ic_type=cauchy__d=4/score_pde/"
-LINKED_SCORE_PDE_DIR = "gridsearch__hardcoded__2026-04-22--16-36-12/n_steps=19999__n_steps_decay=800__layers=256_256_256_256/score_pde/"
+
+#LINKED_SCORE_PDE_DIR = "gridsearch__hardcoded__2026-04-22--16-36-12/n_steps=39999__n_steps_decay=1600__layers=128_128_128_128/score_pde/"
+#LINKED_SCORE_PDE_DIR = "gridsearch__hardcoded__2026-04-22--16-36-12/n_steps=39999__n_steps_decay=1600__layers=256_256_256_256/score_pde/"
+LINKED_SCORE_PDE_DIR = "gridsearch__hardcoded__2026-04-22--16-36-12/n_steps=19999__n_steps_decay=800__layers=128_128_128_128/score_pde/"
 
 # `ll_ode` depends on a matching `score_pde` run, so modes are run in order
 # for each base combo instead of being treated as an independent search axis.
@@ -121,16 +124,16 @@ SEARCH_AXES = {
         #"64,64,64,64",
     #    #"148,148,148,148"
     ],
-    "sampling": [
-        {
-            "f_pde_full_domain": 1,
-            "f_pde_trajs": 7,
-        },
-        {
-            "f_pde_full_domain": 7,
-            "f_pde_trajs": 1,
-        },
-    ],
+    #"sampling": [
+    #    {
+    #        "f_pde_full_domain": 1,
+    #        "f_pde_trajs": 7,
+    #    },
+    #    {
+    #        "f_pde_full_domain": 7,
+    #        "f_pde_trajs": 1,
+    #    },
+    #],
     #"sampling": [
     #    {
     #        "sampling_type": "domain",
