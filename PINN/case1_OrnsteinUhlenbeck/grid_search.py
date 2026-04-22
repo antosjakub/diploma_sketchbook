@@ -20,28 +20,37 @@ VARIANT = "hardcoded"
 
 FIXED_PARAMS = {
     "ic_type": "gauss",
-    "d": 4,
+    #"d": 4,
     "description": "OU IC grid search",
     "seed": 42,
+    #"layers": "64,64,64,64",
     #"layers": "128,128,128,128",
     #"layers": "192,192,192,192",
     #"layers": "256,256,256,256",
     #"layers": "512,512,512,512",
+    
+    # 1)
+    "T": 4.0,
+    "L_min": -5.0,
+    "L_max": 5.0,
+    # 2)
     "n_steps": 19_999,
-    #"n_steps_decay": 2_000,
-    "gamma": 0.9,
-    "lr": 1e-3,
+    #"n_steps": 9,
+    "n_steps_decay": 800, # = n_steps / 25
+    # 3)
+    "resampling_frequency": 100, # res_freq * bs = n_res_points
     "bs": 1_000,
     "n_res_points": 100_000,
-    #"resampling_frequency": 500,
-    "T": 1.0,
+    # do not want to touch:
+    "gamma": 0.9,
+    "lr": 1e-3,
+
     "n_test_points": 10_000,
     "testing_frequency": 100,
     #"lambda_pde": 1.0,
     #"lambda_ic": 10.0,
     "clear_dir": False,
-    "L_min": -5.0,
-    "L_max": 5.0,
+
     "sampling_type": "trajectories",
     "n_trajs": 1_000,
     "nt_steps": 1_000,
@@ -71,22 +80,39 @@ MODES = ["score_pde", "ll_ode"]
 # - dicts, for grouped parameters such as trajectory sampling settings
 SEARCH_AXES = {
     #"ic_type": ["cauchy", "gauss"],
-    #"d": [4, 6, 8],
+    "d": [8, 10],
     #"box": [
     #    {"L_min": -4.0, "L_max": 4.0},
     #    {"L_min": -6.0, "L_max": 6.0},
     #],
+    #"sampling": [
+    #    {
+    #        "n_trajs": 1_000,
+    #        "resampling_frequency": 10,
+    #        "n_res_points": 100_000,
+    #    },
+    #    {
+    #        "n_trajs": 10_000,
+    #        "resampling_frequency": 100,
+    #        "n_res_points": 1_000_000,
+    #    },
+    #],
     "layers": [
-        #"128,128,128,128",
-        "64,64,64,64",
+        #"64,64,64,64",
+        "128,128,128,128",
+        #"148,148,148,148"
         "256,256,256,256",
-    #    "148,148,148,148"
     ],
-    "resampling_frequency": [100, 1000],
-    "n_steps_decay": [
-        200,
-        2_000,
-    ],
+    #"n_steps": [
+    #    9_999,
+    #    19_999
+    #],
+    #"n_steps_decay": [
+    #    400,
+    #    1_000,
+    #],
+    #"T": [3.0, 1.0],
+    #"bs": [10_000, 1_000]
     #"sampling": [
     #    {
     #        "f_pde_full_domain": 1,

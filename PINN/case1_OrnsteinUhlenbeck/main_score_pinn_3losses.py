@@ -118,7 +118,7 @@ run_utils.save_input_config(dir_name, args)
 
 
 ### PREP PDE MODEL
-gamma = torch.tensor([1.3, 2.5, 2.1, 1.6, 3.1, 1.8, 2.7])[:d]
+gamma = torch.tensor([1.3, 2.5, 2.1, 1.6, 3.1, 1.8, 2.7, 1.9, 2.3, 2.9])[:d]
 import pde_model_sde
 if ic_type == "gauss":
     score_sde_model = pde_model_sde.Gaussian_OU(d=d, gamma=gamma)
