@@ -603,20 +603,27 @@ def create_dataloaders__trajectories(
 def create_pde_loader(sampling_type, pde_model, settings, device="cpu"):
     """Build a single DataLoader of PDE collocation points only.
 
-    sampling_type:
-      - "domain":       uniform / LHS over spatial_domain x [0, T]
-      - "trajectories": Euler-Maruyama SDE trajectory bank, residual points
-                        sampled uniformly from (traj_idx, time_idx)
+    Mix of two sampling modes, concatenated into one buffer:
+      - full-domain:  uniform / LHS over spatial_domain x [0, T]
+      - trajectories: Euler-Maruyama SDE trajectory bank, residual points
+                      sampled uniformly from (traj_idx, time_idx)
+
+    Proportions are controlled by f_pde_full_domain and f_pde_trajs in settings.
+    sampling_type sets their defaults when not given explicitly:
+      - "domain"                   → (1, 0)
+      - "trajectories"             → (0, 1)
+      - "domain_and_trajectories"  → (1, 1)
 
     settings keys:
-      - n_res_points: total points in the buffer (default 100_000)
-      - bs:           points per gradient step (default 1_000)
-      - spatial_domain: (d, 2) tensor of [lo, hi] per spatial dim (optional)
-      - T:            final time (default 1.0)
-      - sampling_strategy: "lhs" | "uniform" (only used for "domain")
-      - n_trajs:      number of trajectories (only used for "trajectories",
-                      default n_res_points // 100)
-      - nt_steps:     SDE steps per trajectory (default 100)
+      - f_pde_full_domain, f_pde_trajs: non-negative weights (see above)
+      - n_res_points:      total points in the buffer (default 100_000)
+      - bs:                points per gradient step (default 1_000)
+      - spatial_domain:    (d, 2) tensor of [lo, hi] per spatial dim (optional)
+      - T:                 final time (default 1.0)
+      - sampling_strategy: "lhs" | "uniform" (full-domain only)
+      - n_trajs:           number of trajectories (trajectories only,
+                           default n_res_points // 100)
+      - nt_steps:          SDE steps per trajectory (default 100)
     """
     n_res = settings.get("n_res_points", 100_000)
     bs = settings.get("bs", 1_000)
@@ -625,26 +632,66 @@ def create_pde_loader(sampling_type, pde_model, settings, device="cpu"):
     d = pde_model.d
 
     if sampling_type == "domain":
+        default_f_full, default_f_trajs = 1, 0
+    elif sampling_type == "trajectories":
+        default_f_full, default_f_trajs = 0, 1
+    elif sampling_type == "domain_and_trajectories":
+        default_f_full, default_f_trajs = 1, 1
+    else:
+        raise NameError(f"Unknown sampling_type '{sampling_type}' (expected 'domain', 'trajectories', or 'domain_and_trajectories')")
+
+    f_pde_full_domain = settings.get("f_pde_full_domain", default_f_full)
+    f_pde_trajs = settings.get("f_pde_trajs", default_f_trajs)
+    use_full_domain_sampling = f_pde_full_domain != 0
+    use_trajs_sampling = f_pde_trajs != 0
+
+    if not use_full_domain_sampling and not use_trajs_sampling:
+        raise ValueError("At least one of f_pde_full_domain or f_pde_trajs must be nonzero.")
+
+    use_dual_sampling = use_full_domain_sampling and use_trajs_sampling
+    if use_dual_sampling:
+        if f_pde_full_domain < 0 or f_pde_trajs < 0:
+            raise ValueError("f_pde_full_domain and f_pde_trajs must be non-negative.")
+        n_full_domain = f_pde_full_domain * n_res // (f_pde_full_domain + f_pde_trajs)
+        n_trajs_points = n_res - n_full_domain
+    elif use_full_domain_sampling:
+        n_full_domain = n_res
+        n_trajs_points = 0
+    else:
+        n_full_domain = 0
+        n_trajs_points = n_res
+
+    X_pde_1 = X_pde_2 = None
+    if use_full_domain_sampling:
         strategy = settings.get("sampling_strategy", "lhs")
-        X_pde = sample_domain(n_res, d + 1, sampling_strategy=strategy, device=device)
+        X_pde_1 = sample_domain(n_full_domain, d + 1, sampling_strategy=strategy, device=device)
         if spatial_domain is not None:
             lo = spatial_domain[:, 0]
             hi = spatial_domain[:, 1]
-            X_pde = scale_samples__spatial(X_pde, lo, hi)
+            X_pde_1 = scale_samples__spatial(X_pde_1, lo, hi)
         if T != 1.0:
-            X_pde = scale_samples__temporal(X_pde, T)
-    elif sampling_type == "trajectories":
+            X_pde_1 = scale_samples__temporal(X_pde_1, T)
+
+    if use_trajs_sampling:
         n_trajs = settings.get("n_trajs", max(1, n_res // 100))
         nt_steps = settings.get("nt_steps", 100)
         x0 = pde_model.sample_x0(n_trajs)
-        X_pde = sample_trajs_res_points(pde_model, x0, T, nt_steps, n_res)
+        X_pde_2 = sample_trajs_res_points(pde_model, x0, T, nt_steps, n_trajs_points)
+
+    if use_dual_sampling:
+        X_pde = torch.cat([X_pde_1, X_pde_2], dim=0)
+        print(f"PDE loader (X.shape = {X_pde.shape}, bs = {bs})")
+        print(f" - full_domain sampling (X.shape = {X_pde_1.shape})")
+        print(f" - trajs sampling (X.shape = {X_pde_2.shape})")
+    elif use_full_domain_sampling:
+        X_pde = X_pde_1
+        print(f"PDE loader (X_full_domain.shape = {X_pde.shape}, bs = {bs})")
     else:
-        raise NameError(f"Unknown sampling_type '{sampling_type}' (expected 'domain' or 'trajectories')")
+        X_pde = X_pde_2
+        print(f"PDE loader (X_trajs.shape = {X_pde.shape}, bs = {bs})")
 
     precomputed = _precompute_active(pde_model, X_pde, None, None, active_losses=("pde",), device=device)
-    loader = DataLoader(CollocationDataset(X_pde, precomputed["pde"]), batch_size=bs, shuffle=True)
-    print(f"PDE-only loader ({sampling_type}): X.shape = {X_pde.shape}, bs = {bs}")
-    return loader
+    return DataLoader(CollocationDataset(X_pde, precomputed["pde"]), batch_size=bs, shuffle=True)
 
 
 def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settings, device="cpu"):

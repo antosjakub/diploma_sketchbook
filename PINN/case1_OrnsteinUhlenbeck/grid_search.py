@@ -19,24 +19,24 @@ VARIANT = "hardcoded"
 
 
 FIXED_PARAMS = {
-    #"ic_type": "gauss",
+    "ic_type": "cauchy",
     "d": 4,
     "description": "OU IC grid search",
     "seed": 42,
-    "layers": "64,64,64,64",
+    #"layers": "64,64,64,64",
     #"layers": "128,128,128,128",
     #"layers": "192,192,192,192",
     #"layers": "256,256,256,256",
     #"layers": "512,512,512,512",
     
     # 1)
-    "T": 4.0,
+    "T": 5.0,
     "L_min": -5.0,
     "L_max": 5.0,
     # 2)
-    "n_steps": 19_999,
+    #"n_steps": 19_999,
     #"n_steps": 9,
-    "n_steps_decay": 800, # = n_steps / 25
+    #"n_steps_decay": 800, # = n_steps / 25
     # 3)
     "resampling_frequency": 100, # res_freq * bs = n_res_points
     "bs": 1_000,
@@ -52,12 +52,13 @@ FIXED_PARAMS = {
     "clear_dir": False,
 
     #"sampling_type": "trajectories",
+    "sampling_type": "domain_and_trajectories",
+    "f_pde_full_domain": 9,
+    "f_pde_trajs": 1,
     #"n_trajs": 1_000,
     #"nt_steps": 1_000,
     #"active_losses": "pde,ic",
     #"use_adaptive_weights": True,
-    #"f_pde_full_domain": 3,
-    #"f_pde_trajs": 1,
     #"enable_testing": False
 }
 
@@ -70,8 +71,8 @@ LINKED_SCORE_PDE_DIR = None
 
 # `ll_ode` depends on a matching `score_pde` run, so modes are run in order
 # for each base combo instead of being treated as an independent search axis.
-MODES = ["score_pde", "ll_ode"]
-#MODES = ["ll_ode"]
+#MODES = ["score_pde", "ll_ode"]
+MODES = ["score_pde"]
 
 
 # Add or remove search axes here.
@@ -79,7 +80,7 @@ MODES = ["score_pde", "ll_ode"]
 # - scalars, which set one parameter with the axis name
 # - dicts, for grouped parameters such as trajectory sampling settings
 SEARCH_AXES = {
-    "ic_type": ["cauchy", "gauss"],
+    #"ic_type": ["cauchy", "gauss"],
     #"d": [8, 10],
     #"box": [
     #    {"L_min": -4.0, "L_max": 4.0},
@@ -97,46 +98,46 @@ SEARCH_AXES = {
     #        "n_res_points": 1_000_000,
     #    },
     #],
-    #"layers": [
-    #    #"64,64,64,64",
-    #    "128,128,128,128",
-    #    #"148,148,148,148"
-    #    "256,256,256,256",
-    #],
-    #"n_steps": [
-    #    9_999,
-    #    19_999
-    #],
-    #"n_steps_decay": [
-    #    400,
-    #    1_000,
-    #],
-    #"T": [3.0, 1.0],
+    #"T": [5.0, 6.0],
     #"bs": [10_000, 1_000]
+    "stepping": [
+        {
+            "n_steps": 19_999,
+            #"n_steps": 19,
+            "n_steps_decay": 800,
+        },
+        {
+            "n_steps": 39_999,
+            #"n_steps": 39,
+            "n_steps_decay": 1600,
+        }
+    ],
+    "layers": [
+        "128,128,128,128",
+        "256,256,256,256",
+        #"64,64,64,64",
+    #    #"148,148,148,148"
+    ],
     #"sampling": [
     #    {
-    #        "f_pde_full_domain": 1,
+    #        "f_pde_full_domain": 9,
     #        "f_pde_trajs": 1,
     #    },
     #    {
-    #        "f_pde_full_domain": 2,
+    #        "f_pde_full_domain": 3,
     #        "f_pde_trajs": 1,
     #    },
+    #],
+    #"sampling": [
     #    {
-    #        "f_pde_full_domain": 1,
-    #        "f_pde_trajs": 2,
-    #    }
-    #]
-    "sampling": [
-        {
-            "sampling_type": "domain",
-        },
-        {
-            "sampling_type": "trajectories",
-            "n_trajs": 1_000,
-            "nt_steps": 1_000,
-        },
-    ],
+    #        "sampling_type": "domain",
+    #    },
+    #    {
+    #        "sampling_type": "trajectories",
+    #        "n_trajs": 1_000,
+    #        "nt_steps": 1_000,
+    #    },
+    #],
     #"use_adaptive_weights": [False, True],
     #"active_losses": ["pde,bc,ic", "pde,ic"]
 }
