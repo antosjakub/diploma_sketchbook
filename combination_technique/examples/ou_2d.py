@@ -11,7 +11,7 @@ import numpy as np
 
 from combination_technique import OrnsteinUhlenbeck, TensorGrid, TimeStepper, solve_combination, result_to_sgpp
 from combination_technique.diagnostics import covariance, mass
-from combination_technique.initial import gaussian_density, product_laplace_density
+from combination_technique.initial import cauchy_density, gaussian_density, product_laplace_density
 
 
 def main() -> None:
@@ -26,22 +26,24 @@ def main() -> None:
     ]])
     model = OrnsteinUhlenbeck(sigma)
     stepper = TimeStepper(dt=0.01, theta=1.0)
-    lvl = 10
+    lvl = 12
+    L = 10.0
 
     result = solve_combination(
         model,
         level=lvl,
         #initial_condition=gaussian_density,
-        initial_condition=product_laplace_density,
+        initial_condition=cauchy_density,
+        #initial_condition=product_laplace_density,
         final_time=1.0,
         #final_time=0.01,
         stepper=stepper,
-        domain_radius=4.0,
+        domain_radius=L,
         bc="dirichlet",
-        max_workers=1,
+        max_workers=8,
     )
 
-    target = TensorGrid.from_level((4, 4), domain_radius=4.0)
+    target = TensorGrid.from_level((4, 4), domain_radius=L)
     combined = result.combine_on_grid(target)
     print(f"components: {len(result.components)}")
     print(f"mass on target grid: {mass(target, combined):.8f}")
