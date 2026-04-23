@@ -1,9 +1,9 @@
-"""Linear Fokker-Planck and Smoluchowski model definitions."""
+"""Linear Fokker-Planck and convection-diffusion-reaction models."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Callable, Protocol
 
 import numpy as np
 from scipy import sparse
@@ -20,6 +20,18 @@ class Potential(Protocol):
 
     def laplacian(self, coords: np.ndarray) -> np.ndarray:
         """Return Delta V with shape ``(npoints,)``."""
+
+
+class OperatorModel(Protocol):
+    dimension: int
+
+    def build_operator(
+        self,
+        grid: TensorGrid,
+        *,
+        bc: BoundaryCondition = "dirichlet",
+    ) -> sparse.csr_matrix:
+        """Assemble the semidiscrete operator on one tensor grid."""
 
 
 @dataclass(frozen=True)
@@ -90,6 +102,71 @@ class LinearFokkerPlanck:
             raise ValueError("divergence_drift must return shape (npoints,)")
         if np.any(div_values):
             operator = operator + sparse.diags(div_values, format="csr")
+
+        if bc == "dirichlet":
+            operator = operator.tolil()
+            operator[grid.boundary_mask(), :] = 0.0
+            operator = operator.tocsr()
+
+        return operator
+
+
+@dataclass(frozen=True)
+class ConvectionDiffusionReaction:
+    """Model for ``p_t = a Δp + b(x) · ∇p + c(x) p``."""
+
+    dimension: int
+    diffusion: float
+    drift_fn: Callable[[np.ndarray], np.ndarray] | None = None
+    reaction_fn: Callable[[np.ndarray], np.ndarray] | None = None
+
+    def __post_init__(self) -> None:
+        if self.dimension <= 0:
+            raise ValueError("dimension must be positive")
+        if self.diffusion < 0.0:
+            raise ValueError("diffusion must be nonnegative")
+
+    def drift(self, coords: np.ndarray) -> np.ndarray:
+        if self.drift_fn is None:
+            return np.zeros_like(coords)
+        values = np.asarray(self.drift_fn(coords), dtype=float)
+        if values.shape != coords.shape:
+            raise ValueError("drift_fn must return shape (dimension, npoints)")
+        return values
+
+    def reaction(self, coords: np.ndarray) -> np.ndarray:
+        if self.reaction_fn is None:
+            return np.zeros(coords.shape[1], dtype=float)
+        values = np.asarray(self.reaction_fn(coords), dtype=float).reshape(-1)
+        if values.shape != (coords.shape[1],):
+            raise ValueError("reaction_fn must return shape (npoints,)")
+        return values
+
+    def build_operator(
+        self,
+        grid: TensorGrid,
+        *,
+        bc: BoundaryCondition = "dirichlet",
+    ) -> sparse.csr_matrix:
+        if grid.dimension != self.dimension:
+            raise ValueError("grid dimension does not match model dimension")
+
+        d1, d2 = tensor_derivative_matrices(grid.shape, grid.spacing, bc)
+        operator = sparse.csr_matrix((grid.size, grid.size), dtype=float)
+        if self.diffusion:
+            for second in d2:
+                operator = operator + self.diffusion * second
+
+        coords = grid.flat_coordinates()
+        drift_values = self.drift(coords)
+        for axis in range(self.dimension):
+            values = drift_values[axis]
+            if np.any(values):
+                operator = operator + sparse.diags(values, format="csr") @ d1[axis]
+
+        reaction_values = self.reaction(coords)
+        if np.any(reaction_values):
+            operator = operator + sparse.diags(reaction_values, format="csr")
 
         if bc == "dirichlet":
             operator = operator.tolil()
@@ -201,4 +278,3 @@ class Smoluchowski(LinearFokkerPlanck):
 
     def divergence_drift(self, coords: np.ndarray) -> np.ndarray:
         return -self.potential.laplacian(coords)
-

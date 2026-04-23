@@ -11,7 +11,7 @@ from scipy.sparse import linalg as spla
 
 from .fd import BoundaryCondition
 from .grid import TensorGrid
-from .models import LinearFokkerPlanck
+from .models import OperatorModel
 
 
 @dataclass(frozen=True)
@@ -33,7 +33,7 @@ class TimeStepper:
 
 
 def solve_on_grid(
-    model: LinearFokkerPlanck,
+    model: OperatorModel,
     grid: TensorGrid,
     initial_condition,
     *,
@@ -75,4 +75,3 @@ def solve_on_grid(
             u[grid.boundary_mask()] = 0.0
 
     return np.asarray(u)
-

@@ -12,7 +12,7 @@ from scipy.interpolate import RegularGridInterpolator
 from .fd import BoundaryCondition
 from .grid import TensorGrid
 from .indices import combination_indices, combination_weight
-from .models import LinearFokkerPlanck
+from .models import OperatorModel
 from .solver import TimeStepper, solve_on_grid
 
 
@@ -93,7 +93,7 @@ def _solve_component(args) -> ComponentSolution:
 
 
 def solve_combination(
-    model: LinearFokkerPlanck,
+    model: OperatorModel,
     *,
     level: int,
     initial_condition,
@@ -137,4 +137,3 @@ def solve_combination(
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         components = tuple(executor.map(_solve_component, tasks))
     return CombinationResult(level, dimension, components)
-

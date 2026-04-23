@@ -1,10 +1,15 @@
 # Sparse Grid Combination Technique
 
 This project implements the sparse grid combination technique for
-high-dimensional linear Fokker-Planck-type PDEs. The main idea is to avoid
-solving one isotropic full tensor grid problem in dimension `d`. Instead, we
-solve many smaller anisotropic tensor-grid problems and combine their
-solutions with signed coefficients.
+high-dimensional linear parabolic PDEs, especially equations of the form
+
+```math
+\partial_t p = a \Delta p + b(x) \cdot \nabla p + c(x) p .
+```
+
+The main idea is to avoid solving one isotropic full tensor grid problem in
+dimension `d`. Instead, we solve many smaller anisotropic tensor-grid problems
+and combine their solutions with signed coefficients.
 
 ## Tensor Grids
 
@@ -179,10 +184,13 @@ The initial implementation is organized as a small reusable package:
 - `combination_technique.grid`: endpoint-including anisotropic tensor grids.
 - `combination_technique.fd`: one-dimensional and tensor-product finite
   difference matrices.
-- `combination_technique.models`: OU, Smoluchowski, and potential definitions.
+- `combination_technique.models`: OU, Smoluchowski, and
+  convection-diffusion-reaction model definitions.
 - `combination_technique.solver`: one-grid theta-method time stepping.
 - `combination_technique.combination`: parallel component solves and final
   combination.
+- `combination_technique.sgpp`: SG++ sparse-grid interpolation,
+  dehierarchisation, batched evaluation, quadrature, and plotting helpers.
 
 Minimal example:
 
@@ -208,6 +216,120 @@ result = solve_combination(
     max_workers=1,
 )
 ```
+
+General convection-diffusion-reaction example:
+
+```python
+import numpy as np
+
+from combination_technique import (
+    ConvectionDiffusionReaction,
+    TimeStepper,
+    gaussian_density,
+    solve_combination,
+)
+
+model = ConvectionDiffusionReaction(
+    dimension=3,
+    diffusion=0.2,
+    drift_fn=lambda x: -0.35 * x,
+    reaction_fn=lambda x: 0.15 - 0.05 * np.sum(x * x, axis=0),
+)
+
+result = solve_combination(
+    model,
+    level=4,
+    initial_condition=gaussian_density,
+    final_time=0.05,
+    stepper=TimeStepper(dt=0.01, theta=1.0),
+    domain_radius=4.0,
+    bc="dirichlet",
+    max_workers=1,
+)
+```
+
+## SG++ Workflow
+
+This repository uses SG++ only for the final sparse-grid surrogate layer.
+That is the intended split:
+
+- this package solves the component tensor-grid PDE problems and performs the
+  classical combination step,
+- SG++ stores the final sparse-grid interpolant, evaluates it at points,
+  dehierarchises it when needed, computes quadrature-based mass and moments,
+  and generates slice plots.
+
+That keeps the core combination-technique algebra explicit in this package and
+uses SG++ only where it adds clear value.
+
+Typical workflow:
+
+1. Solve the PDE with `solve_combination(...)`.
+2. Project the resulting combined solution onto an SG++ sparse grid with
+   `result_to_sgpp(...)`.
+3. Use the returned `SGppInterpolant` for:
+   - `evaluate(points)`
+   - `nodal_values()`
+   - `integral()`
+   - `mean()`
+   - `covariance()`
+   - `save_slice_plot(...)`
+
+Example:
+
+```python
+import numpy as np
+
+from combination_technique import (
+    ConvectionDiffusionReaction,
+    TimeStepper,
+    gaussian_density,
+    result_to_sgpp,
+    solve_combination,
+)
+
+model = ConvectionDiffusionReaction(
+    dimension=3,
+    diffusion=0.2,
+    drift_fn=lambda x: -0.35 * x,
+    reaction_fn=lambda x: 0.15 - 0.05 * np.sum(x * x, axis=0),
+)
+
+result = solve_combination(
+    model,
+    level=4,
+    initial_condition=gaussian_density,
+    final_time=0.05,
+    stepper=TimeStepper(dt=0.01, theta=1.0),
+    domain_radius=4.0,
+    bc="dirichlet",
+    max_workers=1,
+)
+
+sparse = result_to_sgpp(result, level=4, boundary=True)
+values = sparse.evaluate(np.array([[0.0, 0.0, 0.0], [1.0, -0.5, 0.25]]))
+mass = sparse.integral()
+mean = sparse.mean()
+cov = sparse.covariance()
+sparse.save_slice_plot("cdr_sgpp_slice.png", axes=(0, 1), fixed={2: 0.0})
+```
+
+### Why `boundary=True` for Quadrature
+
+When the SG++ surrogate is used for mass and moment computations on a bounded
+PDE domain, prefer `boundary=True` in `result_to_sgpp(...)` or
+`SGppInterpolant.from_function(...)`.
+
+That choice matters for:
+
+- `integral()`
+- `mean()`
+- `covariance()`
+
+Reason: for bounded-domain density-like quantities, quadrature is more
+appropriate on a sparse grid that includes the domain boundary. For pure point
+evaluation or qualitative plotting, the interior linear grid may still be
+acceptable, but for mass and moments the boundary grid is the safer default.
 
 The current boundary closures are homogeneous Dirichlet and homogeneous
 Neumann. Exact reflecting flux conditions such as
