@@ -1,98 +1,246 @@
 """
-Requires
-- args.json
-- model.pth
-- pde_params.json
+Compare PINN model outputs as 2D heatmaps in a Dash dashboard.
+
+Three operating modes:
+    # Two models (shows model_a, model_b, and their difference)
+    python launch_dash_webpage.py <dir1> <dir2>
+
+    # Model vs analytic solution (picks u_analytic / q_analytic / p_analytic from the
+    # pde class found in pde_models.py or case1_OrnsteinUhlenbeck/pde_model_sde.py)
+    python launch_dash_webpage.py <dir> --analytic
+
+    # Model vs the stationary distribution p_inf or its log q_inf = log(p_inf)
+    # (2 panels, no diff panel)
+    python launch_dash_webpage.py <dir> --p_inf
+    python launch_dash_webpage.py <dir> --q_inf
+
+Each directory must contain: model.pth, model_metadata.json, pde_metadata.json.
+
+Colorbar control (viz.py-style dict keyed by panel label):
+    --cbar '{"model": "symmetric", "diff": "linked:model"}'
+Specs:  "dynamic"  (default — per-frame min/max)
+        "fixed"    (global min/max precomputed over t in [0, t_max])
+        "symmetric" (symmetric around 0)
+        "linked:<label>"   (use the resolved range of another panel)
+        [lo, hi]           (explicit range)
+
+Panel labels:
+    two_models : "model_a", "model_b", "diff"
+    analytic   : "model",   "analytic", "diff"
+    p_inf      : "model",   "p_inf"
+    q_inf      : "model",   "q_inf"
 """
-import plotly.graph_objects as go
-from dash import Dash, dcc, html, Input, Output, State
-
+import argparse
+import json
+import os
 import sys
-if len(sys.argv) > 1:
-    dir_name = sys.argv[1]
-else:
-    dir_name = 'run_latest'
-import utility
+
+import plotly.graph_objects as go
+from dash import Dash, Input, Output, State, callback_context, dcc, html
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.join(_HERE, "src"))
+sys.path.append(os.path.join(_HERE, "case1_OrnsteinUhlenbeck"))
+
 import torch
-model, u_analytic, pde_metadata, model_metadata = utility.header(dir_name)
-d = model_metadata["args"]["d"]
-
-def fun_1(X):
-    with torch.no_grad():
-        return model(X)
-fun_2 = u_analytic
-
-u_zminmax_const = [-1.0, 1.0]
-err_zminmax_const = [-0.1, 0.1]
-
-u_zminmax_manual = False
-err_zminmax_manual = False
-
-nx = 100
-nt = 200
-t_max = 1.0
+import architecture
+import pde_models
+import utility
 
 
-#d = 4
-#import pde_models
-#pde_model = pde_models.TravellingGaussPacket_v2(d)
-#fun_1 = pde_model.u_analytic
-#fun_2 = pde_model.u_analytic
+# --- CLI --------------------------------------------------------
+parser = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument("dir1", type=str,
+                    help="First run directory (model.pth + metadata).")
+parser.add_argument("dir2", nargs="?", default=None, type=str,
+                    help="Second run directory — triggers two-model comparison.")
+parser.add_argument("--analytic", action="store_true",
+                    help="Compare model vs analytic solution.")
+parser.add_argument("--p_inf", action="store_true",
+                    help="Compare model vs p_inf (stationary distribution).")
+parser.add_argument("--q_inf", action="store_true",
+                    help="Compare model vs q_inf = log(p_inf) (log-stationary distribution).")
+parser.add_argument("--analytic-fn", default=None, type=str,
+                    help="Override analytic-fn selection "
+                         "(one of: u_analytic, q_analytic, p_analytic, s_analytic).")
+parser.add_argument("--model-transform", default="none",
+                    choices=["none", "exp"],
+                    help="Transform applied to model output (use 'exp' when model "
+                         "outputs log-density and you want to compare against a density).")
+parser.add_argument("--cbar", default="{}", type=str,
+                    help='JSON dict of colorbar specs, e.g. \'{"diff":"linked:model"}\'.')
+parser.add_argument("--nx", default=100, type=int, help="Spatial grid resolution.")
+parser.add_argument("--nt", default=200, type=int, help="Number of time frames.")
+parser.add_argument("--t-max", default=1.0, type=float, help="Maximum time value.")
+parser.add_argument("--x-min", default=0.0, type=float, help="Min of plotted spatial range.")
+parser.add_argument("--x-max", default=1.0, type=float, help="Max of plotted spatial range.")
+parser.add_argument("--fixed-val", default=0.5, type=float,
+                    help="Default value for dims not on the plot axes.")
+parser.add_argument("--port", default=8082, type=int, help="Dash server port.")
+args = parser.parse_args()
+
+cbar_spec = json.loads(args.cbar) if args.cbar.strip() else {}
+
+if args.p_inf and args.q_inf:
+    raise SystemExit("Choose only one of --p_inf / --q_inf.")
+if args.dir2 is not None:
+    MODE = "two_models"
+elif args.p_inf:
+    MODE = "p_inf"
+elif args.q_inf:
+    MODE = "q_inf"
+else:
+    MODE = "analytic"
+print(f"Mode: {MODE}")
 
 
-## parameters
-#alpha = 4
-#beta = 0.01
-## precompute
-#k = torch.tensor([3.9, 2.1, 5.0])
-#k_2 = (k**2).sum()
-## define
-#def fun_2(X):
-#    # input
-#    x = X[:,:-1]
-#    t = X[:,-1]
-#    # return
-#    u_space = torch.prod(torch.sin(torch.pi * k * x), dim=1)
-#    u_time = torch.cos(alpha*t) * torch.exp(- beta * t)
-#    return (u_space * u_time).unsqueeze(dim=1)
+# --- loader -----------------------------------------------------
+def _infer_output_dim(state_dict):
+    """Infer PINN output_dim from a saved state_dict (supports nn.Linear and RWFLinear)."""
+    # modified_mlp path
+    for key in ("out_layer.weight", "out_layer.V"):
+        if key in state_dict:
+            return state_dict[key].shape[0]
+    # Standard Sequential("net.0.weight", "net.0.V", ...)
+    net_keys = [k for k in state_dict
+                if k.startswith("net.") and (k.endswith(".weight") or k.endswith(".V"))]
+    if net_keys:
+        last_idx = max(int(k.split(".")[1]) for k in net_keys)
+        for suffix in (".weight", ".V"):
+            k = f"net.{last_idx}{suffix}"
+            if k in state_dict:
+                return state_dict[k].shape[0]
+    raise ValueError("Could not infer output_dim from state_dict.")
 
 
+def _load_pde_model(pde_metadata, d):
+    pde_class_name = pde_metadata["pde_class"]
+    classes = utility.get_module_classes(pde_models)
+    if pde_class_name in classes:
+        pde_model = classes[pde_class_name](d)
+    else:
+        import pde_model_sde
+        sde_classes = utility.get_module_classes(pde_model_sde)
+        if pde_class_name not in sde_classes:
+            raise ValueError(
+                f"Unknown pde_class '{pde_class_name}' "
+                "(not found in pde_models.py or pde_model_sde.py)."
+            )
+        pde_model = sde_classes[pde_class_name](d)
+    pde_model.load_pde_metadata(pde_metadata)
+    return pde_model
 
-#def fun_2(X):
-#    x = X[:,:-1]
-#    t = X[:,-1]
-#    r2 = torch.zeros_like(x[:,0])
-#    for i in range(d):
-#        r2 += (x[:,i]-0.5)**2
-#    y = torch.cos(100*r2) * torch.exp(-10*r2) * torch.cos(10*t) * torch.exp(-t)
-#    return y.unsqueeze(dim=1)
+
+def load_dir(dir_name):
+    print(f"Loading: {dir_name}")
+    model_metadata = utility.json_load(f"{dir_name}/model_metadata.json")
+    pde_metadata = utility.json_load(f"{dir_name}/pde_metadata.json")
+
+    d = model_metadata["args"]["d"]
+    D = d + 1
+    layers = utility.layers_from_string(model_metadata["args"]["layers"])
+
+    state_dict = torch.load(f"{dir_name}/model.pth", map_location="cpu", weights_only=True)
+    output_dim = _infer_output_dim(state_dict)
+
+    model_class_name = model_metadata["model_class"]
+    model_cls = utility.get_module_classes(architecture)[model_class_name]
+    model = model_cls(D, layers, output_dim)
+    model.load_state_dict(state_dict)
+    model.eval()
+
+    pde_model = _load_pde_model(pde_metadata, d)
+    print(f"  d={d}, output_dim={output_dim}, pde_class={pde_metadata['pde_class']}")
+    return {"model": model, "pde_model": pde_model, "d": d,
+            "output_dim": output_dim, "meta": model_metadata}
 
 
-#fun_1 = fun_2
+# --- load and resolve panels ------------------------------------
+run1 = load_dir(args.dir1)
+d = run1["d"]
+if MODE == "two_models":
+    run2 = load_dir(args.dir2)
+    assert run2["d"] == d, f"d mismatch: dir1 has d={d}, dir2 has d={run2['d']}"
 
-def eval_funs(X):
-    Y1_grid = fun_1(X).reshape(nx,nx)
-    Y2_grid = fun_2(X).reshape(nx,nx)
-    return Y1_grid, Y2_grid, Y1_grid-Y2_grid
+
+def wrap_model(model, transform="none"):
+    def f(X):
+        with torch.no_grad():
+            y = model(X)
+            if transform == "exp":
+                y = torch.exp(y)
+            if y.ndim == 2 and y.shape[1] > 1:
+                y = y[:, 0:1]
+        return y
+    return f
 
 
-def get_coord_names(d):
-    return [f"x{i+1}" for i in range(d)]
+def pick_analytic_fn(pde_model, override=None):
+    names = [override] if override else ["u_analytic", "q_analytic", "p_analytic", "s_analytic"]
+    for name in names:
+        if name and hasattr(pde_model, name):
+            print(f"Using analytic fn: {name}")
+            return getattr(pde_model, name)
+    raise ValueError(
+        f"No analytic function on pde_model {type(pde_model).__name__}. "
+        "Try --p_inf, or pass --analytic-fn=<name>."
+    )
 
-def update_minmax(min_new, min_best, max_new, max_best):
-    return [
-        min_new if min_new < min_best else min_best,
-        max_new if max_new > max_best else max_best
+
+fun_1 = wrap_model(run1["model"], args.model_transform)
+if MODE == "two_models":
+    fun_2 = wrap_model(run2["model"], args.model_transform)
+    panels = [
+        {"label": "model_a", "title": f"model_a: {os.path.basename(args.dir1.rstrip('/'))}", "fn": fun_1},
+        {"label": "model_b", "title": f"model_b: {os.path.basename(args.dir2.rstrip('/'))}", "fn": fun_2},
+        {"label": "diff",    "title": "model_a - model_b",                                   "fn": "diff:model_a-model_b"},
     ]
+    colorscales = ["Plasma", "Plasma", "RdBu"]
+elif MODE == "analytic":
+    fun_2 = pick_analytic_fn(run1["pde_model"], args.analytic_fn)
+    panels = [
+        {"label": "model",    "title": "model",            "fn": fun_1},
+        {"label": "analytic", "title": "analytic",         "fn": fun_2},
+        {"label": "diff",     "title": "model - analytic", "fn": "diff:model-analytic"},
+    ]
+    colorscales = ["Plasma", "Plasma", "RdBu"]
+else:  # p_inf / q_inf
+    p_inf_fn = run1["pde_model"].p_inf
 
-# --- create grid data ---------------------------------
-xi = torch.linspace(0.0, 1.0, nx)
-xj = torch.linspace(0.0, 1.0, nx)
-Xi_grid, Xj_grid = torch.meshgrid(xi, xj, indexing='ij')
+    if MODE == "p_inf":
+        def fun_stat(X):
+            with torch.no_grad():
+                return p_inf_fn(X[:, :-1])
+        stat_label = "p_inf"
+    else:  # q_inf
+        def fun_stat(X):
+            with torch.no_grad():
+                return torch.log(p_inf_fn(X[:, :-1]))
+        stat_label = "q_inf"
+
+    panels = [
+        {"label": "model",    "title": "model",    "fn": fun_1},
+        {"label": stat_label, "title": stat_label, "fn": fun_stat},
+    ]
+    colorscales = ["Plasma", "Plasma"]
+
+N_PANELS = len(panels)
+PANEL_LABELS = [p["label"] for p in panels]
+PANEL_TITLES = [p["title"] for p in panels]
+print(f"Panels: {PANEL_LABELS}")
+print(f"Cbar specs: {cbar_spec}")
+
+
+# --- grid setup -------------------------------------------------
+nx, nt, t_max = args.nx, args.nt, args.t_max
+xi = torch.linspace(args.x_min, args.x_max, nx)
+xj = torch.linspace(args.x_min, args.x_max, nx)
+Xi_grid, Xj_grid = torch.meshgrid(xi, xj, indexing="ij")
 xi_flat = Xi_grid.reshape(-1, 1)
 xj_flat = Xj_grid.reshape(-1, 1)
 
-# define domain
+
 def define_domain(plot_dims, x_vals):
     x_flat_list = []
     for di in range(d):
@@ -101,231 +249,219 @@ def define_domain(plot_dims, x_vals):
         elif di == plot_dims[1]:
             x_flat_list.append(xj_flat)
         else:
-            fixed_flat = torch.ones_like(xi_flat) * x_vals[di]
-            x_flat_list.append(fixed_flat)
+            x_flat_list.append(torch.ones_like(xi_flat) * x_vals[di])
     return x_flat_list
 
 
-# initialize
 t_val_init = 0.0
-x_vals_init = 0.5*torch.ones(d)
-plot_dims = [0,1]
+x_vals_init = args.fixed_val * torch.ones(d)
+plot_dims = [0, 1]
 x_flat_list = define_domain(plot_dims, x_vals_init)
 t_flat = torch.ones_like(xi_flat) * t_val_init
 X = torch.cat([*x_flat_list, t_flat], dim=1)
 
-print("sessin saved")
+
+# --- panel evaluation -------------------------------------------
+def eval_panels(X):
+    """Return a list of (nx,nx) numpy arrays, one per panel."""
+    vals = {}
+    for p in panels:
+        fn = p["fn"]
+        if isinstance(fn, str) and fn.startswith("diff:"):
+            continue
+        y = fn(X).reshape(nx, nx)
+        if isinstance(y, torch.Tensor):
+            y = y.detach().cpu().numpy()
+        vals[p["label"]] = y
+
+    grids = []
+    for p in panels:
+        fn = p["fn"]
+        if isinstance(fn, str) and fn.startswith("diff:"):
+            a, b = fn[len("diff:"):].split("-")
+            grids.append(vals[a] - vals[b])
+        else:
+            grids.append(vals[p["label"]])
+    return grids
 
 
-"""
-animation
-- just keep increating the value of one coordinate
-slider
-- set val of one coord
-selecting
-- keep X the same, just redraw
-"""
+# --- cbar resolution (viz.py semantics) -------------------------
+def _range_from_spec(spec, Y, global_range):
+    if spec == "dynamic" or spec is None:
+        return (float(Y.min()), float(Y.max()))
+    if spec == "symmetric":
+        M = max(abs(float(Y.min())), abs(float(Y.max())))
+        return (-M, M)
+    if spec == "fixed":
+        return global_range if global_range is not None else (float(Y.min()), float(Y.max()))
+    if isinstance(spec, (list, tuple)) and len(spec) == 2:
+        return (float(spec[0]), float(spec[1]))
+    return (float(Y.min()), float(Y.max()))
 
-# --- initial figure ----------------------------------------------
-def create_figure(Y_grid, title, colorscale, zmin=None,zmax=None):
+
+def resolve_ranges(Y_grids, cbar_spec, global_ranges):
+    label_to_idx = {PANEL_LABELS[i]: i for i in range(N_PANELS)}
+    out = []
+    for i in range(N_PANELS):
+        spec = cbar_spec.get(PANEL_LABELS[i], "dynamic")
+        if isinstance(spec, str) and spec.startswith("linked:"):
+            ref = spec[len("linked:"):]
+            if ref not in label_to_idx:
+                raise ValueError(f"linked:{ref} — label not found in {PANEL_LABELS}")
+            j = label_to_idx[ref]
+            ref_spec = cbar_spec.get(ref, "dynamic")
+            out.append(_range_from_spec(ref_spec, Y_grids[j], global_ranges[j]))
+        else:
+            out.append(_range_from_spec(spec, Y_grids[i], global_ranges[i]))
+    return out
+
+
+def _needs_global_ranges():
+    for label in PANEL_LABELS:
+        spec = cbar_spec.get(label, "dynamic")
+        if spec == "fixed":
+            return True
+        if isinstance(spec, str) and spec.startswith("linked:"):
+            ref = spec[len("linked:"):]
+            if cbar_spec.get(ref, "dynamic") == "fixed":
+                return True
+    return False
+
+
+def precompute_global_ranges(n_samples=40):
+    if not _needs_global_ranges():
+        return [None] * N_PANELS
+    print(f"Precomputing global color ranges ({n_samples} t-samples)...")
+    lo = [float("inf")] * N_PANELS
+    hi = [float("-inf")] * N_PANELS
+    x_flat_local = define_domain(plot_dims, x_vals_init)
+    for ti in range(n_samples):
+        t = t_max * ti / max(1, n_samples - 1)
+        X_t = torch.cat([*x_flat_local, torch.ones_like(xi_flat) * t], dim=1)
+        grids = eval_panels(X_t)
+        for i, g in enumerate(grids):
+            lo[i] = min(lo[i], float(g.min()))
+            hi[i] = max(hi[i], float(g.max()))
+    ranges = [(lo[i], hi[i]) for i in range(N_PANELS)]
+    for lbl, r in zip(PANEL_LABELS, ranges):
+        print(f"  global[{lbl}] = ({r[0]:.4g}, {r[1]:.4g})")
+    return ranges
+
+
+GLOBAL_RANGES = precompute_global_ranges()
+
+
+# --- figure builders --------------------------------------------
+def create_figure(Y_grid, title, colorscale, zmin=None, zmax=None):
     fig = go.Figure(
         data=go.Heatmap(
-            z=Y_grid.numpy(),
+            z=Y_grid,
             x=xi.numpy(),
             y=xj.numpy(),
             colorscale=colorscale,
             zmin=zmin,
             zmax=zmax,
             colorbar=dict(len=0.75, thickness=7),
-            #colorbar=dict(title="u(x1,..,xd,t)", len=0.75, thickness=7, title_side="right"),
         )
     )
     fig.update_layout(
-        #title="model",
-        title=dict(text=title, y=0.98, yanchor='top'),
+        title=dict(text=title, y=0.98, yanchor="top"),
         margin=dict(l=0, r=0, t=0, b=0),
         xaxis_title="x1",
         yaxis_title="x2",
-        # --- enforce equal aspect ratio ---
         xaxis=dict(scaleanchor="y", constrain="domain"),
-        yaxis=dict(constrain="domain")
+        yaxis=dict(constrain="domain"),
     )
     return fig
 
 
-Y_grids = eval_funs(X)
-titles = ["u_model", "u_analytic", "absolute_error"]
-colorscales = 2*["Plasma"]+["Hot"]
-figs = []
-for i in range(3):
-    figs.append(create_figure(Y_grids[i], titles[i], colorscales[i]))
-
-#tick_vals = [0.0, 0.25, 0.5, 0.75, 1.0]
-#fig.update_xaxes(
-#    tickmode="array",
-#    tickvals=tick_vals,
-#    ticktext=[str(v) for v in tick_vals]
-#)
-#fig.update_yaxes(
-#    tickmode="array",
-#    tickvals=tick_vals,
-#    ticktext=[str(v) for v in tick_vals]
-#)
+def get_coord_names(d):
+    return [f"x{i+1}" for i in range(d)]
 
 
-# --- Dash app ----------------------------------------------------
+# --- initial evaluation -----------------------------------------
+Y_grids_init = eval_panels(X)
+ranges_init = resolve_ranges(Y_grids_init, cbar_spec, GLOBAL_RANGES)
+figs = [
+    create_figure(Y_grids_init[i], PANEL_TITLES[i], colorscales[i],
+                  zmin=ranges_init[i][0], zmax=ranges_init[i][1])
+    for i in range(N_PANELS)
+]
+
+print("session saved")
+
+
+# --- Dash app ---------------------------------------------------
 app = Dash(__name__)
 
-# As many sliders as there are spatial dimensions
 N_SLIDERS_PER_ROW = 4
-# number of full sliders
-n_full_slider_rows = d//N_SLIDERS_PER_ROW
-# number of sliders in the last unfilled row
-n_sliders_last_row = d - N_SLIDERS_PER_ROW*n_full_slider_rows
-assert N_SLIDERS_PER_ROW*n_full_slider_rows + n_sliders_last_row == d
+n_full_slider_rows = d // N_SLIDERS_PER_ROW
+n_sliders_last_row = d - N_SLIDERS_PER_ROW * n_full_slider_rows
+assert N_SLIDERS_PER_ROW * n_full_slider_rows + n_sliders_last_row == d
 
 spatial_sliders = []
-for ri in range(n_full_slider_rows+1):
-    if ri != n_full_slider_rows:
-        n_sliders = N_SLIDERS_PER_ROW
-    else:
-        n_sliders = n_sliders_last_row
+for ri in range(n_full_slider_rows + 1):
+    n_sliders = N_SLIDERS_PER_ROW if ri != n_full_slider_rows else n_sliders_last_row
     if n_sliders != 0:
         spatial_sliders.append(
             html.Div(
                 [html.Div(
-                    [html.Label(f"x{s+1}"), dcc.Slider(id=f"slider_x{s+1}", min=0, max=1, value=0.5)],
+                    [html.Label(f"x{s+1}"),
+                     dcc.Slider(id=f"slider_x{s+1}", min=args.x_min, max=args.x_max,
+                                value=args.fixed_val)],
                     style={"width": "30%"}
-                ) for s in range(N_SLIDERS_PER_ROW*ri, N_SLIDERS_PER_ROW*ri+n_sliders)],
-                style={
-                    "display": "flex",
-                    "justifyContent": "space-between"
-                }
+                ) for s in range(N_SLIDERS_PER_ROW * ri,
+                                 N_SLIDERS_PER_ROW * ri + n_sliders)],
+                style={"display": "flex", "justifyContent": "space-between"}
             )
         )
 
+panel_width_pct = f"{100 / N_PANELS:.2f}%"
+app.layout = html.Div([
+    dcc.Location(id="url", refresh=True),
 
-
-app.layout = html.Div(
-    [
-        dcc.Location(id='url', refresh=True),
-        #dcc.Markdown(r"$u_{analytic}(x_1,\ldots,x_n,t) = \sin(a_1\,x_1)\cdot\ldots\cdot\sin(a_n\,x_n)\,e^{- \alpha\,(a_1^2+\ldots+a_n^2)\,t}$", mathjax=True),
-        #dcc.Markdown(r"$\partial_t u = \alpha \Delta u$", mathjax=True),
-
+    html.Div([
         html.Div([
-            # -- left box - General
             html.Div([
-                #html.H3("General"),
-                # -- time slider & play --
-                html.Div([
+                html.Div("", style={"width": "20%"}),
+                html.Div("time", style={"width": "10%"}),
+                html.Div(dcc.Slider(id="slider_t", min=0, max=t_max, value=0.0),
+                         style={"width": "60%"}),
+                html.Div(html.Button("Play", id="play-button", n_clicks=0),
+                         style={"width": "10%"}),
+                dcc.Interval(id="interval", interval=50, n_intervals=0, disabled=True),
+                dcc.Store(id="is-playing", data=False),
+            ], style={"display": "flex", "alignItems": "center"}),
+            html.Div([
+                html.Div(html.Div([
                     html.Div("", style={"width": "20%"}),
-                    html.Div("time", style={"width": "10%"}),
-                    html.Div(dcc.Slider(id="slider_t", min=0, max=t_max, value=0.0), style={"width": "60%"}),
-                    html.Div(html.Button("Play", id="play-button", n_clicks=0), style={"width": "10%"}),
-                    dcc.Interval(
-                        id="interval",
-                        interval=50, # ms between frames (20 FPS)
-                        n_intervals=0,
-                        disabled=True, # start paused
-                    ),
-                    dcc.Store(id="is-playing", data=False),
-                ], style={"display": "flex", "alignItems": "center"}),
-                # -- space coords dropboxes --
-                html.Div([
-                    # -- xi dropbox --
-                    html.Div(
-                        html.Div([
-                            html.Div("", style={"width": "20%"}),
-                            html.Div("xi-axis", style={"width": "10%"}),
-                            html.Div(
-                                dcc.Dropdown(get_coord_names(d), "x1", id="xi-axis"),
-                                style={"width": "20%"}
-                            )],
-                            style={"display": "flex", "alignItems": "center"},
-                        ),
-                    ),
-                    dcc.Store(id="xi-axis-prev", data="x1"),
-                    # -- xj dropbox --
-                    html.Div(
-                        html.Div([
-                            html.Div("", style={"width": "20%"}),
-                            html.Div("xj-axis", style={"width": "10%"}),
-                            html.Div(
-                                dcc.Dropdown(get_coord_names(d), "x2", id="xj-axis"),
-                                style={"width": "20%"}
-                            )],
-                            style={"display": "flex", "alignItems": "center"},
-                        ),
-                    ),
-                    dcc.Store(id="xj-axis-prev", data="x2"),
-                    ]
-                ),
-                ], style={"width": "50%"}
-            ),
-            # -- right box - Advanced
-            html.Div([
-                #html.Div([
-                #    html.Div("u_model / u_analytic"),
-                #    dcc.Checklist(["set colorbar range manually"], id="u_set_manually"),
-                #    html.Div([
-                #        html.Div("", style={"width": "10%"}),
-                #        html.Div("zmin", style={"width": "10%"}),
-                #        html.Div(
-                #            dcc.Input(placeholder="-1.0", id="u_zmin"),
-                #            style={"width": "30%"}
-                #        ),
-                #        html.Div("zmax", style={"width": "10%"}),
-                #        html.Div(
-                #            dcc.Input(placeholder="1.0", id="u_zmax"),
-                #            style={"width": "30%"}
-                #        ),
-                #    ], style={"display": "flex", "alignItems": "center"}),
-                #    # the same here:
-                #    html.Div("absolute_error"),
-                #])
-                ], style={"width": "50%"}
-            ),
-        ], style={"display": "flex", "alignItems": "center"}),
+                    html.Div("xi-axis", style={"width": "10%"}),
+                    html.Div(dcc.Dropdown(get_coord_names(d), "x1", id="xi-axis"),
+                             style={"width": "20%"}),
+                ], style={"display": "flex", "alignItems": "center"})),
+                dcc.Store(id="xi-axis-prev", data="x1"),
+                html.Div(html.Div([
+                    html.Div("", style={"width": "20%"}),
+                    html.Div("xj-axis", style={"width": "10%"}),
+                    html.Div(dcc.Dropdown(get_coord_names(d), "x2", id="xj-axis"),
+                             style={"width": "20%"}),
+                ], style={"display": "flex", "alignItems": "center"})),
+                dcc.Store(id="xj-axis-prev", data="x2"),
+            ]),
+        ], style={"width": "50%"}),
+        html.Div([], style={"width": "50%"}),
+    ], style={"display": "flex", "alignItems": "center"}),
 
-        #dcc.Graph(id="heatmap", figure=fig, style={"height": "80vh"}),
-        #dcc.Graph(id="heatmap", figure=fig),
-        html.Div([
-            html.Div([
-                dcc.Graph(figure=figs[0], id="fig1")
-            ], style={'width': '33%', 'display': 'inline-block'}),
+    html.Div([
+        html.Div([dcc.Graph(figure=figs[i], id=f"fig{i+1}")],
+                 style={"width": panel_width_pct, "display": "inline-block"})
+        for i in range(N_PANELS)
+    ]),
 
-            html.Div([
-                dcc.Graph(figure=figs[1], id="fig2")
-            ], style={'width': '33%', 'display': 'inline-block'}),
-
-            html.Div([
-                dcc.Graph(figure=figs[2], id="fig3")
-            ], style={'width': '33%', 'display': 'inline-block'})
-        ]),
+    *spatial_sliders,
+])
 
 
-        *spatial_sliders,
-    ]
-)
-
-#@app.callback(
-#    Output("heatmap", "figure"),
-#    Input('url', 'href'), # Triggers on page load or refresh
-#    State("heatmap", "figure"),
-#)
-#def reset_heatmap(href, current_fig):
-#    print("sessin reloaded")
-#    t_flat = torch.ones_like(xi_flat) * t_val
-#    X = torch.concatenate([*x_flat_list, t_flat], dim=1)
-#    Y = u_analytic(X)
-#    Y_grid = Y.reshape(nx, nx)
-#    current_fig["data"][0]["z"] = Y_grid
-#    return current_fig
-
-
-
-
-# Toggle play / pause
 @app.callback(
     Output("is-playing", "data"),
     Output("interval", "disabled"),
@@ -335,135 +471,79 @@ app.layout = html.Div(
     prevent_initial_call=True,
 )
 def toggle_play(n_clicks, is_playing):
-    if n_clicks is None:
-        raise dash.exceptions.PreventUpdate
     new_state = not is_playing
     return new_state, (not new_state), ("Pause" if new_state else "Play")
 
-# Increase slider value while playing
+
 @app.callback(
     Output("slider_t", "value"),
     Input("interval", "n_intervals"),
     State("slider_t", "value"),
 )
-def update_slider(n_intervals, value):
-    if value is None:
-        value = 0.0
-    #return (value + 1) % nt
-    value += t_max/nt
-    if value > t_max:
-        return 0.0
-    else:
-        return value
+def advance_slider_t(n_intervals, value):
+    value = 0.0 if value is None else value
+    value += t_max / nt
+    return 0.0 if value > t_max else value
 
-from dash import callback_context
-# Update heatmap when
-# - choose different axes
-# - move the time or space sliders
+
 @app.callback(
-    # outputOs
-    [Output(f"fig{i+1}", "figure") for i in range(3)],
-    [Output(f"slider_x{i+1}", "disabled") for i in range(d)],
+    [Output(f"fig{i+1}", "figure") for i in range(N_PANELS)] +
+    [Output(f"slider_x{i+1}", "disabled") for i in range(d)] +
     [Output("xi-axis-prev", "data"), Output("xj-axis-prev", "data")],
-    # inputs
-    Input('url', 'href'), # Triggers on page load or refresh
-    [Input("xi-axis", "value"), Input("xj-axis", "value")],
-    [Input("slider_t", "value")] + [Input(f"slider_x{i+1}", "value") for i in range(d)],
-    # states
-    [State("xi-axis-prev", "data"), State("xj-axis-prev", "data")],
-    [State(f"fig{i+1}", "figure") for i in range(3)],
+    Input("url", "href"),
+    Input("xi-axis", "value"),
+    Input("xj-axis", "value"),
+    Input("slider_t", "value"),
+    *[Input(f"slider_x{i+1}", "value") for i in range(d)],
+    State("xi-axis-prev", "data"),
+    State("xj-axis-prev", "data"),
+    *[State(f"fig{i+1}", "figure") for i in range(N_PANELS)],
 )
-def update_heatmap(*args):
+def update_heatmaps(*cb_args):
     trigger = callback_context.triggered_id
-    # inputs
-    href = args[0]
-    xi_axis = args[1]
-    xj_axis = args[2]
-    t_value = args[3]
-    x_values = args[4:-5]
-    # states
-    xi_axis_prev = args[-5]
-    xj_axis_prev = args[-4]
-    curr_figs = list(args[-3:])
-    #### disable sliders ####
-    disabed_list = []
+    xi_axis = cb_args[1]
+    xj_axis = cb_args[2]
+    t_value = cb_args[3]
+    x_values = list(cb_args[4:4 + d])
+    xi_axis_prev = cb_args[4 + d]
+    xj_axis_prev = cb_args[4 + d + 1]
+    curr_figs = list(cb_args[4 + d + 2:])
+
+    disabled_list = []
     if xi_axis == xj_axis:
         print("Illegal to set same xi xj")
     for i in range(d):
-        if f"x{i+1}" == xi_axis or f"x{i+1}" == xj_axis:
-            disabed_list.append(True)
-        else:
-            disabed_list.append(False)
-    #### update X ####
+        disabled_list.append(f"x{i+1}" == xi_axis or f"x{i+1}" == xj_axis)
+
     global X
-    ###### initial heat map ######
     if trigger == "url":
-        t_flat = torch.ones_like(xi_flat) * t_val_init
-        print("session refreshed")
-        X = torch.cat([*x_flat_list, t_flat], dim=1)
-    ###### choosing different axes ######
-    elif trigger == "xi-axis" or trigger == "xj-axis":
-        prev_axes = [int(xi_axis_prev[1:])-1, int(xj_axis_prev[1:])-1]
-        X[:, prev_axes[0]] = torch.ones(nx**2) * x_values[prev_axes[0]]
-        X[:, prev_axes[1]] = torch.ones(nx**2) * x_values[prev_axes[1]]
-        plot_dims = [int(xi_axis[1:])-1, int(xj_axis[1:])-1]
-        X[:, plot_dims[0]] = xi_flat[:,0]
-        X[:, plot_dims[1]] = xj_flat[:,0]
-        ## calculate the zmin and zmax from all time using only u_analysis
-        #Xz = torch.zeros_like(X)
-        #Xz[:,:-1] = X[:,:-1]
-        #ymin_2, ymax_2 = torch.inf, -torch.inf
-        #ymin_3, ymax_3 = torch.inf, -torch.inf
-        #print("def", ymin_2, ymax_2)
-        #print("def", ymin_3, ymax_3)
-        #for i in range(nt):
-        #    t = t_max * i/nt
-        #    Xz[:,-1] = t * torch.ones(nx**2)
-        #    Y2 = fun_2(Xz)
-        #    Y3 = fun_1(Xz) - Y2
-        #    Y2_minmax = Y2.aminmax()
-        #    Y3_minmax = Y3.aminmax()
-        #    ymin_2, ymax_2 = update_minmax(Y2_minmax[0], ymin_2, Y2_minmax[1], ymax_2)
-        #    ymin_3, ymax_3 = update_minmax(Y3_minmax[0], ymin_3, Y3_minmax[1], ymax_3)
-        #print("cal", ymin_2, ymax_2)
-        #print("cal", ymin_3, ymax_3)
-        ## update the zmin/zmax
-        #for i in range(3):
-        #    if i != 2:
-        #        curr_figs[i]["data"][0]["zmin"] = ymin_2
-        #        curr_figs[i]["data"][0]["zmax"] = ymax_2
-        #    else:
-        #        curr_figs[i]["data"][0]["zmin"] = ymin_3
-        #        curr_figs[i]["data"][0]["zmax"] = ymax_3
-    ###### setting values via slider ######
-    else:
-        coord_name = trigger[len("slider_"):]
-        if coord_name == "t":
+        t_flat_local = torch.ones_like(xi_flat) * t_val_init
+        X = torch.cat([*x_flat_list, t_flat_local], dim=1)
+    elif trigger in ("xi-axis", "xj-axis"):
+        prev_axes = [int(xi_axis_prev[1:]) - 1, int(xj_axis_prev[1:]) - 1]
+        X[:, prev_axes[0]] = torch.ones(nx * nx) * x_values[prev_axes[0]]
+        X[:, prev_axes[1]] = torch.ones(nx * nx) * x_values[prev_axes[1]]
+        new_axes = [int(xi_axis[1:]) - 1, int(xj_axis[1:]) - 1]
+        X[:, new_axes[0]] = xi_flat[:, 0]
+        X[:, new_axes[1]] = xj_flat[:, 0]
+    elif isinstance(trigger, str) and trigger.startswith("slider_"):
+        coord = trigger[len("slider_"):]
+        if coord == "t":
             X[:, -1:] = t_value * torch.ones_like(xi_flat)
-        elif coord_name[0] == "x":
-            di = int(coord_name[1:])-1
+        elif coord.startswith("x"):
+            di = int(coord[1:]) - 1
             X[:, di:di+1] = x_values[di] * torch.ones_like(xi_flat)
 
-    # update figure
-    Y1_grid = fun_1(X).reshape(nx,nx).numpy()
-    Y2_grid = fun_2(X).reshape(nx,nx).numpy()
-    Y_grids = [Y1_grid, Y2_grid, Y1_grid-Y2_grid]
-    # calc zminmax
-    u_zminmax = u_zminmax_const if u_zminmax_manual else [Y2_grid.min(), Y2_grid.max()]
-    err_zminmax = err_zminmax_const if err_zminmax_manual else [Y_grids[-1].min(), Y_grids[-1].max()]
-    for i in range(3):
+    Y_grids = eval_panels(X)
+    ranges = resolve_ranges(Y_grids, cbar_spec, GLOBAL_RANGES)
+    for i in range(N_PANELS):
         curr_figs[i]["data"][0]["z"] = Y_grids[i]
-        if i != 2:
-            curr_figs[i]["data"][0]["zmin"] = u_zminmax[0]
-            curr_figs[i]["data"][0]["zmax"] = u_zminmax[1]
-            pass
-        else:
-            curr_figs[i]["data"][0]["zmin"] = err_zminmax[0]
-            curr_figs[i]["data"][0]["zmax"] = err_zminmax[1]
+        curr_figs[i]["data"][0]["zmin"] = ranges[i][0]
+        curr_figs[i]["data"][0]["zmax"] = ranges[i][1]
         curr_figs[i]["layout"]["xaxis"]["title"]["text"] = xi_axis
         curr_figs[i]["layout"]["yaxis"]["title"]["text"] = xj_axis
-    return *curr_figs, *disabed_list, xi_axis, xj_axis
+    return (*curr_figs, *disabled_list, xi_axis, xj_axis)
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=8082)
+    app.run(debug=True, port=args.port)
