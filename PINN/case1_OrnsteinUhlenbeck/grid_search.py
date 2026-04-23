@@ -24,7 +24,7 @@ FIXED_PARAMS = {
     "description": "OU IC grid search",
     "seed": 42,
     #"layers": "64,64,64,64",
-    #"layers": "128,128,128,128",
+    "layers": "128,128,128,128",
     #"layers": "192,192,192,192",
     #"layers": "256,256,256,256",
     #"layers": "512,512,512,512",
@@ -34,9 +34,9 @@ FIXED_PARAMS = {
     "L_min": -5.0,
     "L_max": 5.0,
     # 2)
-    "n_steps": 19_999,
+    "n_steps": 59_999,
     #"n_steps": 9,
-    "n_steps_decay": 800, # = n_steps / 25
+    #"n_steps_decay": 800, # = n_steps / 25
     # 3)
     "resampling_frequency": 100, # res_freq * bs = n_res_points
     "bs": 1_000,
@@ -53,8 +53,8 @@ FIXED_PARAMS = {
 
     #"sampling_type": "trajectories",
     "sampling_type": "domain_and_trajectories",
-    "f_pde_full_domain": 1,
-    "f_pde_trajs": 1,
+    #"f_pde_full_domain": 1,
+    #"f_pde_trajs": 1,
     #"n_trajs": 1_000,
     #"nt_steps": 1_000,
     #"active_losses": "pde,ic",
@@ -69,9 +69,9 @@ FIXED_PARAMS = {
 #LINKED_SCORE_PDE_DIR = "gridsearch__3losses__2026-04-20--21-02-15/ic_type=gauss__d=2/score_pde/"
 #LINKED_SCORE_PDE_DIR = "gridsearch__hardcoded__2026-04-21--08-36-32/ic_type=cauchy__d=4/score_pde/"
 
-#LINKED_SCORE_PDE_DIR = "gridsearch__hardcoded__2026-04-22--16-36-12/n_steps=39999__n_steps_decay=1600__layers=128_128_128_128/score_pde/"
+LINKED_SCORE_PDE_DIR = "gridsearch__hardcoded__2026-04-22--16-36-12/n_steps=39999__n_steps_decay=1600__layers=128_128_128_128/score_pde/"
 #LINKED_SCORE_PDE_DIR = "gridsearch__hardcoded__2026-04-22--16-36-12/n_steps=39999__n_steps_decay=1600__layers=256_256_256_256/score_pde/"
-LINKED_SCORE_PDE_DIR = "gridsearch__hardcoded__2026-04-22--16-36-12/n_steps=19999__n_steps_decay=800__layers=128_128_128_128/score_pde/"
+#LINKED_SCORE_PDE_DIR = "gridsearch__hardcoded__2026-04-22--16-36-12/n_steps=19999__n_steps_decay=800__layers=128_128_128_128/score_pde/"
 
 # `ll_ode` depends on a matching `score_pde` run, so modes are run in order
 # for each base combo instead of being treated as an independent search axis.
@@ -108,32 +108,31 @@ SEARCH_AXES = {
     #    {
     #        #"n_steps": 19_999,
     #        #"n_steps": 19,
-    #        #"n_steps_decay": 800,
-    #        "layers": "128,128,128,128",
+    #        "n_steps_decay": 800,
     #    },
     #    {
     #        #"n_steps": 39_999,
     #        #"n_steps": 39,
-    #        #"n_steps_decay": 1600,
-    #        "layers": "256,256,256,256",
+    #        "n_steps_decay": 1600,
     #    }
     #],
-    "layers": [
-        "128,128,128,128",
-        "256,256,256,256",
-        #"64,64,64,64",
-    #    #"148,148,148,148"
-    ],
-    #"sampling": [
-    #    {
-    #        "f_pde_full_domain": 1,
-    #        "f_pde_trajs": 7,
-    #    },
-    #    {
-    #        "f_pde_full_domain": 7,
-    #        "f_pde_trajs": 1,
-    #    },
+    #"layers": [
+    #    "128,128,128,128",
+    #    "256,256,256,256",
+    #    #"64,64,64,64",
+    ##    #"148,148,148,148"
     #],
+    "sampling": [
+        {
+            "f_pde_full_domain": 1,
+            "f_pde_trajs": 6,
+        },
+        {
+            "f_pde_full_domain": 1,
+            "f_pde_trajs": 2,
+        },
+    ],
+    "n_steps_decay": [6_000, 1_500], # 40 times or 10 times decay
     #"sampling": [
     #    {
     #        "sampling_type": "domain",

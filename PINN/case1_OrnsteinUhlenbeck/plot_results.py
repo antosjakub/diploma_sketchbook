@@ -282,12 +282,12 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Regenerate plots from a saved run directory.")
     parser.add_argument("--src_dir_name", type=str, help="Run directory, e.g. 'gauss/run_3losses_score_pde' or 'laplace/run_hardcoded_ll_ode'")
-    parser.add_argument("--out_dir_name", type=str, help="Output directory")
+    #parser.add_argument("--out_dir_name", type=str, help="Output directory")
     cli_args = parser.parse_args()
     src_dir_name = cli_args.src_dir_name.rstrip('/')
-    out_dir_name = cli_args.out_dir_name.rstrip('/')
+    #out_dir_name = cli_args.out_dir_name.rstrip('/')
 
-    replot_src_out(src_dir_name, out_dir_name)
+    replot_src_out(src_dir_name, src_dir_name)
 
 
     #device = None
