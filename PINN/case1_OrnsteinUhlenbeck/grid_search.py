@@ -15,26 +15,26 @@ CASE_DIR = Path(__file__).resolve().parent
 
 # Choose which training entrypoint to use.
 # Supported values: "hardcoded", "3losses"
-VARIANT = "hardcoded"
+VARIANT = "3losses"
 
 
 FIXED_PARAMS = {
-    "ic_type": "cauchy",
+    "ic_type": "laplace",
     "d": 4,
     "description": "OU IC grid search",
     "seed": 42,
     #"layers": "64,64,64,64",
-    #"layers": "128,128,128,128",
+    "layers": "128,128,128,128",
     #"layers": "192,192,192,192",
     #"layers": "256,256,256,256",
     #"layers": "512,512,512,512",
     
     # 1)
-    "T": 5.0,
+    "T": 3.0,
     "L_min": -5.0,
     "L_max": 5.0,
     # 2)
-    "n_steps": 59_999,
+    "n_steps": 19_999,
     #"n_steps": 9,
     #"n_steps_decay": 800, # = n_steps / 25
     # 3)
@@ -47,17 +47,18 @@ FIXED_PARAMS = {
 
     "n_test_points": 10_000,
     "testing_frequency": 100,
-    #"lambda_pde": 1.0,
-    #"lambda_ic": 10.0,
     "clear_dir": False,
 
     #"sampling_type": "trajectories",
     "sampling_type": "domain_and_trajectories",
     "f_pde_full_domain": 1,
     "f_pde_trajs": 1,
-    #"n_trajs": 1_000,
-    #"nt_steps": 1_000,
-    #"active_losses": "pde,ic",
+    "n_trajs": 1_000,
+    "nt_steps": 1_000,
+
+    "active_losses": "pde,ic",
+    "lambda_pde": 1.0,
+    "lambda_ic": 20.0,
     #"use_adaptive_weights": True,
     #"enable_testing": False
     #"mode": "ll_ode",
@@ -117,13 +118,14 @@ SEARCH_AXES = {
     #        "n_steps_decay": 1600,
     #    }
     #],
-    "n_steps_decay": [1_500, 6_000], # 40 times or 10 times decay
-    "layers": [
-        "128,128,128,128",
-        #"256,256,256,256",
-        "64,64,64,64",
-    #    #"148,148,148,148"
-    ],
+    "use_adaptive_weights": [True, False],
+    "n_steps_decay": [800, 2_000], # 40 times or 10 times decay
+    #"layers": [
+    #    "128,128,128,128",
+    #    #"256,256,256,256",
+    #    "64,64,64,64",
+    ##    #"148,148,148,148"
+    #],
     #"sampling": [
     #    {
     #        "f_pde_full_domain": 1,
@@ -144,7 +146,6 @@ SEARCH_AXES = {
     #        "nt_steps": 1_000,
     #    },
     #],
-    #"use_adaptive_weights": [False, True],
     #"active_losses": ["pde,bc,ic", "pde,ic"]
 }
 
