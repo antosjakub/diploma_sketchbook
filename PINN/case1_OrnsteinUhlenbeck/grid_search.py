@@ -24,13 +24,13 @@ FIXED_PARAMS = {
     "description": "OU IC grid search",
     "seed": 42,
     #"layers": "64,64,64,64",
-    "layers": "128,128,128,128",
+    #"layers": "128,128,128,128",
     #"layers": "192,192,192,192",
-    #"layers": "256,256,256,256",
+    "layers": "256,256,256,256",
     #"layers": "512,512,512,512",
     
     # 1)
-    "T": 3.0,
+    "T": 3.5,
     "L_min": -5.0,
     "L_max": 5.0,
     # 2)
@@ -59,7 +59,7 @@ FIXED_PARAMS = {
     "active_losses": "pde,ic",
     "lambda_pde": 1.0,
     "lambda_ic": 20.0,
-    #"use_adaptive_weights": True,
+    "use_adaptive_weights": True,
     #"enable_testing": False
     #"mode": "ll_ode",
 }
@@ -108,18 +108,28 @@ SEARCH_AXES = {
     #"bs": [10_000, 1_000]
     #"stepping": [
     #    {
-    #        #"n_steps": 19_999,
+    #        "n_steps": 19_999,
     #        #"n_steps": 19,
-    #        "n_steps_decay": 800,
+    #        "n_steps_decay": 3_000,
     #    },
+    #    #{
+    #    #    "n_steps": 39_999,
+    #    #    #"n_steps": 39,
+    #    #    "n_steps_decay": 6_000,
+    #    #},
     #    {
-    #        #"n_steps": 39_999,
-    #        #"n_steps": 39,
-    #        "n_steps_decay": 1600,
-    #    }
+    #        "n_steps": 19_999,
+    #        #"n_steps": 19,
+    #        "n_steps_decay": 1_000,
+    #    },
+    #    #{
+    #    #    "n_steps": 39_999,
+    #    #    #"n_steps": 39,
+    #    #    "n_steps_decay": 2_000,
+    #    #},
     #],
-    "use_adaptive_weights": [True, False],
-    "n_steps_decay": [800, 2_000], # 40 times or 10 times decay
+    #"use_adaptive_weights": [True, False],
+    "n_steps_decay": [1_000, 2_000, 500], # ~ 20-5 times decay (10 times was best so far)
     #"layers": [
     #    "128,128,128,128",
     #    #"256,256,256,256",
