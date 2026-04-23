@@ -1,0 +1,204 @@
+"""Linear Fokker-Planck and Smoluchowski model definitions."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Protocol
+
+import numpy as np
+from scipy import sparse
+
+from .fd import BoundaryCondition, tensor_derivative_matrices
+from .grid import TensorGrid
+
+
+class Potential(Protocol):
+    dimension: int
+
+    def gradient(self, coords: np.ndarray) -> np.ndarray:
+        """Return grad V with shape ``(dimension, npoints)``."""
+
+    def laplacian(self, coords: np.ndarray) -> np.ndarray:
+        """Return Delta V with shape ``(npoints,)``."""
+
+
+@dataclass(frozen=True)
+class LinearFokkerPlanck:
+    """Linear Fokker-Planck equation with constant diffusion.
+
+    The represented equation is
+
+        p_t = sum_ij diffusion_ij d_ij p - div(drift p)
+
+    Expanding the divergence gives
+
+        p_t = sum_ij diffusion_ij d_ij p
+              - drift . grad p
+              - div(drift) p
+    """
+
+    diffusion: np.ndarray
+    dimension: int
+
+    def __post_init__(self) -> None:
+        diffusion = np.asarray(self.diffusion, dtype=float)
+        if diffusion.shape != (self.dimension, self.dimension):
+            raise ValueError("diffusion must have shape (dimension, dimension)")
+        object.__setattr__(self, "diffusion", diffusion)
+
+    def drift(self, coords: np.ndarray) -> np.ndarray:
+        return np.zeros_like(coords)
+
+    def divergence_drift(self, coords: np.ndarray) -> np.ndarray:
+        return np.zeros(coords.shape[1], dtype=float)
+
+    def build_operator(
+        self,
+        grid: TensorGrid,
+        *,
+        bc: BoundaryCondition = "dirichlet",
+    ) -> sparse.csr_matrix:
+        if grid.dimension != self.dimension:
+            raise ValueError("grid dimension does not match model dimension")
+
+        d1, d2 = tensor_derivative_matrices(grid.shape, grid.spacing, bc)
+        size = grid.size
+        operator = sparse.csr_matrix((size, size), dtype=float)
+
+        for i in range(self.dimension):
+            for j in range(self.dimension):
+                coefficient = self.diffusion[i, j]
+                if coefficient == 0.0:
+                    continue
+                if i == j:
+                    operator = operator + coefficient * d2[i]
+                else:
+                    operator = operator + coefficient * (d1[i] @ d1[j])
+
+        coords = grid.flat_coordinates()
+        drift_values = np.asarray(self.drift(coords), dtype=float)
+        if drift_values.shape != coords.shape:
+            raise ValueError("drift must return shape (dimension, npoints)")
+
+        for axis in range(self.dimension):
+            values = -drift_values[axis]
+            if np.any(values):
+                operator = operator + sparse.diags(values, format="csr") @ d1[axis]
+
+        div_values = -np.asarray(self.divergence_drift(coords), dtype=float)
+        if div_values.shape != (size,):
+            raise ValueError("divergence_drift must return shape (npoints,)")
+        if np.any(div_values):
+            operator = operator + sparse.diags(div_values, format="csr")
+
+        if bc == "dirichlet":
+            operator = operator.tolil()
+            operator[grid.boundary_mask(), :] = 0.0
+            operator = operator.tocsr()
+
+        return operator
+
+
+@dataclass(frozen=True)
+class OrnsteinUhlenbeck(LinearFokkerPlanck):
+    """Ornstein-Uhlenbeck model dX = -0.5 X dt + Sigma^{1/2} dW."""
+
+    covariance: np.ndarray
+
+    def __init__(self, covariance: np.ndarray):
+        covariance = np.asarray(covariance, dtype=float)
+        if covariance.ndim != 2 or covariance.shape[0] != covariance.shape[1]:
+            raise ValueError("covariance must be a square matrix")
+        object.__setattr__(self, "covariance", covariance)
+        super().__init__(diffusion=0.5 * covariance, dimension=covariance.shape[0])
+
+    def drift(self, coords: np.ndarray) -> np.ndarray:
+        return -0.5 * coords
+
+    def divergence_drift(self, coords: np.ndarray) -> np.ndarray:
+        return np.full(coords.shape[1], -0.5 * self.dimension, dtype=float)
+
+
+@dataclass(frozen=True)
+class QuadraticPotential:
+    matrix: np.ndarray
+
+    def __post_init__(self) -> None:
+        matrix = np.asarray(self.matrix, dtype=float)
+        if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
+            raise ValueError("matrix must be square")
+        object.__setattr__(self, "matrix", matrix)
+        object.__setattr__(self, "dimension", matrix.shape[0])
+
+    def gradient(self, coords: np.ndarray) -> np.ndarray:
+        return self.matrix @ coords
+
+    def laplacian(self, coords: np.ndarray) -> np.ndarray:
+        return np.full(coords.shape[1], np.trace(self.matrix), dtype=float)
+
+
+@dataclass(frozen=True)
+class DoubleWellPotential:
+    wells: np.ndarray
+
+    def __post_init__(self) -> None:
+        wells = np.asarray(self.wells, dtype=float)
+        if wells.ndim != 1:
+            raise ValueError("wells must be a one-dimensional array")
+        object.__setattr__(self, "wells", wells)
+        object.__setattr__(self, "dimension", wells.size)
+
+    def gradient(self, coords: np.ndarray) -> np.ndarray:
+        return coords * (coords * coords - self.wells[:, None] ** 2)
+
+    def laplacian(self, coords: np.ndarray) -> np.ndarray:
+        values = 3.0 * coords * coords - self.wells[:, None] ** 2
+        return np.sum(values, axis=0)
+
+
+@dataclass(frozen=True)
+class RastriginPotential:
+    amplitude: float
+    gamma: np.ndarray
+
+    def __post_init__(self) -> None:
+        gamma = np.asarray(self.gamma, dtype=float)
+        if gamma.ndim != 1:
+            raise ValueError("gamma must be a one-dimensional array")
+        object.__setattr__(self, "gamma", gamma)
+        object.__setattr__(self, "dimension", gamma.size)
+
+    def gradient(self, coords: np.ndarray) -> np.ndarray:
+        return 2.0 * coords + self.amplitude * self.gamma[:, None] * np.sin(
+            self.gamma[:, None] * coords
+        )
+
+    def laplacian(self, coords: np.ndarray) -> np.ndarray:
+        values = 2.0 + self.amplitude * self.gamma[:, None] ** 2 * np.cos(
+            self.gamma[:, None] * coords
+        )
+        return np.sum(values, axis=0)
+
+
+@dataclass(frozen=True)
+class Smoluchowski(LinearFokkerPlanck):
+    """Smoluchowski equation rho_t = beta^-1 Delta rho + div(rho grad V)."""
+
+    potential: Potential
+    beta: float = 1.0
+
+    def __init__(self, potential: Potential, beta: float = 1.0):
+        if beta <= 0.0:
+            raise ValueError("beta must be positive")
+        dimension = potential.dimension
+        diffusion = (1.0 / beta) * np.eye(dimension)
+        object.__setattr__(self, "potential", potential)
+        object.__setattr__(self, "beta", beta)
+        super().__init__(diffusion=diffusion, dimension=dimension)
+
+    def drift(self, coords: np.ndarray) -> np.ndarray:
+        return -self.potential.gradient(coords)
+
+    def divergence_drift(self, coords: np.ndarray) -> np.ndarray:
+        return -self.potential.laplacian(coords)
+
