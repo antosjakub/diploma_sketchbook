@@ -13,7 +13,7 @@ from .fd import BoundaryCondition
 from .grid import TensorGrid
 from .indices import combination_indices, combination_weight
 from .models import OperatorModel
-from .solver import TimeStepper, solve_on_grid
+from .solver import LinearSolveConfig, OperatorBackend, TimeStepper, solve_on_grid
 
 
 @dataclass(frozen=True)
@@ -79,6 +79,8 @@ def _solve_component(args) -> ComponentSolution:
         final_time,
         stepper,
         bc,
+        operator_backend,
+        linear_solve,
     ) = args
     grid = TensorGrid.from_level(levels, domain_radius=domain_radius)
     values = solve_on_grid(
@@ -88,6 +90,8 @@ def _solve_component(args) -> ComponentSolution:
         final_time=final_time,
         stepper=stepper,
         bc=bc,
+        operator_backend=operator_backend,
+        linear_solve=linear_solve,
     )
     return ComponentSolution(levels=levels, weight=weight, grid=grid, values=values)
 
@@ -104,6 +108,8 @@ def solve_combination(
     max_workers: int | None = None,
     min_level: int = 1,
     max_component_size: int | None = None,
+    operator_backend: OperatorBackend = "matrix",
+    linear_solve: LinearSolveConfig | None = None,
 ) -> CombinationResult:
     """Solve all component grids and return an implicit combination result."""
 
@@ -127,6 +133,8 @@ def solve_combination(
                 final_time,
                 stepper,
                 bc,
+                operator_backend,
+                linear_solve,
             )
         )
 

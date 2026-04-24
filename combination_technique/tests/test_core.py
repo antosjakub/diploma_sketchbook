@@ -6,6 +6,7 @@ import numpy as np
 
 from combination_technique import (
     ConvectionDiffusionReaction,
+    LinearSolveConfig,
     OrnsteinUhlenbeck,
     QuadraticPotential,
     SGppInterpolant,
@@ -62,6 +63,8 @@ class GridAndSolverTests(unittest.TestCase):
         grid = TensorGrid.from_level((2, 2), domain_radius=2.0)
         operator = model.build_operator(grid, bc="dirichlet")
         self.assertEqual(operator.shape, (grid.size, grid.size))
+        matrix_free = model.build_linear_operator(grid, bc="dirichlet")
+        self.assertEqual(matrix_free.shape, (grid.size, grid.size))
 
     def test_general_cdr_operator_shape(self) -> None:
         model = ConvectionDiffusionReaction(
@@ -74,6 +77,44 @@ class GridAndSolverTests(unittest.TestCase):
         operator = model.build_operator(grid, bc="dirichlet")
         self.assertEqual(operator.shape, (grid.size, grid.size))
 
+    def test_matrix_and_linear_operator_agree_on_matvec(self) -> None:
+        model = OrnsteinUhlenbeck(np.array([[1.0, 0.2], [0.2, 0.8]]))
+        grid = TensorGrid.from_level((2, 2), domain_radius=2.0)
+        matrix = model.build_operator(grid, bc="dirichlet")
+        operator = model.build_linear_operator(grid, bc="dirichlet")
+        vector = np.linspace(0.0, 1.0, grid.size)
+        np.testing.assert_allclose(matrix @ vector, operator @ vector, atol=1e-12, rtol=1e-12)
+
+    def test_matrix_and_linear_operator_solvers_agree(self) -> None:
+        model = OrnsteinUhlenbeck(np.eye(2))
+        grid = TensorGrid.from_level((2, 2), domain_radius=3.0)
+        stepper = TimeStepper(dt=0.05, theta=1.0)
+        matrix_solution = solve_on_grid(
+            model,
+            grid,
+            gaussian_density,
+            final_time=0.1,
+            stepper=stepper,
+            bc="neumann",
+            operator_backend="matrix",
+        )
+        operator_solution = solve_on_grid(
+            model,
+            grid,
+            gaussian_density,
+            final_time=0.1,
+            stepper=stepper,
+            bc="neumann",
+            operator_backend="linear_operator",
+            linear_solve=LinearSolveConfig(rtol=1e-10, atol=1e-12, maxiter=200),
+        )
+        np.testing.assert_allclose(
+            matrix_solution,
+            operator_solution,
+            atol=1e-8,
+            rtol=1e-8,
+        )
+
     def test_combination_result_evaluates_points(self) -> None:
         model = OrnsteinUhlenbeck(np.eye(2))
         result = solve_combination(
@@ -85,6 +126,23 @@ class GridAndSolverTests(unittest.TestCase):
             domain_radius=3.0,
             bc="neumann",
             max_workers=1,
+        )
+        values = result.evaluate(np.array([[0.0, 0.0], [1.0, 0.0]]))
+        self.assertEqual(values.shape, (2,))
+        self.assertTrue(np.all(np.isfinite(values)))
+
+    def test_combination_accepts_linear_operator_backend(self) -> None:
+        model = OrnsteinUhlenbeck(np.eye(2))
+        result = solve_combination(
+            model,
+            level=3,
+            initial_condition=gaussian_density,
+            final_time=0.0,
+            stepper=TimeStepper(dt=0.1),
+            domain_radius=3.0,
+            bc="neumann",
+            max_workers=1,
+            operator_backend="linear_operator",
         )
         values = result.evaluate(np.array([[0.0, 0.0], [1.0, 0.0]]))
         self.assertEqual(values.shape, (2,))

@@ -26,21 +26,24 @@ def main() -> None:
     ]])
     model = OrnsteinUhlenbeck(sigma)
     stepper = TimeStepper(dt=0.01, theta=1.0)
-    lvl = 12
-    L = 10.0
+    lvl = 10
+    L = 4.0
+    T = 0.5
+    #backend = "matrix"
+    backend = "linear_operator"
 
     result = solve_combination(
         model,
         level=lvl,
         #initial_condition=gaussian_density,
-        initial_condition=cauchy_density,
-        #initial_condition=product_laplace_density,
-        final_time=1.0,
-        #final_time=0.01,
+        #initial_condition=cauchy_density,
+        initial_condition=product_laplace_density,
+        final_time=T,
         stepper=stepper,
         domain_radius=L,
         bc="dirichlet",
         max_workers=8,
+        operator_backend=backend
     )
 
     target = TensorGrid.from_level((4, 4), domain_radius=L)

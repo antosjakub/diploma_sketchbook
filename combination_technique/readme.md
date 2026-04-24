@@ -217,6 +217,29 @@ result = solve_combination(
 )
 ```
 
+To compare assembled and matrix-free component solves, switch the backend:
+
+```python
+from combination_technique import LinearSolveConfig
+
+result = solve_combination(
+    model,
+    level=3,
+    initial_condition=gaussian_density,
+    final_time=0.1,
+    stepper=TimeStepper(dt=0.02, theta=1.0),
+    domain_radius=4.0,
+    bc="dirichlet",
+    max_workers=1,
+    operator_backend="linear_operator",
+    linear_solve=LinearSolveConfig(method="gmres", rtol=1e-8, maxiter=200),
+)
+```
+
+Use `operator_backend="matrix"` for the original assembled sparse-matrix path.
+The `linear_operator` backend avoids materializing the full tensor-grid
+operator and is intended for larger high-dimensional component problems.
+
 General convection-diffusion-reaction example:
 
 ```python

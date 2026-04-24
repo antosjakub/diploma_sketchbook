@@ -7,8 +7,14 @@ from typing import Callable, Protocol
 
 import numpy as np
 from scipy import sparse
+from scipy.sparse.linalg import LinearOperator
 
-from .fd import BoundaryCondition, tensor_derivative_matrices
+from .fd import (
+    BoundaryCondition,
+    apply_axis_operator,
+    tensor_derivative_1d_matrices,
+    tensor_derivative_matrices,
+)
 from .grid import TensorGrid
 
 
@@ -32,6 +38,14 @@ class OperatorModel(Protocol):
         bc: BoundaryCondition = "dirichlet",
     ) -> sparse.csr_matrix:
         """Assemble the semidiscrete operator on one tensor grid."""
+
+    def build_linear_operator(
+        self,
+        grid: TensorGrid,
+        *,
+        bc: BoundaryCondition = "dirichlet",
+    ) -> LinearOperator:
+        """Build a matrix-free semidiscrete operator on one tensor grid."""
 
 
 @dataclass(frozen=True)
@@ -110,6 +124,63 @@ class LinearFokkerPlanck:
 
         return operator
 
+    def build_linear_operator(
+        self,
+        grid: TensorGrid,
+        *,
+        bc: BoundaryCondition = "dirichlet",
+    ) -> LinearOperator:
+        if grid.dimension != self.dimension:
+            raise ValueError("grid dimension does not match model dimension")
+
+        d1_1d, d2_1d = tensor_derivative_1d_matrices(grid.shape, grid.spacing, bc)
+        coords = grid.flat_coordinates()
+        drift_values = np.asarray(self.drift(coords), dtype=float)
+        if drift_values.shape != coords.shape:
+            raise ValueError("drift must return shape (dimension, npoints)")
+
+        div_values = -np.asarray(self.divergence_drift(coords), dtype=float)
+        if div_values.shape != (grid.size,):
+            raise ValueError("divergence_drift must return shape (npoints,)")
+
+        active_diffusion: list[tuple[float, int, int]] = []
+        for i in range(self.dimension):
+            for j in range(self.dimension):
+                coefficient = self.diffusion[i, j]
+                if coefficient != 0.0:
+                    active_diffusion.append((coefficient, i, j))
+
+        active_drift = [
+            (axis, -drift_values[axis].copy())
+            for axis in range(self.dimension)
+            if np.any(drift_values[axis])
+        ]
+        has_divergence = np.any(div_values)
+        boundary_mask = grid.boundary_mask() if bc == "dirichlet" else None
+
+        def matvec(x: np.ndarray) -> np.ndarray:
+            vector = np.asarray(x, dtype=float).reshape(-1)
+            result = np.zeros_like(vector)
+
+            for coefficient, i, j in active_diffusion:
+                if i == j:
+                    result += coefficient * apply_axis_operator(vector, d2_1d[i], grid.shape, i)
+                else:
+                    mixed = apply_axis_operator(vector, d1_1d[j], grid.shape, j)
+                    result += coefficient * apply_axis_operator(mixed, d1_1d[i], grid.shape, i)
+
+            for axis, values in active_drift:
+                result += values * apply_axis_operator(vector, d1_1d[axis], grid.shape, axis)
+
+            if has_divergence:
+                result += div_values * vector
+
+            if boundary_mask is not None:
+                result[boundary_mask] = 0.0
+            return result
+
+        return LinearOperator((grid.size, grid.size), matvec=matvec, dtype=float)
+
 
 @dataclass(frozen=True)
 class ConvectionDiffusionReaction:
@@ -174,6 +245,47 @@ class ConvectionDiffusionReaction:
             operator = operator.tocsr()
 
         return operator
+
+    def build_linear_operator(
+        self,
+        grid: TensorGrid,
+        *,
+        bc: BoundaryCondition = "dirichlet",
+    ) -> LinearOperator:
+        if grid.dimension != self.dimension:
+            raise ValueError("grid dimension does not match model dimension")
+
+        d1_1d, d2_1d = tensor_derivative_1d_matrices(grid.shape, grid.spacing, bc)
+        coords = grid.flat_coordinates()
+        drift_values = self.drift(coords)
+        reaction_values = self.reaction(coords)
+        active_drift = [
+            (axis, drift_values[axis].copy())
+            for axis in range(self.dimension)
+            if np.any(drift_values[axis])
+        ]
+        has_reaction = np.any(reaction_values)
+        boundary_mask = grid.boundary_mask() if bc == "dirichlet" else None
+
+        def matvec(x: np.ndarray) -> np.ndarray:
+            vector = np.asarray(x, dtype=float).reshape(-1)
+            result = np.zeros_like(vector)
+
+            if self.diffusion:
+                for axis, second in enumerate(d2_1d):
+                    result += self.diffusion * apply_axis_operator(vector, second, grid.shape, axis)
+
+            for axis, values in active_drift:
+                result += values * apply_axis_operator(vector, d1_1d[axis], grid.shape, axis)
+
+            if has_reaction:
+                result += reaction_values * vector
+
+            if boundary_mask is not None:
+                result[boundary_mask] = 0.0
+            return result
+
+        return LinearOperator((grid.size, grid.size), matvec=matvec, dtype=float)
 
 
 @dataclass(frozen=True)
