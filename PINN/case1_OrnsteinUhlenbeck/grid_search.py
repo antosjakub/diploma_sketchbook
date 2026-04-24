@@ -24,9 +24,9 @@ FIXED_PARAMS = {
     "description": "OU IC grid search",
     "seed": 42,
     #"layers": "64,64,64,64",
-    #"layers": "128,128,128,128",
+    "layers": "128,128,128,128",
     #"layers": "192,192,192,192",
-    "layers": "256,256,256,256",
+    #"layers": "256,256,256,256",
     #"layers": "512,512,512,512",
     
     # 1)
@@ -34,9 +34,9 @@ FIXED_PARAMS = {
     "L_min": -5.0,
     "L_max": 5.0,
     # 2)
-    #"n_steps": 39_999,
+    "n_steps": 9_999,
     #"n_steps": 9,
-    #"n_steps_decay": 1600, # = n_steps / 25
+    "n_steps_decay": 400, # = n_steps / 25
     # 3)
     "resampling_frequency": 100, # res_freq * bs = n_res_points
     "bs": 1_000,
@@ -51,8 +51,9 @@ FIXED_PARAMS = {
 
     #"sampling_type": "trajectories",
     "sampling_type": "domain_and_trajectories",
-    #"f_pde_full_domain": 1,
-    #"f_pde_trajs": 1,
+    "f_pde_full_domain": 1,
+    "f_pde_trajs": 1,
+
     "n_trajs": 1_000,
     "nt_steps": 1_000,
 
@@ -106,23 +107,23 @@ SEARCH_AXES = {
     #],
     #"T": [5.0, 6.0],
     #"bs": [10_000, 1_000]
-    "stepping": [
-        {
-            "n_steps": 19_999,
-            #"n_steps": 19,
-            "n_steps_decay": 800,
-        },
-        {
-            "n_steps": 9_999,
-            #"n_steps": 9,
-            "n_steps_decay": 400,
-        },
-        {
-            "n_steps": 39_999,
-            #"n_steps": 39,
-            "n_steps_decay": 1_600,
-        },
-    ],
+    #"stepping": [
+    #    {
+    #        "n_steps": 19_999,
+    #        #"n_steps": 19,
+    #        "n_steps_decay": 800,
+    #    },
+    #    {
+    #        "n_steps": 9_999,
+    #        #"n_steps": 9,
+    #        "n_steps_decay": 400,
+    #    },
+    #    {
+    #        "n_steps": 39_999,
+    #        #"n_steps": 39,
+    #        "n_steps_decay": 1_600,
+    #    },
+    #],
     #"use_adaptive_weights": [True, False],
     #"n_steps_decay": [1_000, 2_000, 500], # ~ 20-5 times decay (10 times was best so far)
     #"layers": [
@@ -133,16 +134,16 @@ SEARCH_AXES = {
     #],
     "sampling": [
         {
-            "f_pde_full_domain": 1,
-            "f_pde_trajs": 1,
+            "f_ic_full_domain": 1,
+            "f_ic_trajs": 1,
         },
         {
-            "f_pde_full_domain": 2,
-            "f_pde_trajs": 1,
+            "f_ic_full_domain": 4,
+            "f_ic_trajs": 1,
         },
         {
-            "f_pde_full_domain": 1,
-            "f_pde_trajs": 2,
+            "f_ic_full_domain": 1,
+            "f_ic_trajs": 4,
         },
     ],
     #"sampling": [

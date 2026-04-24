@@ -44,6 +44,8 @@ parser.add_argument("--ic_type", default="gauss", type=str, help="gauss, cauchy,
 parser.add_argument("--sampling_type", default="domain_and_trajectories", type=str, help="trajectories, domain")
 parser.add_argument("--f_pde_full_domain", default=1, type=int, help="")
 parser.add_argument("--f_pde_trajs", default=2, type=int, help="")
+parser.add_argument("--f_ic_full_domain", default=2, type=int, help="")
+parser.add_argument("--f_ic_trajs", default=1, type=int, help="")
 
 #
 parser.add_argument("--enable_profiler", action="store_true", help="")
@@ -218,6 +220,8 @@ elif sampling_type == "domain_and_trajectories":
         "use_rbas": args.use_rbas,
         "f_pde_full_domain": args.f_pde_full_domain,
         "f_pde_trajs": args.f_pde_trajs,
+        "f_ic_full_domain": args.f_ic_full_domain,
+        "f_ic_trajs": args.f_ic_trajs,
     }
 
 from trainers import PINN_Trainer

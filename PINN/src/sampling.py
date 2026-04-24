@@ -711,8 +711,21 @@ def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settin
             f_ic   =  1,
             f_norm =  0,
         )
-        x0_ic = pde_model.sample_x0(n_initial)
-        X_ic = contruct_trajs_ic(x0_ic, n_initial)
+        f_ic_full_domain = settings.get("f_ic_full_domain", 1)
+        f_ic_trajs = settings.get("f_ic_trajs", 1)
+        n_ic_full_domain = f_ic_full_domain * n_initial // (f_ic_full_domain + f_ic_trajs)
+        n_ic_trajs =             f_ic_trajs * n_initial // (f_ic_full_domain + f_ic_trajs)
+        x0_ic_trajs = pde_model.sample_x0(n_ic_trajs)
+        X_ic_trajs = contruct_trajs_ic(x0_ic_trajs, n_ic_trajs)
+        strategy = settings.get("sampling_strategy", "lhs")
+        X_ic_full_domain = sample_ic(n_ic_full_domain, d, sampling_strategy=strategy, device=device)
+        X_ic = torch.cat([
+            X_ic_trajs,
+            X_ic_full_domain
+        ], dim=0)
+        print(f"IC loader: X.shape = {X_ic.shape}, bs = {bs_ic}")
+        print(f" - full domain sampling (X.shape = {X_ic_full_domain.shape})")
+        print(f" - trajs sampling (X.shape = {X_ic_trajs.shape})")
     else:
         bs_pde = bs
         n_interior = n_res_points
@@ -772,7 +785,6 @@ def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settin
     bundle = {}
     bundle["pde"] = DataLoader(CollocationDataset(X_pde, precomputed["pde"]), batch_size=bs_pde, shuffle=True)
     if "ic" in active_losses:
-        print(f"IC loader: X.shape = {X_ic.shape}, bs = {bs_ic}")
         bundle["ic"] = DataLoader(CollocationDataset(X_ic, precomputed["ic"]), batch_size=bs_ic, shuffle=True)
     return bundle
 
