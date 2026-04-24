@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import csv
+import tempfile
 import unittest
 
 import numpy as np
 
 from combination_technique import (
+    BenchmarkCase,
     ConvectionDiffusionReaction,
     LinearSolveConfig,
     OrnsteinUhlenbeck,
@@ -17,9 +20,11 @@ from combination_technique import (
     combination_weight,
     gaussian_density,
     result_to_sgpp,
+    run_backend_benchmark,
     sgpp_available,
     solve_combination,
     solve_on_grid,
+    solve_on_grid_with_stats,
 )
 
 
@@ -145,6 +150,88 @@ class GridAndSolverTests(unittest.TestCase):
         self.assertEqual(solution.shape, (grid.size,))
         self.assertTrue(np.all(np.isfinite(solution)))
 
+    def test_solve_on_grid_with_stats_reports_iterations_and_timing(self) -> None:
+        model = OrnsteinUhlenbeck(np.eye(2))
+        grid = TensorGrid.from_level((2, 2), domain_radius=3.0)
+        result = solve_on_grid_with_stats(
+            model,
+            grid,
+            gaussian_density,
+            final_time=0.1,
+            stepper=TimeStepper(dt=0.05, theta=1.0),
+            bc="neumann",
+            operator_backend="linear_operator",
+            linear_solve=LinearSolveConfig(
+                method="gmres",
+                preconditioner="jacobi",
+                rtol=1e-10,
+                atol=1e-12,
+                maxiter=200,
+            ),
+        )
+        self.assertEqual(result.values.shape, (grid.size,))
+        self.assertEqual(result.stats.grid_size, grid.size)
+        self.assertEqual(result.stats.steps, 2)
+        self.assertGreaterEqual(result.stats.total_seconds, 0.0)
+        self.assertGreaterEqual(result.stats.operator_setup_seconds, 0.0)
+        self.assertGreaterEqual(result.stats.solve_seconds, 0.0)
+        self.assertGreater(result.stats.krylov_iterations, 0)
+        self.assertEqual(len(result.stats.krylov_iterations_per_step), result.stats.steps)
+
+    def test_matrix_solver_with_ilu_preconditioner(self) -> None:
+        model = OrnsteinUhlenbeck(np.eye(2))
+        grid = TensorGrid.from_level((2, 2), domain_radius=3.0)
+        stepper = TimeStepper(dt=0.05, theta=1.0)
+        solution = solve_on_grid(
+            model,
+            grid,
+            gaussian_density,
+            final_time=0.1,
+            stepper=stepper,
+            bc="neumann",
+            operator_backend="matrix",
+            linear_solve=LinearSolveConfig(
+                method="gmres",
+                preconditioner="ilu",
+                ilu_drop_tol=1e-4,
+                ilu_fill_factor=10.0,
+                rtol=1e-10,
+                atol=1e-12,
+                maxiter=200,
+            ),
+        )
+        self.assertEqual(solution.shape, (grid.size,))
+        self.assertTrue(np.all(np.isfinite(solution)))
+
+    def test_rejects_incompatible_preconditioner_backend_pair(self) -> None:
+        model = OrnsteinUhlenbeck(np.eye(2))
+        grid = TensorGrid.from_level((2, 2), domain_radius=3.0)
+        stepper = TimeStepper(dt=0.05, theta=1.0)
+
+        with self.assertRaises(ValueError):
+            solve_on_grid(
+                model,
+                grid,
+                gaussian_density,
+                final_time=0.1,
+                stepper=stepper,
+                bc="neumann",
+                operator_backend="matrix",
+                linear_solve=LinearSolveConfig(preconditioner="jacobi"),
+            )
+
+        with self.assertRaises(ValueError):
+            solve_on_grid(
+                model,
+                grid,
+                gaussian_density,
+                final_time=0.1,
+                stepper=stepper,
+                bc="neumann",
+                operator_backend="linear_operator",
+                linear_solve=LinearSolveConfig(preconditioner="ilu"),
+            )
+
     def test_combination_result_evaluates_points(self) -> None:
         model = OrnsteinUhlenbeck(np.eye(2))
         result = solve_combination(
@@ -160,6 +247,9 @@ class GridAndSolverTests(unittest.TestCase):
         values = result.evaluate(np.array([[0.0, 0.0], [1.0, 0.0]]))
         self.assertEqual(values.shape, (2,))
         self.assertTrue(np.all(np.isfinite(values)))
+        self.assertEqual(len(result.component_stats()), len(result.components))
+        self.assertGreaterEqual(result.total_component_time, 0.0)
+        self.assertGreaterEqual(result.total_krylov_iterations, 0)
 
     def test_combination_accepts_linear_operator_backend(self) -> None:
         model = OrnsteinUhlenbeck(np.eye(2))
@@ -177,6 +267,42 @@ class GridAndSolverTests(unittest.TestCase):
         values = result.evaluate(np.array([[0.0, 0.0], [1.0, 0.0]]))
         self.assertEqual(values.shape, (2,))
         self.assertTrue(np.all(np.isfinite(values)))
+
+    def test_run_backend_benchmark_writes_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = f"{tmpdir}/benchmark.csv"
+            rows = run_backend_benchmark(
+                output_path=output,
+                dimension=2,
+                level=3,
+                final_time=0.02,
+                dt=0.01,
+                domain_radius=2.0,
+                rho=0.1,
+                max_workers=1,
+                repeats=1,
+                cases=(
+                    BenchmarkCase(
+                        name="matrix_direct",
+                        operator_backend="matrix",
+                        linear_solve=LinearSolveConfig(preconditioner="none"),
+                    ),
+                    BenchmarkCase(
+                        name="linear_operator_jacobi",
+                        operator_backend="linear_operator",
+                        linear_solve=LinearSolveConfig(
+                            method="gmres",
+                            preconditioner="jacobi",
+                            maxiter=100,
+                        ),
+                    ),
+                ),
+            )
+            self.assertGreater(len(rows), 0)
+            with open(output, newline="", encoding="utf-8") as handle:
+                written_rows = list(csv.DictReader(handle))
+            self.assertEqual(len(written_rows), len(rows))
+            self.assertEqual(sum(row["row_type"] == "summary" for row in written_rows), 2)
 
     @unittest.skipUnless(sgpp_available(), "SG++ bindings are not available")
     def test_sgpp_interpolant_from_function(self) -> None:

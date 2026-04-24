@@ -13,7 +13,13 @@ from .fd import BoundaryCondition
 from .grid import TensorGrid
 from .indices import combination_indices, combination_weight
 from .models import OperatorModel
-from .solver import LinearSolveConfig, OperatorBackend, TimeStepper, solve_on_grid
+from .solver import (
+    GridSolveStats,
+    LinearSolveConfig,
+    OperatorBackend,
+    TimeStepper,
+    solve_on_grid_with_stats,
+)
 
 
 @dataclass(frozen=True)
@@ -22,6 +28,7 @@ class ComponentSolution:
     weight: int
     grid: TensorGrid
     values: np.ndarray
+    stats: GridSolveStats
 
     @property
     def shaped_values(self) -> np.ndarray:
@@ -44,6 +51,17 @@ class CombinationResult:
     level: int
     dimension: int
     components: tuple[ComponentSolution, ...]
+
+    @property
+    def total_component_time(self) -> float:
+        return float(sum(component.stats.total_seconds for component in self.components))
+
+    @property
+    def total_krylov_iterations(self) -> int:
+        return int(sum(component.stats.krylov_iterations for component in self.components))
+
+    def component_stats(self) -> tuple[GridSolveStats, ...]:
+        return tuple(component.stats for component in self.components)
 
     def evaluate(self, points: np.ndarray) -> np.ndarray:
         """Evaluate the combined solution at points.
@@ -83,7 +101,7 @@ def _solve_component(args) -> ComponentSolution:
         linear_solve,
     ) = args
     grid = TensorGrid.from_level(levels, domain_radius=domain_radius)
-    values = solve_on_grid(
+    result = solve_on_grid_with_stats(
         model,
         grid,
         initial_condition,
@@ -93,7 +111,13 @@ def _solve_component(args) -> ComponentSolution:
         operator_backend=operator_backend,
         linear_solve=linear_solve,
     )
-    return ComponentSolution(levels=levels, weight=weight, grid=grid, values=values)
+    return ComponentSolution(
+        levels=levels,
+        weight=weight,
+        grid=grid,
+        values=result.values,
+        stats=result.stats,
+    )
 
 
 def solve_combination(
