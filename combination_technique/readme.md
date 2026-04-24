@@ -232,13 +232,21 @@ result = solve_combination(
     bc="dirichlet",
     max_workers=1,
     operator_backend="linear_operator",
-    linear_solve=LinearSolveConfig(method="gmres", rtol=1e-8, maxiter=200),
+    linear_solve=LinearSolveConfig(
+        method="gmres",
+        preconditioner="jacobi",
+        rtol=1e-8,
+        maxiter=200,
+    ),
 )
 ```
 
 Use `operator_backend="matrix"` for the original assembled sparse-matrix path.
 The `linear_operator` backend avoids materializing the full tensor-grid
 operator and is intended for larger high-dimensional component problems.
+`preconditioner="jacobi"` uses a diagonal left preconditioner for the implicit
+theta-method system and is the recommended first option before trying more
+expensive preconditioners.
 
 General convection-diffusion-reaction example:
 

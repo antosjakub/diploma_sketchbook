@@ -85,6 +85,13 @@ class GridAndSolverTests(unittest.TestCase):
         vector = np.linspace(0.0, 1.0, grid.size)
         np.testing.assert_allclose(matrix @ vector, operator @ vector, atol=1e-12, rtol=1e-12)
 
+    def test_operator_diagonal_matches_assembled_matrix(self) -> None:
+        model = OrnsteinUhlenbeck(np.array([[1.0, 0.2], [0.2, 0.8]]))
+        grid = TensorGrid.from_level((2, 2), domain_radius=2.0)
+        matrix = model.build_operator(grid, bc="dirichlet")
+        diagonal = model.operator_diagonal(grid, bc="dirichlet")
+        np.testing.assert_allclose(matrix.diagonal(), diagonal, atol=1e-12, rtol=1e-12)
+
     def test_matrix_and_linear_operator_solvers_agree(self) -> None:
         model = OrnsteinUhlenbeck(np.eye(2))
         grid = TensorGrid.from_level((2, 2), domain_radius=3.0)
@@ -114,6 +121,29 @@ class GridAndSolverTests(unittest.TestCase):
             atol=1e-8,
             rtol=1e-8,
         )
+
+    def test_linear_operator_solver_with_jacobi_preconditioner(self) -> None:
+        model = OrnsteinUhlenbeck(np.eye(2))
+        grid = TensorGrid.from_level((2, 2), domain_radius=3.0)
+        stepper = TimeStepper(dt=0.05, theta=1.0)
+        solution = solve_on_grid(
+            model,
+            grid,
+            gaussian_density,
+            final_time=0.1,
+            stepper=stepper,
+            bc="neumann",
+            operator_backend="linear_operator",
+            linear_solve=LinearSolveConfig(
+                method="gmres",
+                preconditioner="jacobi",
+                rtol=1e-10,
+                atol=1e-12,
+                maxiter=200,
+            ),
+        )
+        self.assertEqual(solution.shape, (grid.size,))
+        self.assertTrue(np.all(np.isfinite(solution)))
 
     def test_combination_result_evaluates_points(self) -> None:
         model = OrnsteinUhlenbeck(np.eye(2))

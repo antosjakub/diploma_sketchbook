@@ -16,6 +16,7 @@ from .models import OperatorModel
 
 OperatorBackend = Literal["matrix", "linear_operator"]
 IterativeMethod = Literal["gmres", "bicgstab"]
+PreconditionerKind = Literal["none", "jacobi"]
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ class LinearSolveConfig:
     """Configuration for implicit iterative solves."""
 
     method: IterativeMethod = "gmres"
+    preconditioner: PreconditionerKind = "none"
     rtol: float = 1e-8
     atol: float = 0.0
     maxiter: int | None = None
@@ -52,13 +54,16 @@ class LinearSolveConfig:
             raise ValueError("atol must be nonnegative")
         if self.maxiter is not None and self.maxiter <= 0:
             raise ValueError("maxiter must be positive when provided")
+        if self.preconditioner not in {"none", "jacobi"}:
+            raise ValueError("preconditioner must be 'none' or 'jacobi'")
 
 
-def _solve_iterative(system, rhs: np.ndarray, config: LinearSolveConfig) -> np.ndarray:
+def _solve_iterative(system, rhs: np.ndarray, config: LinearSolveConfig, preconditioner=None) -> np.ndarray:
     if config.method == "gmres":
         solution, info = spla.gmres(
             system,
             rhs,
+            M=preconditioner,
             rtol=config.rtol,
             atol=config.atol,
             maxiter=config.maxiter,
@@ -67,6 +72,7 @@ def _solve_iterative(system, rhs: np.ndarray, config: LinearSolveConfig) -> np.n
         solution, info = spla.bicgstab(
             system,
             rhs,
+            M=preconditioner,
             rtol=config.rtol,
             atol=config.atol,
             maxiter=config.maxiter,
@@ -95,7 +101,8 @@ def solve_on_grid(
     ``operator_backend="matrix"`` keeps the original assembled sparse-matrix
     path. ``operator_backend="linear_operator"`` uses a matrix-free
     ``scipy.sparse.linalg.LinearOperator`` and iterative solves for implicit
-    steps.
+    steps. For that path, ``LinearSolveConfig(preconditioner="jacobi")``
+    enables a diagonal left preconditioner for the implicit system.
     """
 
     if final_time < 0.0:
@@ -153,9 +160,22 @@ def solve_on_grid(
         matvec=lambda x: np.asarray(x, dtype=float).reshape(-1) - stepper.theta * dt * (operator @ x),
         dtype=float,
     )
+    preconditioner = None
+    if linear_solve.preconditioner == "jacobi":
+        lhs_diagonal = 1.0 - stepper.theta * dt * model.operator_diagonal(grid, bc=bc)
+        safe_diagonal = lhs_diagonal.copy()
+        near_zero = np.isclose(safe_diagonal, 0.0)
+        safe_diagonal[near_zero] = 1.0
+        inverse_diagonal = 1.0 / safe_diagonal
+        inverse_diagonal[near_zero] = 1.0
+        preconditioner = spla.LinearOperator(
+            (grid.size, grid.size),
+            matvec=lambda x: inverse_diagonal * np.asarray(x, dtype=float).reshape(-1),
+            dtype=float,
+        )
 
     for _ in range(steps):
-        u = _solve_iterative(lhs, apply_rhs(u), linear_solve)
+        u = _solve_iterative(lhs, apply_rhs(u), linear_solve, preconditioner=preconditioner)
         if bc == "dirichlet":
             u[grid.boundary_mask()] = 0.0
 

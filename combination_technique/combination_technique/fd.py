@@ -87,6 +87,16 @@ def apply_axis_operator(
     return np.asarray(restored, dtype=float).reshape(-1)
 
 
+def lift_axis_diagonal(diagonal: np.ndarray, shape: tuple[int, ...], axis: int) -> np.ndarray:
+    """Lift a 1D operator diagonal to the full tensor-grid diagonal."""
+
+    template = np.ones(shape, dtype=float)
+    selector = [None] * len(shape)
+    selector[axis] = slice(None)
+    template *= np.asarray(diagonal, dtype=float)[tuple(selector)]
+    return template.reshape(-1)
+
+
 def tensor_derivative_matrices(
     shape: tuple[int, ...],
     spacing: tuple[float, ...],

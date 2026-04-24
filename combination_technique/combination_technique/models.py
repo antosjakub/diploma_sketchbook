@@ -12,6 +12,7 @@ from scipy.sparse.linalg import LinearOperator
 from .fd import (
     BoundaryCondition,
     apply_axis_operator,
+    lift_axis_diagonal,
     tensor_derivative_1d_matrices,
     tensor_derivative_matrices,
 )
@@ -46,6 +47,14 @@ class OperatorModel(Protocol):
         bc: BoundaryCondition = "dirichlet",
     ) -> LinearOperator:
         """Build a matrix-free semidiscrete operator on one tensor grid."""
+
+    def operator_diagonal(
+        self,
+        grid: TensorGrid,
+        *,
+        bc: BoundaryCondition = "dirichlet",
+    ) -> np.ndarray:
+        """Return the diagonal of the semidiscrete operator."""
 
 
 @dataclass(frozen=True)
@@ -181,6 +190,34 @@ class LinearFokkerPlanck:
 
         return LinearOperator((grid.size, grid.size), matvec=matvec, dtype=float)
 
+    def operator_diagonal(
+        self,
+        grid: TensorGrid,
+        *,
+        bc: BoundaryCondition = "dirichlet",
+    ) -> np.ndarray:
+        if grid.dimension != self.dimension:
+            raise ValueError("grid dimension does not match model dimension")
+
+        _, d2_1d = tensor_derivative_1d_matrices(grid.shape, grid.spacing, bc)
+        diagonal = np.zeros(grid.size, dtype=float)
+
+        for axis in range(self.dimension):
+            coefficient = self.diffusion[axis, axis]
+            if coefficient != 0.0:
+                diagonal += coefficient * lift_axis_diagonal(d2_1d[axis].diagonal(), grid.shape, axis)
+
+        coords = grid.flat_coordinates()
+        div_values = -np.asarray(self.divergence_drift(coords), dtype=float)
+        if div_values.shape != (grid.size,):
+            raise ValueError("divergence_drift must return shape (npoints,)")
+        diagonal += div_values
+
+        if bc == "dirichlet":
+            diagonal[grid.boundary_mask()] = 0.0
+
+        return diagonal
+
 
 @dataclass(frozen=True)
 class ConvectionDiffusionReaction:
@@ -286,6 +323,31 @@ class ConvectionDiffusionReaction:
             return result
 
         return LinearOperator((grid.size, grid.size), matvec=matvec, dtype=float)
+
+    def operator_diagonal(
+        self,
+        grid: TensorGrid,
+        *,
+        bc: BoundaryCondition = "dirichlet",
+    ) -> np.ndarray:
+        if grid.dimension != self.dimension:
+            raise ValueError("grid dimension does not match model dimension")
+
+        _, d2_1d = tensor_derivative_1d_matrices(grid.shape, grid.spacing, bc)
+        diagonal = np.zeros(grid.size, dtype=float)
+
+        if self.diffusion:
+            for axis in range(self.dimension):
+                diagonal += self.diffusion * lift_axis_diagonal(d2_1d[axis].diagonal(), grid.shape, axis)
+
+        coords = grid.flat_coordinates()
+        reaction_values = self.reaction(coords)
+        diagonal += reaction_values
+
+        if bc == "dirichlet":
+            diagonal[grid.boundary_mask()] = 0.0
+
+        return diagonal
 
 
 @dataclass(frozen=True)
