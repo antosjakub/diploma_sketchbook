@@ -19,6 +19,11 @@ $$
 $$
 Thus the corresponding PDE then reads
 $$
+\partial_t p = \frac{1}{2} div(\Sigma\nabla p) + \frac{1}{2}\nabla\cdot(x\,p)\\
+\partial_t p = \frac{1}{2} div(\Sigma\nabla p) + \frac{1}{2}dp + \frac{1}{2}x\cdot \nabla p \\
+$$
+
+$$
 \partial_t p - \frac{1}{2} \nabla\cdot (\Sigma\nabla p + x\,p) = 0\\
 \partial_t p + \nabla\cdot J = 0\\
 $$
@@ -27,6 +32,98 @@ $$
 J\cdot n = 0\\
 (\Sigma\nabla p + x\,p)\cdot n = 0
 $$
+
+To get rid of the mixed second derivatived caused by the $\Sigma$ matrix, we consider the change of coordinates
+$y = A\,x$
+where A is a general matrix whose form is to be determined.
+
+The change of coordinates introduces a jacobian terms into the PDE, namely
+
+$$
+\frac{\partial p}{\partial x_i}
+= \frac{\partial p}{\partial y_j}\frac{\partial y_j}{\partial x_i}
+= \frac{\partial p}{\partial y_j}\frac{\partial}{\partial x_i}
+\left( A_{jk}x_k \right)
+= \frac{\partial p}{\partial y_j}A_{ji}
+$$
+
+Hence
+$$
+\nabla_x p = A^T\nabla_y p
+$$
+
+Now consider a general vector function $\vec{v}(x):\R^d\to\R^d$
+
+$$
+div_x(\vec{v})
+= \frac{\partial v_i}{\partial x_i}
+= ...
+= \frac{\partial v_i}{\partial y_j}A_{ji}
+= \frac{\partial}{\partial y_j}(A_{ji}v_i)
+= div_y(A\vec{v})
+$$
+
+Setting $\vec{v} = \Sigma\nabla_x p$ and combining the previous two results, we obtain:
+
+$$
+div_x(\Sigma\nabla_x p)
+= div_y(A\Sigma A^T\nabla_y p)
+$$
+
+The PDE thus transform from
+
+$$
+\partial_t p
+= \frac{1}{2} div_x(\Sigma\nabla_x p)
++ \frac{1}{2}x\cdot \nabla_x p
++ \frac{1}{2}d\,p
+$$
+
+to
+$$
+\partial_t p
+= \frac{1}{2} div_y(A\Sigma A^T\nabla_y p)
++ \frac{1}{2}(A^{-1}y)\cdot (A^T\nabla_y p)
++ \frac{1}{2}d\,p
+$$
+
+And since
+$$
+(A^{-1}y)\cdot (A^T\nabla_y p)
+= (A^{-1}y)^T (A^T\nabla_y p)
+= y^TA^{-T}A^T\nabla_y p
+= y^T\nabla_y p
+$$
+
+The system further simplifiesa to
+$$
+\partial_t p
+= div_y(A\Sigma A^T\nabla_y p)
++ \frac{1}{2}y\cdot \nabla_y p
++ \frac{1}{2}d\,p
+$$
+
+Now, we know that $\Sigma=Q^T\Gamma Q$, implying
+$$
+A\Sigma A^T
+= A Q^T \Gamma Q A^T
+$$
+Setting $A=\Gamma^{-1/2}Q$, we obtain $A\Sigma A^T = I$.
+
+Lastly, setting $p(x,t)=p(A^{-1}y,t)=:\tilde{p}(y,t)$
+
+The PDE system thus becomes
+$$
+\partial_t \tilde{p}
+= \Delta_y \tilde{p}
++ \frac{1}{2}y\cdot \nabla_y \tilde{p}
++ \frac{1}{2}d\,\tilde{p}
+\\
+\tilde{p}(y,0) = p_0(Q^T\Gamma^{1/2}\,y)
+$$
+
+We then reconstruct the solution as $p(x,t) = \tilde{p}(\Gamma^{-1/2}Q\,x,t)$
+
 
 
 We consider 3 distribution for the initial condition:

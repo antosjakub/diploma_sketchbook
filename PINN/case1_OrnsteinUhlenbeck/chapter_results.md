@@ -78,6 +78,12 @@ s_0(x) = \nabla_x \log p_0(x) = -(d+1)\frac{x}{1 + ||x||^2}
 $$
 
 
+Long tails
+
+hardcoded
+pinn no bc... - no long tail problem?
+
+
 ## Case 3: p_0(x) = laplace distrib
 
 $$
@@ -105,20 +111,23 @@ $\operatorname{sign}(x)|_i := \operatorname{sign}(x_i)$
 
 note: p,q,s discontinuous 
 
-#### Original Score-PINN
 
-- hardcoded bc ic
+We, again try to hardcode the initial and boundary conditions into the network output:
+
+$$
+s_\theta(x) = \mathcal{N}_\theta(x)\,t + s(x)
+$$
+
+Because of the discotinuity, this leads to ... - nice pattern I has showing has.
+
+
+We next train a score-pinn network but with both the pde and ic losses.
+
+We need to balance them. Based on out chooce of $\lambda_ic$ and $\lambda_pde$ the trained solution either follows the start-like pattern from the initial condition or abrubtly destroys the pattern and directly relaxes to gaussina.
+
+To enable more natural behavior, we thus turn to adaptive loss weighting.
+
+The authors 
 - trajs sampling
+- domain sampling?
 
-plot
-
-we see...
-
-
-#### Score-PINN variants
-- variants
-    - full domain - not only trajs
-    - with loss in bc ic
-    - with loss in bc
-    - 1k per epoch
-    - looping batches
