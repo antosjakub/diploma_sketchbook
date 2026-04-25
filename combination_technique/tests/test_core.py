@@ -8,6 +8,7 @@ import numpy as np
 
 from combination_technique import (
     BenchmarkCase,
+    LinearFokkerPlanck,
     ConvectionDiffusionReaction,
     LinearSolveConfig,
     OrnsteinUhlenbeck,
@@ -89,6 +90,37 @@ class GridAndSolverTests(unittest.TestCase):
         operator = model.build_linear_operator(grid, bc="dirichlet")
         vector = np.linspace(0.0, 1.0, grid.size)
         np.testing.assert_allclose(matrix @ vector, operator @ vector, atol=1e-12, rtol=1e-12)
+
+    def test_isotropic_diffusion_matches_laplacian_model(self) -> None:
+        alpha = 0.4
+        drift = lambda coords: -0.25 * coords
+        reaction = lambda coords: np.full(coords.shape[1], 0.3, dtype=float)
+
+        class TestLinearFokkerPlanck(LinearFokkerPlanck):
+            def drift(self, coords: np.ndarray) -> np.ndarray:
+                return -drift(coords)
+
+            def divergence_drift(self, coords: np.ndarray) -> np.ndarray:
+                return -reaction(coords)
+
+        laplace_model = ConvectionDiffusionReaction(
+            dimension=2,
+            diffusion=alpha,
+            drift_fn=drift,
+            reaction_fn=reaction,
+        )
+        fokker_planck_model = TestLinearFokkerPlanck(alpha * np.eye(2), dimension=2)
+        grid = TensorGrid.from_level((2, 2), domain_radius=2.0)
+        vector = np.linspace(0.0, 1.0, grid.size)
+
+        laplace_operator = laplace_model.build_operator(grid, bc="dirichlet")
+        fokker_planck_operator = fokker_planck_model.build_operator(grid, bc="dirichlet")
+        np.testing.assert_allclose(
+            laplace_operator @ vector,
+            fokker_planck_operator @ vector,
+            atol=1e-12,
+            rtol=1e-12,
+        )
 
     def test_operator_diagonal_matches_assembled_matrix(self) -> None:
         model = OrnsteinUhlenbeck(np.array([[1.0, 0.2], [0.2, 0.8]]))

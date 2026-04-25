@@ -248,6 +248,94 @@ operator and is intended for larger high-dimensional component problems.
 theta-method system and is the recommended first option before trying more
 expensive preconditioners.
 
+The diffusion handling is also split internally:
+- isotropic diffusion `alpha * Delta u` uses a dedicated Laplacian fast path
+- full constant-matrix diffusion `div(Sigma grad u)` uses the general mixed-derivative path
+
+That means transformed problems with scalar diffusion are now the optimized
+default case in both assembled and matrix-free operators.
+
+For assembled matrix experiments, you can use SciPy's ILU preconditioner:
+
+```python
+result = solve_combination(
+    model,
+    level=3,
+    initial_condition=gaussian_density,
+    final_time=0.1,
+    stepper=TimeStepper(dt=0.02, theta=1.0),
+    domain_radius=4.0,
+    bc="dirichlet",
+    max_workers=1,
+    operator_backend="matrix",
+    linear_solve=LinearSolveConfig(
+        method="gmres",
+        preconditioner="ilu",
+        ilu_drop_tol=1e-4,
+        ilu_fill_factor=10.0,
+        maxiter=200,
+    ),
+)
+```
+
+Use `preconditioner="ilu"` only with `operator_backend="matrix"`, and
+`preconditioner="jacobi"` only with `operator_backend="linear_operator"`.
+
+For quantitative comparisons, use `solve_on_grid_with_stats(...)` or inspect
+the component diagnostics stored in `solve_combination(...)` results:
+
+```python
+from combination_technique import solve_on_grid_with_stats
+
+grid_result = solve_on_grid_with_stats(
+    model,
+    grid,
+    gaussian_density,
+    final_time=0.1,
+    stepper=TimeStepper(dt=0.02, theta=1.0),
+    operator_backend="linear_operator",
+    linear_solve=LinearSolveConfig(method="gmres", preconditioner="jacobi"),
+)
+print(grid_result.stats.krylov_iterations)
+print(grid_result.stats.total_seconds)
+
+combo = solve_combination(
+    model,
+    level=3,
+    initial_condition=gaussian_density,
+    final_time=0.1,
+    stepper=TimeStepper(dt=0.02, theta=1.0),
+    domain_radius=4.0,
+    max_workers=1,
+    operator_backend="linear_operator",
+    linear_solve=LinearSolveConfig(method="gmres", preconditioner="jacobi"),
+)
+print(combo.total_krylov_iterations)
+print(combo.total_component_time)
+for component in combo.components:
+    print(component.levels, component.grid.size, component.stats.krylov_iterations)
+```
+
+For repeatable thesis runs, use the benchmark CLI:
+
+```bash
+python examples/benchmark_backends.py \
+  --dimension 3 \
+  --level 4 \
+  --final-time 0.1 \
+  --dt 0.02 \
+  --output results/ou_backend_benchmark.csv
+```
+
+The CSV contains both:
+- summary rows, one per backend/repeat, with wall time, total component time, and total Krylov iterations
+- component rows, one per tensor-grid component solve, with level multi-index, grid size, setup time, solve time, and Krylov iterations
+
+The default benchmark cases are:
+- `matrix_direct`
+- `matrix_ilu`
+- `linear_operator_jacobi`
+
 General convection-diffusion-reaction example:
 
 ```python

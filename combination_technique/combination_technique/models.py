@@ -57,6 +57,43 @@ class OperatorModel(Protocol):
         """Return the diagonal of the semidiscrete operator."""
 
 
+def _diffusion_scalar_identity(diffusion: np.ndarray) -> float | None:
+    """Return alpha when diffusion is alpha * I, else ``None``."""
+
+    diagonal = np.diag(diffusion)
+    if diagonal.size == 0:
+        return 0.0
+    alpha = float(diagonal[0])
+    if np.allclose(diffusion, alpha * np.eye(diffusion.shape[0])):
+        return alpha
+    return None
+
+
+def _active_diagonal_diffusion(diffusion: np.ndarray) -> list[tuple[int, float]]:
+    """Return nonzero diagonal entries as ``(axis, coefficient)`` pairs."""
+
+    diagonal = np.diag(diffusion)
+    return [
+        (axis, float(coefficient))
+        for axis, coefficient in enumerate(diagonal)
+        if coefficient != 0.0
+    ]
+
+
+def _active_mixed_diffusion(diffusion: np.ndarray) -> list[tuple[float, int, int]]:
+    """Return nonzero off-diagonal diffusion entries."""
+
+    active: list[tuple[float, int, int]] = []
+    for i in range(diffusion.shape[0]):
+        for j in range(diffusion.shape[1]):
+            if i == j:
+                continue
+            coefficient = float(diffusion[i, j])
+            if coefficient != 0.0:
+                active.append((coefficient, i, j))
+    return active
+
+
 @dataclass(frozen=True)
 class LinearFokkerPlanck:
     """Linear Fokker-Planck equation with constant diffusion.
@@ -87,6 +124,12 @@ class LinearFokkerPlanck:
     def divergence_drift(self, coords: np.ndarray) -> np.ndarray:
         return np.zeros(coords.shape[1], dtype=float)
 
+    def _diffusion_structure(self) -> tuple[float | None, list[tuple[int, float]], list[tuple[float, int, int]]]:
+        isotropic = _diffusion_scalar_identity(self.diffusion)
+        diagonal = _active_diagonal_diffusion(self.diffusion)
+        mixed = _active_mixed_diffusion(self.diffusion)
+        return isotropic, diagonal, mixed
+
     def build_operator(
         self,
         grid: TensorGrid,
@@ -99,16 +142,16 @@ class LinearFokkerPlanck:
         d1, d2 = tensor_derivative_matrices(grid.shape, grid.spacing, bc)
         size = grid.size
         operator = sparse.csr_matrix((size, size), dtype=float)
+        isotropic, diagonal_diffusion, mixed_diffusion = self._diffusion_structure()
 
-        for i in range(self.dimension):
-            for j in range(self.dimension):
-                coefficient = self.diffusion[i, j]
-                if coefficient == 0.0:
-                    continue
-                if i == j:
-                    operator = operator + coefficient * d2[i]
-                else:
-                    operator = operator + coefficient * (d1[i] @ d1[j])
+        if isotropic is not None:
+            for second in d2:
+                operator = operator + isotropic * second
+        else:
+            for axis, coefficient in diagonal_diffusion:
+                operator = operator + coefficient * d2[axis]
+            for coefficient, i, j in mixed_diffusion:
+                operator = operator + coefficient * (d1[i] @ d1[j])
 
         coords = grid.flat_coordinates()
         drift_values = np.asarray(self.drift(coords), dtype=float)
@@ -152,12 +195,7 @@ class LinearFokkerPlanck:
         if div_values.shape != (grid.size,):
             raise ValueError("divergence_drift must return shape (npoints,)")
 
-        active_diffusion: list[tuple[float, int, int]] = []
-        for i in range(self.dimension):
-            for j in range(self.dimension):
-                coefficient = self.diffusion[i, j]
-                if coefficient != 0.0:
-                    active_diffusion.append((coefficient, i, j))
+        isotropic, diagonal_diffusion, mixed_diffusion = self._diffusion_structure()
 
         active_drift = [
             (axis, -drift_values[axis].copy())
@@ -171,10 +209,13 @@ class LinearFokkerPlanck:
             vector = np.asarray(x, dtype=float).reshape(-1)
             result = np.zeros_like(vector)
 
-            for coefficient, i, j in active_diffusion:
-                if i == j:
-                    result += coefficient * apply_axis_operator(vector, d2_1d[i], grid.shape, i)
-                else:
+            if isotropic is not None:
+                for axis, second in enumerate(d2_1d):
+                    result += isotropic * apply_axis_operator(vector, second, grid.shape, axis)
+            else:
+                for axis, coefficient in diagonal_diffusion:
+                    result += coefficient * apply_axis_operator(vector, d2_1d[axis], grid.shape, axis)
+                for coefficient, i, j in mixed_diffusion:
                     mixed = apply_axis_operator(vector, d1_1d[j], grid.shape, j)
                     result += coefficient * apply_axis_operator(mixed, d1_1d[i], grid.shape, i)
 
@@ -201,10 +242,13 @@ class LinearFokkerPlanck:
 
         _, d2_1d = tensor_derivative_1d_matrices(grid.shape, grid.spacing, bc)
         diagonal = np.zeros(grid.size, dtype=float)
+        isotropic, diagonal_diffusion, _ = self._diffusion_structure()
 
-        for axis in range(self.dimension):
-            coefficient = self.diffusion[axis, axis]
-            if coefficient != 0.0:
+        if isotropic is not None:
+            for axis, second in enumerate(d2_1d):
+                diagonal += isotropic * lift_axis_diagonal(second.diagonal(), grid.shape, axis)
+        else:
+            for axis, coefficient in diagonal_diffusion:
                 diagonal += coefficient * lift_axis_diagonal(d2_1d[axis].diagonal(), grid.shape, axis)
 
         coords = grid.flat_coordinates()
