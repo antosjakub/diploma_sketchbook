@@ -12,7 +12,7 @@ class PINN_Trainer:
         self, model, optimizer, scheduler, pde_model,
         sampling_type, sampling_settings,
         loss_weighting, testing_suite, active_losses=("pde", "bc", "ic", "norm"),
-        profiler=None, device='cpu', dir_name=None,
+        profiler=None, device='cpu', dir_name=None, grad_clip_norm=None,
     ):
         self.model = model
         self.optimizer = optimizer
@@ -26,6 +26,7 @@ class PINN_Trainer:
         self.device = device
         self.d = self.pde_model.d
         self.dir_name = dir_name
+        self.grad_clip_norm = grad_clip_norm
 
         for k in active_losses:
             if k not in self.VALID_LOSS_KEYS:
@@ -80,6 +81,8 @@ class PINN_Trainer:
         loss_value = self.loss_weighting.weight_loss(per_term)
         with record_function("backward"):
             loss_value.backward()
+        if self.grad_clip_norm is not None:
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip_norm)
         with record_function("optimizer_step"):
             self.optimizer.step()
         per_term_vals = {k: per_term[i].item() for i, k in enumerate(self.active_losses)}
@@ -196,7 +199,8 @@ class PINN_Trainer_1k:
     def __init__(
         self, model, optimizer, scheduler, pde_model,
         sampling_type, sampling_settings,
-        testing_suite=None, profiler=None, device='cpu', dir_name=None
+        testing_suite=None, profiler=None, device='cpu', dir_name=None,
+        grad_clip_norm=None,
     ):
         self.model = model
         self.optimizer = optimizer
@@ -211,6 +215,7 @@ class PINN_Trainer_1k:
         self.loader = None
         self._loader_iter = None,
         self.dir_name = dir_name
+        self.grad_clip_norm = grad_clip_norm
 
     def _build_loader(self):
         self.loader = sampling.create_pde_loader(
@@ -235,6 +240,8 @@ class PINN_Trainer_1k:
                 loss_pde = self.pde_model.pde_loss(batch[0], self.model, batch[1])
         with record_function("backward"):
             loss_pde.backward()
+        if self.grad_clip_norm is not None:
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip_norm)
         with record_function("optimizer_step"):
             self.optimizer.step()
         return loss_pde

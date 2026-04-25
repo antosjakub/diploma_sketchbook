@@ -111,6 +111,7 @@ class AdaptiveWeights(ConstantWeights):
     def __init__(self, weights, momentum=0.9, device='cpu'):
         self.weights = weights
         self.momentum = momentum
+        self.weights_history = [self.weights.detach().clone()]
 
     def __compute_grad_norm(self, loss, model):
         """L2 norm of gradients of `loss` w.r.t. model parameters."""
@@ -125,6 +126,11 @@ class AdaptiveWeights(ConstantWeights):
             grad_norms[i] = self.__compute_grad_norm(losses[i], model)
         weights_new = torch.ones_like(self.weights) * grad_norms.sum() + 1e-8
         weights_new /= grad_norms + 1e-8
+        if not torch.isfinite(weights_new).all():
+            print(f"- skipped weight update: non-finite weights_new={weights_new.tolist()}")
+            self.weights_history.append(self.weights.detach().clone())
+            return
         # exponential moving average
         self.weights = self.momentum * self.weights + (1 - self.momentum) * weights_new
+        self.weights_history.append(self.weights.detach().clone())
         print(f"- updated loss weights: {self.weights.tolist()}")

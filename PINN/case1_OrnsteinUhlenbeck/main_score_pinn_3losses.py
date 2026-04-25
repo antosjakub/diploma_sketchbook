@@ -18,6 +18,7 @@ parser.add_argument("--lambda_ic", default=10.0, type=float, help="")
 parser.add_argument("--lambda_norm", default=0.1, type=float, help="Weight of the ∫p dx = 1 normalization loss.")
 parser.add_argument("--use_adaptive_weights", action="store_true", help="Loss weighting.")
 parser.add_argument("--active_losses", default="pde,ic", type=str, help="Comma-separated subset of {pde,bc,ic,norm}. 'pde' is required.")
+parser.add_argument("--grad_clip_norm", default=None, type=float, help="Max-norm gradient clipping for the train step. None disables it.")
 
 parser.add_argument("--n_res_points", default=10_000, type=int, help="")
 parser.add_argument("--n_trajs", default=1_000, type=int, help="")
@@ -230,7 +231,8 @@ trainer = PINN_Trainer(
     sampling_type=sampling_type, sampling_settings=sampling_settings,
     loss_weighting=loss_weighting, testing_suite=testing_suite,
     active_losses=active_losses, profiler=profiler, device=device,
-    dir_name=dir_name
+    dir_name=dir_name,
+    grad_clip_norm=args.grad_clip_norm,
 )
 losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
     n_steps=args.n_steps,
@@ -248,7 +250,7 @@ utility.print_duration_h_m_s(t1, time.time(), "Adam training")
 
 print("\nTraining complete!")
 
-loss_name, l2_name = run_utils.save_run(dir_name, model, losses, l2_errs, args, head_fn=None)
+loss_name, l2_name = run_utils.save_run(dir_name, model, losses, l2_errs, args, head_fn=None, loss_weighting=loss_weighting if args.n_steps > 0 else None) 
 
 
 import plot_results

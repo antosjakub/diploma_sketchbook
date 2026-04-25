@@ -108,12 +108,14 @@ def merge_losses(dst, src):
 
 
 
-def save_run(dir_name, model, losses, l2_errs, args, pde_model=None, head_fn=None):
+def save_run(dir_name, model, losses, l2_errs, args, pde_model=None, head_fn=None, loss_weighting=None):
     """Dump model state, loss dict, l2 errors, model metadata and (optionally) pde metadata.
 
     `head_fn`: optional tag identifying the architectural head (e.g. "hardcoded_ic"),
     stored at the top level of model_metadata.json so reloaders can rebuild the model
     without string-sniffing the output directory. `None` means the default PINN head.
+    `loss_weighting`: if an AdaptiveWeights instance, its `weights_history` is dumped
+    to `training_loss_weights.pth` as a (n_updates, n_terms) tensor.
     """
     with open(f'{dir_name}/model_metadata.json', 'w', encoding='utf-8') as f:
         json.dump(
@@ -134,5 +136,8 @@ def save_run(dir_name, model, losses, l2_errs, args, pde_model=None, head_fn=Non
     torch.save(model.state_dict(), f'{dir_name}/model.pth')
     torch.save({k: torch.tensor(v) for k, v in losses.items()}, f'{loss_name}.pth')
     torch.save(torch.tensor(l2_errs), f'{l2_name}.pth')
+    if isinstance(loss_weighting, loss.AdaptiveWeights) and len(loss_weighting.weights_history) > 0:
+        weights_name = f'{dir_name}/training_loss_weights'
+        torch.save(torch.stack(loss_weighting.weights_history), f'{weights_name}.pth')
     print("\nResults saved.")
     return loss_name, l2_name

@@ -22,6 +22,7 @@ parser.add_argument("--lambda_bc", default=0.01, type=float, help="")
 parser.add_argument("--lambda_ic", default=1.0, type=float, help="")
 parser.add_argument("--lambda_norm", default=0.1, type=float, help="Weight of the ∫p dx = 1 normalization loss.")
 parser.add_argument("--use_adaptive_weights", action="store_true", help="Loss weighting.")
+parser.add_argument("--grad_clip_norm", default=None, type=float, help="Max-norm gradient clipping for the train step. None disables it.")
 parser.add_argument("--active_losses", default="pde,bc,ic,norm", type=str, help="Comma-separated subset of {pde,bc,ic,norm}. 'pde' is required.")
 parser.add_argument("--use_rbas", action="store_true", help="Residual-based adaptive sampling")
 #parser.add_argument("--n_norm_buffer", default=10_000, type=int, help="Size of the p_inf sample buffer for the normalization loss.")
@@ -173,6 +174,7 @@ if args.n_steps > 0:
         sampling_type="vanilla_pinn", sampling_settings=sampling_settings,
         loss_weighting=loss_weighting, testing_suite=testing_suite,
         active_losses=active_losses, profiler=profiler, device=device,
+        grad_clip_norm=args.grad_clip_norm,
     )
     losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
     #losses_adam, l2_errs_adam = trainer.train_adam_fullbatch(
@@ -211,7 +213,10 @@ if args.n_steps_lbfgs > 0:
 # Dan
 print("\nTraining complete!")
 
-loss_name, l2_name = run_utils.save_run(dir_name, model, losses, l2_errs, args, pde_model)
+loss_name, l2_name = run_utils.save_run(
+    dir_name, model, losses, l2_errs, args, pde_model,
+    loss_weighting=loss_weighting if args.n_steps > 0 else None,
+)
 
 print(l2_errs)
 
