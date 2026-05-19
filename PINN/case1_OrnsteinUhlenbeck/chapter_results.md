@@ -4,7 +4,7 @@
 We consider the Ornstein-Uhlenbeck (OU) process with anisotropic and correlated noises, 
 
 $$
-dX_t = -\frac{1}{2} x\,dt + \Sigma^\frac{1}{2} dW_t
+dX_t = -\tfrac{1}{2} x\,dt + \Sigma^\frac{1}{2} dW_t
 $$
 
 The Brownian noise is correlated with the covariance matrix $\Sigma\in\mathbb{R}^{d\times d}$, which is constructed as follows:
@@ -14,12 +14,12 @@ The Brownian noise is correlated with the covariance matrix $\Sigma\in\mathbb{R}
 
 We have
 $$
-\mu = -\frac{1}{2} x \\ 
+\mu = -\tfrac{1}{2} x \\ 
 \sigma = \Sigma^\frac{1}{2}
 $$
 Thus the corresponding PDE then reads
 $$
-\partial_t p - \frac{1}{2} \nabla\cdot (\Sigma\nabla p + x\,p) = 0\\
+\partial_t p - \tfrac{1}{2} \nabla\cdot (\Sigma\nabla p + x\,p) = 0\\
 \partial_t p + \nabla\cdot J = 0\\
 $$
 bc:
@@ -30,7 +30,7 @@ $$
 
 
 
-We consider 3 distribution for the initial condition:
+We consider 3 different initial conditions corresponding to the following distributions:
 
 - gaussian (has analytic solution)
 - cauchy (no analytic solution)
@@ -40,7 +40,7 @@ show the plots - density & vector field for each distrib
 
 
 
-## Case 1: p_0(x) = unit gaussian
+## Case 1: $\,p_0(x)$ = unit gaussian
 
 $$
 p_0(x) = \alpha_d\, e^{-\frac{1}{2}||x||^2}\:, \quad \alpha_d = (2\pi)^{-d/2}

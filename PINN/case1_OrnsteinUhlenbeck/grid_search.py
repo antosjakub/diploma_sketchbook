@@ -20,13 +20,13 @@ VARIANT = "3losses"
 
 FIXED_PARAMS = {
     "ic_type": "laplace",
-    "d": 4,
+    #"d": 4,
     "description": "OU IC grid search",
     "seed": 42,
     #"layers": "64,64,64,64",
-    "layers": "128,128,128,128",
+    #"layers": "128,128,128,128",
     #"layers": "192,192,192,192",
-    #"layers": "256,256,256,256",
+    "layers": "256,256,256,256",
     #"layers": "512,512,512,512",
     
     # 1)
@@ -34,9 +34,9 @@ FIXED_PARAMS = {
     "L_min": -5.0,
     "L_max": 5.0,
     # 2)
-    "n_steps": 9_999,
-    #"n_steps": 9,
-    "n_steps_decay": 400, # = n_steps / 25
+    "n_steps": 39_999,
+    #"n_steps": 399,
+    "n_steps_decay": 1600, # = n_steps / 25
     # 3)
     "resampling_frequency": 100, # res_freq * bs = n_res_points
     "bs": 1_000,
@@ -53,6 +53,8 @@ FIXED_PARAMS = {
     "sampling_type": "domain_and_trajectories",
     "f_pde_full_domain": 1,
     "f_pde_trajs": 1,
+    "f_ic_full_domain": 1,
+    "f_ic_trajs": 1,
 
     "n_trajs": 1_000,
     "nt_steps": 1_000,
@@ -78,8 +80,8 @@ LINKED_SCORE_PDE_DIR = None
 
 # `ll_ode` depends on a matching `score_pde` run, so modes are run in order
 # for each base combo instead of being treated as an independent search axis.
-#MODES = ["score_pde", "ll_ode"]
-MODES = ["score_pde"]
+MODES = ["score_pde", "ll_ode"]
+#MODES = ["score_pde"]
 
 
 # Add or remove search axes here.
@@ -88,7 +90,7 @@ MODES = ["score_pde"]
 # - dicts, for grouped parameters such as trajectory sampling settings
 SEARCH_AXES = {
     #"ic_type": ["cauchy", "gauss"],
-    #"d": [8, 10],
+    "d": [6, 4, 8],
     #"box": [
     #    {"L_min": -4.0, "L_max": 4.0},
     #    {"L_min": -6.0, "L_max": 6.0},
@@ -132,20 +134,20 @@ SEARCH_AXES = {
     #    "64,64,64,64",
     ##    #"148,148,148,148"
     #],
-    "sampling": [
-        {
-            "f_ic_full_domain": 1,
-            "f_ic_trajs": 1,
-        },
-        {
-            "f_ic_full_domain": 4,
-            "f_ic_trajs": 1,
-        },
-        {
-            "f_ic_full_domain": 1,
-            "f_ic_trajs": 4,
-        },
-    ],
+    #"sampling": [
+    #    {
+    #        "f_ic_full_domain": 1,
+    #        "f_ic_trajs": 1,
+    #    },
+    #    {
+    #        "f_ic_full_domain": 4,
+    #        "f_ic_trajs": 1,
+    #    },
+    #    {
+    #        "f_ic_full_domain": 1,
+    #        "f_ic_trajs": 4,
+    #    },
+    #],
     #"sampling": [
     #    {
     #        "sampling_type": "domain",
