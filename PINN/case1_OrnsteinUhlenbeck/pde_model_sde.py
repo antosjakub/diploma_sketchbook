@@ -332,6 +332,8 @@ class LaplaceIC(InitialDistribution):
     def __init__(self, d, dtype=torch.float32, device=None):
         super().__init__(d, dtype, device)
         self._log_alpha = -d * math.log(2.0)
+        # smallest number apart from 0 for produced by torch.rand:
+        self.eps = torch.finfo(self.dtype).eps / 2.0
     def log_p0(self, x):
         return self._log_alpha - x.abs().sum(dim=1, keepdim=True)
     def p0(self, x):
@@ -339,9 +341,14 @@ class LaplaceIC(InitialDistribution):
     def s0(self, x):
         return -torch.sign(x)
     def sample(self, n):
-        # Inverse-CDF: U ~ Uniform(-1/2, 1/2), X = -sign(U) log(1 - 2|U|)
-        u = torch.rand(n, self.d, dtype=self.dtype, device=self.device) - 0.5
-        return -torch.sign(u) * torch.log1p(-2.0 * u.abs())
+        # Inverse-CDF: 
+        #   sample y from unifrom distrib, then map via inv-cdf to laplace distrib
+        #   0.0 < y < 0.5: x =  log(2y),   2y   \in (0,1)
+        #   0.5 < y < 1.0: x = -log(2-2y), 2-2y \in (0,1)
+        #   => sample (0,1) for both
+        # Y ~ Uniform(0, 1), X = -sign(U-0.5) log(Y)
+        y = torch.rand(n, self.d, dtype=self.dtype, device=self.device) # [0,1)
+        return -torch.sign(y-0.5) * torch.log(y+self.eps)
 
 
 class Anisotropic_OU:
