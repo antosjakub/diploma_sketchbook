@@ -1,0 +1,60 @@
+%
+%  An example of a bibliographical database in BibTeX format,
+%  which is used by biblatex to create the list of referenced works.
+%
+%  Academic search engines and software for maintenance of bibliography
+%  often supports exporting records in BibTeX format. We recommend:
+%
+%    - Google Scholar (https://scholar.google.com/)
+%    - JabRef (https://www.jabref.org/)
+%    - zoterobib (https://zbib.org/)
+%
+%  BEWARE:
+%
+%    *  If a name contains a capital letter, which must be kept such,
+%       use curly brackets ({T}hailand, {HIV}).
+%
+%  ===========================================================================
+
+
+% --- PINN
+
+@ARTICLE{uni_approx,
+  title = {Multilayer feedforward networks are universal approximators},
+  journal = {Neural Networks},
+  volume = {2},
+  number = {5},
+  pages = {359-366},
+  year = {1989},
+  issn = {0893-6080},
+  doi = {https://doi.org/10.1016/0893-6080(89)90020-8},
+  url = {https://www.sciencedirect.com/science/article/pii/0893608089900208},
+  author = {Kurt Hornik and Maxwell Stinchcombe and Halbert White},
+  keywords = {Feedforward networks, Universal approximation, Mapping networks, Network representation capability, Stone-Weierstrass Theorem, Squashing functions, Sigma-Pi networks, Back-propagation networks},
+  abstract = {This paper rigorously establishes that standard multilayer feedforward networks with as few as one hidden layer using arbitrary squashing functions are capable of approximating any Borel measurable function from one finite dimensional space to another to any desired degree of accuracy, provided sufficiently many hidden units are available. In this sense, multilayer feedforward networks are a class of universal approximators.}
+}
+
+@misc{experts_guide,
+  title={An Expert's Guide to Training Physics-informed Neural Networks}, 
+  author={Sifan Wang and Shyam Sankaran and Hanwen Wang and Paris Perdikaris},
+  year={2023},
+  eprint={2308.08468},
+  archivePrefix={arXiv},
+  primaryClass={cs.LG},
+  url={https://arxiv.org/abs/2308.08468}, 
+}
+
+
+@article{systematic_review,
+  title = {Advances in physics-informed neural networks for solving complex partial differential equations and their engineering applications: A systematic review},
+  journal = {Engineering Applications of Artificial Intelligence},
+  volume = {161},
+  pages = {112044},
+  year = {2025},
+  issn = {0952-1976},
+  doi = {https://doi.org/10.1016/j.engappai.2025.112044},
+  url = {https://www.sciencedirect.com/science/article/pii/S0952197625020524},
+  author = {Jiangtao Guo and Hao Zhu and Yujie Yang and Chenrui Guo},
+  keywords = {Partial differential equations, Physics-informed neural network, Network architectures, Optimization technologies, Implementation framework, Multidisciplinary applications},
+  abstract = {Most physical and engineering problems can be described by partial differential equations (PDEs), which are typically solved using numerical methods such as the finite difference method and the finite element method. However, conventional numerical discretization approaches face significant challenges in terms of computational efficiency and convergence speed when dealing with complex nonlinear PDEs, such as high-dimensional nonlinear PDEs, stiff PDEs, PDEs with complex boundary conditions or irregular geometries, and multi-scale PDEs. Recently, physics-informed neural networks (PINNs) have emerged as a transformative methodology for solving complex PDEs by integrating physical laws intrinsically into deep learning architectures. While PINNs effectively overcome mesh dependency and dimensionality constraints inherent in traditional numerical methods, they still encounter persistent challenges related to training convergence and generalization robustness. This paper aims to present a comprehensive review of the state-of-the-art developments in PINNs for solving complex PDE problems. The core ideas, network architectures, and generic implementation frameworks, along with associated open-source Python libraries, are first introduced in detail. Furthermore, a systematic taxonomy of optimization techniques is provided, covering hyperparameter selection, adaptive sampling strategies, physics-constrained loss formulations, hybrid differentiation approaches, and architectural innovations. Subsequently, various coping strategies and research advancements of PINNs in addressing complex nonlinear PDE problems are thoroughly discussed. Real-world engineering applications are then reviewed across multiple domains, including cosmology and quantum mechanics, materials science and manufacturing, fluid mechanics, energy systems, biological and environmental sciences, and power and information technologies. Finally, this paper discusses the current challenges and limitations of PINNs in solving complex PDEs and outlines potential directions for future research. By addressing the current limitations and pursuing targeted improvements in architectures, training, interpretability and generalization, PINNs can become a powerful tool in engineering and scientific applications.}
+}
