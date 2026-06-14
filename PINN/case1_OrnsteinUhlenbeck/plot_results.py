@@ -98,11 +98,6 @@ def _plot_ll_ode(dir_name, model, model_s, pde_model, score_sde_model, args, opt
     T = args.T
     model_fn_q = viz.wrapp_model(model)
     model_fn_p = lambda X: torch.exp(model_fn_q(X))
-    model_fn_s = viz.wrapp_model(model_s)
-    q_ic = lambda X: pde_model.q0(X[:, :-1])
-    q_inf = lambda X: torch.log(pde_model.p_inf(X[:, :-1]))
-    p_ic = lambda X: pde_model.p0(X[:, :-1])
-    p_inf = lambda X: pde_model.p_inf(X[:, :-1])
 
     if args.enable_testing:
         plotter = viz.FunctionPlotter(**options)
@@ -119,34 +114,9 @@ def _plot_ll_ode(dir_name, model, model_s, pde_model, score_sde_model, args, opt
         plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p_analytic.png', t_val=0.234)
         plotter.save_animation(f'{dir_name}/viz/anim_model_p_vs_p_analytic.gif', num_frames=30, fps=5, t_end=T)
 
-    plotter = viz.FunctionPlotter(**options)
-    plotter.add_panel('model_q', title="model_q(x,0)").heatmap(model_fn_q)
-    plotter.add_panel('q_ic', title="q_0(x)").heatmap(q_ic)
-    plotter.save_plot(f'{dir_name}/viz/plot_model_q_vs_q0.png', t_val=0.0)
+    _plot_q_pde(dir_name, model, pde_model, args, options)
 
-    plotter = viz.FunctionPlotter(**options)
-    plotter.add_panel('model_p', title="model_p(x,0) = exp(model_q(x,0))").heatmap(model_fn_p)
-    plotter.add_panel('p_ic', title="p_0(x)").heatmap(p_ic)
-    plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p0.png', t_val=0.0)
-
-    plotter = viz.FunctionPlotter(**options)
-    plotter.add_panel('model_q', title="model_q(x,T)").heatmap(model_fn_q)
-    plotter.add_panel('q_inf', title="q_inf(x)").heatmap(q_inf)
-    plotter.save_plot(f'{dir_name}/viz/plot_model_q_vs_q_inf.png', t_val=T)
-
-    plotter = viz.FunctionPlotter(**options)
-    plotter.add_panel('model_p', title="model_p(x,T)").heatmap(model_fn_p)
-    plotter.add_panel('p_inf', title="p_inf(x)").heatmap(p_inf)
-    plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p_inf.png', t_val=T)
-
-    plotter = viz.FunctionPlotter(**options)
-    plotter.add_panel('model_q', title="model_q(x,t)").heatmap(model_fn_q)
-    plotter.save_animation(f'{dir_name}/viz/anim_model_q.gif', num_frames=30, fps=5, t_end=T)
-
-    plotter = viz.FunctionPlotter(**options)
-    plotter.add_panel('model_p', title="model_p(x,t) = exp(model_q(x,t))").heatmap(model_fn_p)
-    plotter.save_animation(f'{dir_name}/viz/anim_model_p.gif', num_frames=30, fps=5, t_end=T)
-
+    model_fn_s = viz.wrapp_model(model_s)
     plotter = viz.FunctionPlotter(**options)
     p = plotter.add_panel('sq', title="model_s & model_q")
     p.heatmap(model_fn_q)
@@ -157,9 +127,46 @@ def _plot_ll_ode(dir_name, model, model_s, pde_model, score_sde_model, args, opt
     plotter.save_animation(f'{dir_name}/viz/anim_model_sq_sp.gif', num_frames=30, fps=5, t_end=T)
 
 
+def _plot_q_pde(dir_name, model, pde_model, args, options):
+    T = args.T
+    model_fn_q = viz.wrapp_model(model)
+    model_fn_p = lambda X: torch.exp(model_fn_q(X))
+    q_ic = lambda X: pde_model.q0(X[:, :-1])
+    q_inf = lambda X: torch.log(pde_model.p_inf(X[:, :-1]))
+    p_ic = lambda X: pde_model.p0(X[:, :-1])
+    p_inf = lambda X: pde_model.p_inf(X[:, :-1])
+
+    # IC: q and p vs q_0 and p_0
+    plotter = viz.FunctionPlotter(**options)
+    plotter.add_panel('model_q', title="model_q(x,0)").heatmap(model_fn_q)
+    plotter.add_panel('q_ic', title="q_0(x)").heatmap(q_ic)
+    plotter.save_plot(f'{dir_name}/viz/plot_model_q_vs_q0.png', t_val=0.0)
+    plotter = viz.FunctionPlotter(**options)
+    plotter.add_panel('model_p', title="model_p(x,0) = exp(model_q(x,0))").heatmap(model_fn_p)
+    plotter.add_panel('p_ic', title="p_0(x)").heatmap(p_ic)
+    plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p0.png', t_val=0.0)
+    # inf: q and p vs q_inf and p_inf
+    plotter = viz.FunctionPlotter(**options)
+    plotter.add_panel('model_q', title="model_q(x,T)").heatmap(model_fn_q)
+    plotter.add_panel('q_inf', title="q_inf(x)").heatmap(q_inf)
+    plotter.save_plot(f'{dir_name}/viz/plot_model_q_vs_q_inf.png', t_val=T)
+    plotter = viz.FunctionPlotter(**options)
+    plotter.add_panel('model_p', title="model_p(x,T)").heatmap(model_fn_p)
+    plotter.add_panel('p_inf', title="p_inf(x)").heatmap(p_inf)
+    plotter.save_plot(f'{dir_name}/viz/plot_model_p_vs_p_inf.png', t_val=T)
+    # anim: q and p
+    plotter = viz.FunctionPlotter(**options)
+    plotter.add_panel('model_q', title="model_q(x,t)").heatmap(model_fn_q)
+    plotter.save_animation(f'{dir_name}/viz/anim_model_q.gif', num_frames=30, fps=5, t_end=T)
+    plotter = viz.FunctionPlotter(**options)
+    plotter.add_panel('model_p', title="model_p(x,t) = exp(model_q(x,t))").heatmap(model_fn_p)
+    plotter.save_animation(f'{dir_name}/viz/anim_model_p.gif', num_frames=30, fps=5, t_end=T)
+
+
+
 def plot_viz(dir_name, model, pde_model, score_sde_model, args, device, model_s=None):
     d = args.d
-    type_sp = args.mode
+    mode = args.mode
 
     options = {
         "d": d,
@@ -172,14 +179,16 @@ def plot_viz(dir_name, model, pde_model, score_sde_model, args, device, model_s=
 
     os.makedirs(f"{dir_name}/viz/", exist_ok=True)
 
-    if type_sp == "score_pde":
+    if mode == "score_pde":
         _plot_score_pde(dir_name, model, pde_model, score_sde_model, args, options)
-    elif type_sp == "ll_ode":
+    elif mode == "ll_ode":
         if model_s is None:
             raise ValueError("ll_ode mode requires model_s")
         _plot_ll_ode(dir_name, model, model_s, pde_model, score_sde_model, args, options)
+    elif mode == "q_pde":
+        _plot_q_pde(dir_name, model, pde_model, args, options)
     else:
-        raise ValueError(f"Unknown mode: {type_sp}")
+        raise ValueError(f"Unknown mode: {mode}")
 
 
 def plot_run(dir_name, model, pde_model, score_sde_model, args, device,

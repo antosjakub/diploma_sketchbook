@@ -189,6 +189,7 @@ class PINN_Trainer:
 
 class PINN_Trainer_1k:
     """Minimal trainer: only the PDE residual loss, single DataLoader.
+    TD: delete all metions of total loss - keep only the pde loss
 
     Default shape: dataloader holds ~100_000 points, each gradient step
     consumes bs points (~1000). Sampling mode is chosen per-call:

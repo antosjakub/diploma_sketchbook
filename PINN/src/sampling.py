@@ -105,6 +105,8 @@ def residual_based_adaptive_sampling(d, residual_fn, model, type="pde", n_new=10
     picking_criterion: "multinomial" or "top_k"
     Returns (X_selected,) for pde/ic, or (X_selected, normals_selected) for bc.
     """
+
+    # sample domain
     normals_cand = None
     precomputed = {}
     if type == 'pde':
@@ -115,7 +117,8 @@ def residual_based_adaptive_sampling(d, residual_fn, model, type="pde", n_new=10
         precomputed["normals"] = normals_cand
     elif type == 'ic':
         X_cand = sample_ic(n_candidates, d, sampling_strategy=sampling_strategy, device=device)
-
+    
+    # rbas logic:
     res = residual_fn(X_cand, model, precomputed).detach()
     abs_res = res.abs().squeeze()
 
@@ -129,7 +132,7 @@ def residual_based_adaptive_sampling(d, residual_fn, model, type="pde", n_new=10
 
     if normals_cand is not None:
         return X_cand[idx].detach(), normals_cand[idx].detach()
-    return X_cand[idx].detach()
+    return X_cand[idx].detach(), None
 
 
 
@@ -362,31 +365,6 @@ def sample_residual_points_from_trajectory_bank(
     t_res = times[time_idx].unsqueeze(1)              # (n_points, 1)
 
     return x_res, t_res
-
-
-
-def residual_based_adaptive_sampling(X_cand, residual_fn, model, n_new=1000, picking_criterion="multinomial"):
-    """
-    sampling_strategy: "lhs" or "uniform" 
-    picking_criterion: "multinomial" or "top_k" 
-    """
-
-    X_cand = X_cand.requires_grad_(True)
-
-    res = residual_fn(X_cand, model).detach()
-    abs_res = res.abs().squeeze()
-    
-    if picking_criterion == "top_k":
-        # Pick top-k high-residual points
-        _, idx = torch.topk(abs_res, n_new)
-        return X_cand[idx].detach()
-    elif picking_criterion == "multinomial":
-        probs = abs_res / abs_res.sum()
-        idx = torch.multinomial(probs, n_new, replacement=False)
-        return X_cand[idx].detach()
-    else:
-        raise NameError("Provide a correct picking crierion.")
-
 
 
 
@@ -719,10 +697,19 @@ def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settin
         X_ic_trajs = contruct_trajs_ic(x0_ic_trajs, n_ic_trajs)
         strategy = settings.get("sampling_strategy", "lhs")
         X_ic_full_domain = sample_ic(n_ic_full_domain, d, sampling_strategy=strategy, device=device)
+        if spatial_domain is not None:
+            lo = spatial_domain[:, 0]
+            hi = spatial_domain[:, 1]
+            X_ic_full_domain = scale_samples__spatial(X_ic_full_domain, lo, hi)
         X_ic = torch.cat([
             X_ic_trajs,
             X_ic_full_domain
         ], dim=0)
+
+        #for i in range(d):
+        #    print(i, "traj", X_ic_trajs[:,i].min(), X_ic_trajs[:,i].max())
+        #    print(i, "dom-old", X_ic_full_domain[:,i].min(), X_ic_full_domain[:,i].max())
+
         print(f"IC loader: X.shape = {X_ic.shape}, bs = {bs_ic}")
         print(f" - full domain sampling (X.shape = {X_ic_full_domain.shape})")
         print(f" - trajs sampling (X.shape = {X_ic_trajs.shape})")

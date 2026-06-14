@@ -347,8 +347,11 @@ class LaplaceIC(InitialDistribution):
         #   0.5 < y < 1.0: x = -log(2-2y), 2-2y \in (0,1)
         #   => sample (0,1) for both
         # Y ~ Uniform(0, 1), X = -sign(U-0.5) log(Y)
-        y = torch.rand(n, self.d, dtype=self.dtype, device=self.device) # [0,1)
-        return -torch.sign(y-0.5) * torch.log(y+self.eps)
+        y = torch.rand(n, self.d, dtype=self.dtype, device=self.device)+self.eps # [0,1)
+        x = torch.log(y)
+        mask = torch.randint(2, (n,self.d)).bool()
+        x[mask] *= -1.0
+        return x
 
 
 class Anisotropic_OU:
@@ -449,6 +452,7 @@ class Anisotropic_OU:
             self.score_sde_model = score_sde_model
         def __getattr__(self, name):
             return getattr(self.score_sde_model, name)
+
         def pde_residual(self, X, model_q, precomputed):
             # L = d_t q = 1/2 ( tr(Sigma grad_x s) + s^T Sigma s + x . s + d ).
             # Reduces to the isotropic form when Sigma = sigma^2 I.
@@ -465,7 +469,38 @@ class Anisotropic_OU:
             assert L.shape == (X.shape[0], 1)
             residual = q_t - L
             return residual
-    
+
+        def bc_residual(self, X, model_q, precomputed):
+            # (Sigma grad q + x).n = 0
+            X = X.detach().requires_grad_(True)
+            q = model_q(X)
+            grad_q = derivatives.compute_grad(X, q, torch.ones_like(q))[:,-1:]
+            n = precomputed["normals"]
+            Sigma_grad_q = torch.einsum('ij,bj->bi', self.Sigma, grad_q)
+            return ( ( Sigma_grad_q + X[:,:-1] ) * n ).sum(dim=1).unsqueeze(1)
+
+        def ic_residual(self, X, model_q, precomputed):
+            return model_q(X) - precomputed["q0"]
+
+        def pde_loss(self, X, model_q, precomputed):
+            res = self.pde_residual(X, model_q, precomputed)
+            return torch.mean(res**2)
+        def bc_loss(self, X, model_q, precomputed):
+            res = self.bc_residual(X, model_q, precomputed)
+            return torch.mean(res**2)
+        def ic_loss(self, X, model_q, precomputed):
+            res = self.ic_residual(X, model_q, precomputed)
+            return torch.mean(res**2)
+
+        def precompute(self, X_pde, X_bc, X_ic):
+            return {
+                "pde": {},
+                "bc": {},
+                "ic": {
+                    "q0": self.q0(X_ic[:,:-1]).detach()
+                },
+            }
+
 
     class Score_PDE:
         def __init__(self, score_sde_model) -> None:
