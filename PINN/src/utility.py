@@ -84,7 +84,7 @@ def get_module_classes(module):
 
 
 
-def header(dir_name):
+def header(dir_name, device=None):
     import torch
     import architecture
     import pde_models
@@ -95,10 +95,12 @@ def header(dir_name):
 
     d = model_metadata["args"]["d"]
     D = d+1
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_class_name = model_metadata["model_class"]
     print(model_class_name)
-    model = get_module_classes(architecture)[model_class_name](D, layers_from_string(model_metadata["args"]["layers"]))
-    model.load_state_dict(torch.load(f'{dir_name}/model.pth'))
+    model = get_module_classes(architecture)[model_class_name](D, layers_from_string(model_metadata["args"]["layers"])).to(device)
+    model.load_state_dict(torch.load(f'{dir_name}/model.pth', map_location=device))
     model.eval()
 
     pde_class_name = pde_metadata["pde_class"]
@@ -292,7 +294,7 @@ class TestingSuite:
             if self.keep_in_cache:
                 payload = self.payload
             else:
-                payload = torch.load(self.test_file_path)
+                payload = torch.load(self.test_file_path, map_location="cpu")
             X = payload["data"]["X"]
             u_true = payload["data"]["u_true"]
         except:
@@ -330,11 +332,11 @@ class TestingSuite:
         return l2_err, l1_err, rel_err
 
 
-def generate_SPD(d, eps=1e-10):
-    B = torch.randn(d, d)
+def generate_SPD(d, eps=1e-10, device=None, dtype=torch.float32):
+    B = torch.randn(d, d, device=device, dtype=dtype)
     A = torch.mm(B, B.t())
     # to ensure PD
-    jitter = torch.eye(d) * eps
+    jitter = torch.eye(d, device=device, dtype=dtype) * eps
     A = A + jitter
     return A
 

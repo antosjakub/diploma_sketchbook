@@ -385,7 +385,7 @@ def split_res_points(n_res_points, bs=512, f_pde=14, f_bc=1, f_ic=1, f_norm=16):
 def contruct_trajs_ic(x0, n_res_points):
     X_ic = torch.cat([
         x0[:n_res_points],
-        torch.zeros(n_res_points, 1)],
+        torch.zeros(n_res_points, 1, device=x0.device, dtype=x0.dtype)],
     dim=1)
     return X_ic
 

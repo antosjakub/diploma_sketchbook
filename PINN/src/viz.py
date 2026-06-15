@@ -104,12 +104,17 @@ class FunctionPlotter:
         self.d = d
         self.plot_dims = plot_dims
         self.N = N
-        self.device = device
-        self.fixed_dims_vals = fixed_dims_vals if fixed_dims_vals is not None else 0.2 * torch.ones(d)
+        self.device = torch.device(device)
+        default_fixed_dims = torch.full((d,), 0.2, device=self.device)
+        self.fixed_dims_vals = (
+            fixed_dims_vals.to(self.device)
+            if fixed_dims_vals is not None
+            else default_fixed_dims
+        )
         self.x_start = x_start
         self.x_end = x_end
-        x = torch.linspace(x_start, x_end, N, device=device)
-        y = torch.linspace(x_start, x_end, N, device=device)
+        x = torch.linspace(x_start, x_end, N, device=self.device)
+        y = torch.linspace(x_start, x_end, N, device=self.device)
         self.X_grid, self.Y_grid = torch.meshgrid(x, y, indexing='ij')
         x_flat = self.X_grid.reshape(-1, 1)
         y_flat = self.Y_grid.reshape(-1, 1)
@@ -283,7 +288,7 @@ class FunctionPlotter:
             raise RuntimeError("No panels added.")
 
         specs = self._resolve_cbar_modes(cbar, default='dynamic')
-        t_values = torch.tensor([t_val])
+        t_values = torch.tensor([t_val], device=self.device)
         global_ranges = self._compute_global_ranges(t_values)
         ranges = self._resolve_ranges(specs, global_ranges)
 
@@ -317,7 +322,7 @@ class FunctionPlotter:
         if not self._panels:
             raise RuntimeError("No panels added.")
 
-        t_values = torch.linspace(t_start, t_end, num_frames)
+        t_values = torch.linspace(t_start, t_end, num_frames, device=self.device)
         n = len(self._panels)
 
         specs = self._resolve_cbar_modes(cbar, default='dynamic')
