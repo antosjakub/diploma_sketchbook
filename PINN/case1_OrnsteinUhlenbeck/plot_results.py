@@ -171,7 +171,7 @@ def plot_viz(dir_name, model, pde_model, score_sde_model, args, device, model_s=
     options = {
         "d": d,
         "plot_dims": [0, 1],
-        "fixed_dims_vals": 0.5 * torch.ones(d),
+        "fixed_dims_vals": 0.5 * torch.ones(d, device=device),
         "device": device,
         "x_start": args.L_min,
         "x_end": args.L_max,
@@ -233,7 +233,7 @@ def load_run(dir_name, device=None, specific_paths={}):
     head_fn_tag = model_metadata["head_fn"]
 
     score_sde_cls = utility.get_module_classes(pde_model_sde)[pde_metadata["pde_class"]]
-    score_sde_model = score_sde_cls(d=d)
+    score_sde_model = score_sde_cls(d=d, device=device)
 
     model_s = None
     if type_sp == "score_pde":

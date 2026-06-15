@@ -80,12 +80,22 @@ def make_optim(model, args):
     return optimizer, scheduler
 
 
-def make_loss_weighting(args, active_losses):
+def make_loss_weighting(args, active_losses, device=None):
     """Build Adaptive/Constant weighting with one weight per active loss term."""
-    weights = [getattr(args, f"lambda_{k}") for k in active_losses]
+    weights = torch.tensor([getattr(args, f"lambda_{k}") for k in active_losses], device=device)
     if args.use_adaptive_weights:
-        return loss.AdaptiveWeights(weights=torch.tensor(weights))
+        return loss.AdaptiveWeights(weights=weights)
     return loss.ConstantWeights(weights=weights)
+
+
+def make_spatial_domain(d, x_min, x_max, device=None, dtype=torch.float32):
+    return torch.stack(
+        [
+            torch.full((d,), x_min, device=device, dtype=dtype),
+            torch.full((d,), x_max, device=device, dtype=dtype),
+        ],
+        dim=1,
+    )
 
 
 def make_profiler(dir_name, args):

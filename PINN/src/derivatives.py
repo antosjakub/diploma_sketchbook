@@ -40,7 +40,7 @@ def compute_derivatives(model, X, compute_laplace=True):
                 hess_row = torch.autograd.grad(
                     inputs=X,
                     outputs=grad_u[:,i].sum(),
-                    grad_outputs=torch.tensor(1.0),
+                    grad_outputs=torch.ones((), device=X.device, dtype=X.dtype),
                     create_graph=True,
                     retain_graph=True
                 )[0]

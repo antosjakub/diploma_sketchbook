@@ -115,6 +115,7 @@ def identity_fn(y,x):
 
 
 import torch
+
 class ScorePINNTestingSuite:
     """
     Testing suite for Score-PINN models.
@@ -145,7 +146,7 @@ class ScorePINNTestingSuite:
             if torch.cuda.is_available():
                 torch.cuda.manual_seed_all(seed)
             x = pde_model.sample_x0(n_test_points)
-            t = torch.rand(n_test_points, 1) * T
+            t = torch.rand(n_test_points, 1, device=x.device, dtype=x.dtype) * T
 
         X = torch.cat([x, t], dim=1).detach().cpu()
 
@@ -160,7 +161,7 @@ class ScorePINNTestingSuite:
             self.payload = payload
         self.test_data_ready = True
 
-    def test_model(self, model, test_bs=100_000):
+    def test_model(self, model, test_bs=100_000, device="cpu"):
         """
         Compute L2 RMSE, mean L1, and max relative error between model output
         and the pre-cached analytic targets.
@@ -183,13 +184,12 @@ class ScorePINNTestingSuite:
         sum_sq = 0.0
         sum_abs = 0.0
         max_rel = 0.0
-
         model.eval()
         with torch.no_grad():
             for i in range(0, N, test_bs):
                 j = min(i + test_bs, N)
-                X_chunk = X[i:j]
-                target_chunk = target[i:j]
+                X_chunk = X[i:j].to(device)
+                target_chunk = target[i:j].to(device)
 
                 pred = model(X_chunk)
                 err = pred - target_chunk
@@ -303,13 +303,12 @@ class TestingSuite:
         sum_l1 = 0.0
         max_rel = 0.0
         eps = 1e-10
-
         model.eval()
         with torch.no_grad():
             for i in range(0, N, test_bs):
                 j = min(i + test_bs, N)
-                X_chunk = X[i:j]
-                u_true_chunk = u_true[i:j]
+                X_chunk = X[i:j].to(device)
+                u_true_chunk = u_true[i:j].to(device)
 
                 u_pred = model(X_chunk)
                 err = u_pred - u_true_chunk

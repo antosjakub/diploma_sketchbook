@@ -107,14 +107,14 @@ run_utils.save_input_config(dir_name, args)
 
 
 ### PREP PDE MODEL
-gamma = torch.tensor([1.3, 2.5, 2.1, 1.6, 3.1, 1.8, 2.7, 1.9, 2.3, 2.9])[:d]
+gamma = torch.tensor([1.3, 2.5, 2.1, 1.6, 3.1, 1.8, 2.7, 1.9, 2.3, 2.9], device=device)[:d]
 import pde_model_sde
 if args.ic_type == "gauss":
-    score_sde_model = pde_model_sde.Gaussian_OU(d=d, gamma=gamma)
+    score_sde_model = pde_model_sde.Gaussian_OU(d=d, gamma=gamma, device=device)
 elif args.ic_type == "cauchy":
-    score_sde_model = pde_model_sde.Cauchy_OU(d=d, gamma=gamma)
+    score_sde_model = pde_model_sde.Cauchy_OU(d=d, gamma=gamma, device=device)
 elif args.ic_type == "laplace":
-    score_sde_model = pde_model_sde.Laplace_OU(d=d, gamma=gamma)
+    score_sde_model = pde_model_sde.Laplace_OU(d=d, gamma=gamma, device=device)
 
 pde_model = score_sde_model.q_PDE(score_sde_model)
 
@@ -139,7 +139,7 @@ losses = run_utils.init_losses(("total",) + active_losses)
 l2_errs = []
 
 optimizer, scheduler = run_utils.make_optim(model, args)
-loss_weighting = run_utils.make_loss_weighting(args, active_losses)
+loss_weighting = run_utils.make_loss_weighting(args, active_losses, device=device)
 profiler = run_utils.make_profiler(dir_name, args)
 
 sdgd_num_dims = args.sdgd_num_dims if args.sdgd_num_dims is not None else d
@@ -160,10 +160,11 @@ else:
 
 T = args.T
 sampling_type = args.sampling_type
+spatial_domain = run_utils.make_spatial_domain(d, args.L_min, args.L_max, device=device)
 if sampling_type == "trajectories":
     sampling_settings = {
         "T": args.T,
-        "spatial_domain": torch.stack([torch.full((d,), args.L_min), torch.full((d,), args.L_max)], dim=1),
+        "spatial_domain": spatial_domain,
         "n_res_points": args.n_res_points,
         "bs": args.bs,
         "n_trajs": args.n_trajs,
@@ -172,7 +173,7 @@ if sampling_type == "trajectories":
 elif sampling_type == "domain":
     sampling_settings = {
         "T": T,
-        "spatial_domain": torch.stack([torch.full((d,), args.L_min), torch.full((d,), args.L_max)], dim=1),
+        "spatial_domain": spatial_domain,
         "n_res_points": args.n_res_points,
         "bs": args.bs,
         "use_rbas": args.use_rbas,
@@ -180,7 +181,7 @@ elif sampling_type == "domain":
 elif sampling_type == "domain_and_trajectories":
     sampling_settings = {
         "T": args.T,
-        "spatial_domain": torch.stack([torch.full((d,), args.L_min), torch.full((d,), args.L_max)], dim=1),
+        "spatial_domain": spatial_domain,
         "n_res_points": args.n_res_points,
         "bs": args.bs,
         "n_trajs": args.n_trajs,

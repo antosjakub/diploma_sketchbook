@@ -165,7 +165,7 @@ class PINN_Trainer:
                 parts.append(f"lr: {self.optimizer.param_groups[0]['lr']:.6f}")
                 log = ", ".join(parts)
                 if self.testing_suite is not None:
-                    l2_err, l1_err, rel_err = self.testing_suite.test_model(self.model)
+                    l2_err, l1_err, rel_err = self.testing_suite.test_model(self.model, device=self.device)
                     l2_errs.append(l2_err)
                     log += f", L2: {l2_err:.6f}, L1: {l1_err:.6f}, rel_max: {rel_err:.6f}"
                 print(log)
@@ -276,7 +276,7 @@ class PINN_Trainer_1k:
             if (si + 1) % testing_frequency == 0:
                 log = f"Step {si+1}/{n_steps}, Loss: {loss_val:.6f}, pde: {loss_val:.6f}, lr: {self.optimizer.param_groups[0]['lr']:.6f}"
                 if self.testing_suite is not None:
-                    l2_err, l1_err, rel_err = self.testing_suite.test_model(self.model)
+                    l2_err, l1_err, rel_err = self.testing_suite.test_model(self.model, device=self.device)
                     l2_errs.append(l2_err)
                     log += f", L2: {l2_err:.6f}, L1: {l1_err:.6f}, rel_max: {rel_err:.6f}"
                 print(log)
@@ -468,4 +468,3 @@ class PINN_Trainer_1k:
 #            break
 #
 #    return losses, l2_errs
-

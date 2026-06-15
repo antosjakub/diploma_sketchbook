@@ -8,7 +8,7 @@ def sample_uniform(n_samples: int, n_dims: int, device="cpu") -> torch.Tensor:
 def sample_lhs(n_samples: int, n_dims: int, device="cpu") -> torch.Tensor:
     """Returns LHS in [0, 1]^n_dims."""
     # Create stratified intervals, then permute each dimension independently
-    perms = torch.stack([torch.randperm(n_samples) for _ in range(n_dims)], dim=1)
+    perms = torch.stack([torch.randperm(n_samples, device=device) for _ in range(n_dims)], dim=1)
     # Sample uniformly within each stratum
     uni = torch.rand(n_samples, n_dims, device=device)
     # shape: (n_samples, n_dims)
