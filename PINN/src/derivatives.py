@@ -36,7 +36,7 @@ def compute_derivatives(model, X, compute_laplace=True):
         with record_function("laplace_u"):
             # Laplacian - spatial only
             spatial_laplace_u = []
-            for i in range(D-1):
+            for i in range(D):
                 hess_row = torch.autograd.grad(
                     inputs=X,
                     outputs=grad_u[:,i].sum(),
