@@ -8,11 +8,11 @@ parser.add_argument("--d", default=4, type=int, help="Number of spatial dimensio
 #parser.add_argument("--layers", default="256,256,256,256", type=str, help="")
 #parser.add_argument("--layers", default="64,64,64,64", type=str, help="")
 parser.add_argument("--layers", default="128,128,128,128", type=str, help="")
-parser.add_argument("--n_steps", default=9_999, type=int, help="")
+parser.add_argument("--n_steps", default=999, type=int, help="")
 parser.add_argument("--n_steps_decay", default=1_600, type=int, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--gamma", default=0.9, type=float, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--lr", default=1e-3, type=float, help="")
-parser.add_argument("--bs", default=1000, type=int, help="")
+parser.add_argument("--bs", default=500, type=int, help="")
 
 parser.add_argument("--lambda_pde", default=1.0, type=float, help="")
 parser.add_argument("--lambda_bc", default=10.0, type=float, help="")
@@ -50,6 +50,11 @@ parser.add_argument("--f_pde_trajs", default=1, type=int, help="")
 parser.add_argument("--f_ic_full_domain", default=1, type=int, help="")
 parser.add_argument("--f_ic_trajs", default=1, type=int, help="")
 
+parser.add_argument("--use_lbfgs", action="store_true", help="")
+
+parser.add_argument("--compile_model", action="store_true", help="")
+
+
 #
 parser.add_argument("--enable_profiler", action="store_true", help="")
 parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
@@ -76,6 +81,8 @@ parser.add_argument("--clear_dir", action="store_true", help="Erase contents of 
     -
 """
 
+
+
 import torch
 
 import os, sys
@@ -92,6 +99,7 @@ import run_utils
 args = run_utils.parse_args_with_config(
     parser, [] if "__file__" not in globals() else None
 )
+args.enable_profiler = True
 
 d = args.d  # space dims
 D = d + 1   # space + time dims
@@ -100,6 +108,7 @@ print(f"\n{'='*60}")
 print(f"Training vanilla-PINN for {d}D PDE")
 print(f"Domain: [0,1]^{d} x [0,1]")
 print(f"{'='*60}\n")
+print(args.layers)
 
 
 dir_name, device = run_utils.setup_run(args)
@@ -126,9 +135,16 @@ print()
 
 
 # Select the model architecture
-model = architecture.PINN(D, layers, 1).to(device)
 #model = torch.compile(model, mode="reduce-overhead")
 #model = torch.compile(model)
+
+model = architecture.PINN(D, layers, 1).to(device)
+#model = architecture.PINN_base(D, layers, 1).to(device)
+if args.starting_model:
+    model.load_state_dict(torch.load(args.starting_model, weights_only=True))
+if args.compile_model:
+    model.compile()
+
 
 
 active_losses = tuple(k.strip() for k in args.active_losses.split(",") if k.strip())
@@ -202,19 +218,47 @@ trainer = PINN_Trainer(
     dir_name=dir_name,
     grad_clip_norm=args.grad_clip_norm,
 )
-losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
-    n_steps=args.n_steps,
-    n_steps_decay=args.n_steps_decay,
-    resampling_frequency=args.resampling_frequency,
-    testing_frequency=args.testing_frequency,
-    use_sdgd=args.use_sdgd,
-    sdgd_num_dims=sdgd_num_dims,
-    one_batch_per_epoch = True,
-)
+#losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
+
+if args.use_lbfgs:
+    trainer.optimizer = torch.optim.LBFGS(
+        model.parameters(),
+        lr=1e-3,
+        max_iter=20, # inner CG iterations per step
+        max_eval=25,
+        history_size=50,
+        tolerance_grad=1e-7,
+        tolerance_change=1e-9,
+        line_search_fn='strong_wolfe'
+    )
+    trainer.scheduler = torch.optim.lr_scheduler.ExponentialLR(trainer.optimizer, gamma=0.9)
+    losses_adam, l2_errs_adam = trainer.train_lbfgs(
+        n_steps=args.n_steps,
+        n_steps_decay=args.n_steps_decay,
+        resampling_frequency=args.resampling_frequency,
+        testing_frequency=args.testing_frequency,
+        use_sdgd=args.use_sdgd,
+        sdgd_num_dims=sdgd_num_dims,
+        one_batch_per_epoch = True,
+    )
+else:
+    losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
+        n_steps=args.n_steps,
+        n_steps_decay=args.n_steps_decay,
+        resampling_frequency=args.resampling_frequency,
+        testing_frequency=args.testing_frequency,
+        use_sdgd=args.use_sdgd,
+        sdgd_num_dims=sdgd_num_dims,
+        one_batch_per_epoch = True,
+    )
 run_utils.merge_losses(losses, losses_adam)
 l2_errs += l2_errs_adam
 print("\nAdam training complete!")
-utility.print_duration_h_m_s(t1, time.time(), "Adam training")
+print(utility.get_duration_h_m_s(t1, time.time(), "Adam training"))
+
+# create a simulation results file?
+# - add in time
+# - weights
 
 print("\nTraining complete!")
 

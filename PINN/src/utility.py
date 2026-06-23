@@ -17,13 +17,13 @@ def get_duration(dt):
     s = dt - 3600 * h - 60 * m
     return int(h),int(m),s
 
-def print_duration_h_m_s(t1, t2, label="Smthg"):
+def get_duration_h_m_s(t1, t2, label="Smthg"):
     h, m, s = get_duration(t2 - t1)
     parts = [f"{label} completed in:"]
     if h > 0: parts.append(f"{h} hours")
     if m > 0: parts.append(f"{m} minutes")
     parts.append(f"{s} seconds")
-    print(" ".join(parts))
+    return " ".join(parts)
 
 
 from torch.profiler import profile, ProfilerActivity
@@ -46,12 +46,12 @@ class Profiler():
     def start(self, si):
         if si == self.start_step:
             self.prof_ctx.__enter__()
-            print(f"\n[Profiler] Started at step {si+1}")
+            print(f"\n[Profiler] Started at step {si}")
 
     def exit(self, si):
         if si == self.end_step-1:
             self.prof_ctx.__exit__(None, None, None)
-            print(f"\n[Profiler] Stopped. Results:")
+            print(f"\n[Profiler] Stopped at step {si}. Results:")
             prof_report = self.prof_ctx.key_averages().table(sort_by="cpu_time_total", row_limit=20)
             print(prof_report)
             # save profiler report

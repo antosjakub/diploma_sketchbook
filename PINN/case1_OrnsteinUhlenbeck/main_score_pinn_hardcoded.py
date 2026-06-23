@@ -233,7 +233,7 @@ losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
 run_utils.merge_losses(losses, losses_adam)
 l2_errs += l2_errs_adam
 print("\nAdam training complete!")
-utility.print_duration_h_m_s(t1, time.time(), "Adam training")
+print(utility.get_duration_h_m_s(t1, time.time(), "Adam training"))
 
 print("\nTraining complete!")
 

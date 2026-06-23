@@ -125,11 +125,12 @@ class PINN_Trainer:
 
         for si in range(n_steps):
 
+            if self.profiler: self.profiler.start(si)
+
             if (si + 1) % resampling_frequency == 0:
                 print("New training data arrived!")
-                self._build_bundle()
-
-            if self.profiler: self.profiler.start(si)
+                with record_function("resample"):
+                    self._build_bundle()
 
             if one_batch_per_epoch:
                 batches_by_name = self._next_batches(loader_keys)
@@ -151,10 +152,11 @@ class PINN_Trainer:
                 self.scheduler.step()
 
             if type(self.loss_weighting).__name__ == 'AdaptiveWeights':
-                if (si + 1) % 50 == 0:
-                    self.optimizer.zero_grad()
-                    per_term_w = [self._loss_term(k, batches_by_name) for k in self.active_losses]
-                    self.loss_weighting.update(per_term_w, self.model)
+                with record_function("update_weights"):
+                    if (si + 1) % 50 == 0:
+                        self.optimizer.zero_grad()
+                        per_term_w = [self._loss_term(k, batches_by_name) for k in self.active_losses]
+                        self.loss_weighting.update(per_term_w, self.model)
 
             if self.profiler: self.profiler.exit(si)
 
@@ -183,6 +185,95 @@ class PINN_Trainer:
         return losses, l2_errs
 
 
+    def train_lbfgs(self, n_steps, n_steps_decay, resampling_frequency=2000, testing_frequency=100, use_sdgd=False, sdgd_num_dims=None, one_batch_per_epoch=False):
+        """Train the model using Adam optimizer.
+
+        If one_batch_per_epoch=True, each `si` performs a single gradient step
+        (one batch from each active loader). Otherwise iterates over all batches
+        of the bundle per `si`.
+        """
+        print(f"\n{'='*60}")
+        print(f"Starting L-BFGS fine-tuning ({n_steps} steps)")
+        print(f"{'='*60}\n")
+
+
+        if self.profiler: self.profiler.make()
+
+        step_counter = [0]  # mutable counter accessible inside closure
+        self.last_losses = None
+        self.losses = {"total": [], **{k: [] for k in self.active_losses}}
+        self.i = 0
+
+        def build_closure(batches_by_name):
+            def closure():
+                # optimizer.zero_grad()
+                # calc loss
+                # store losses
+                # loss.backward()
+                # return loss
+                self.optimizer.zero_grad()
+                with record_function("loss"):
+                    per_term = [
+                        self._loss_term(k, batches_by_name, use_sdgd, sdgd_num_dims)
+                        for k in self.active_losses
+                    ]
+                loss_value = self.loss_weighting.weight_loss(per_term)
+                #print(f"s={self.s}, i={self.i}: loss = {loss_value}")
+                self.i += 1
+                with record_function("backward"):
+                    loss_value.backward()
+                if self.grad_clip_norm is not None:
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip_norm)
+                self.last_losses = {k: per_term[i].item() for i, k in enumerate(self.active_losses)}
+
+                self.losses["total"].append(loss_value.item())
+                for k in self.active_losses:
+                    self.losses[k].append(self.last_losses[k])
+                return loss_value
+            return closure
+
+        loader_keys = [k for k in self.LOADER_KEYS if k in self.active_losses]
+        self._build_bundle()
+        batches_by_name = self._next_batches(loader_keys)
+        closure_step = build_closure(batches_by_name)
+
+        for si in range(n_steps):
+
+            if (si + 1) % resampling_frequency == 0:
+                print("New training data arrived!")
+                self._build_bundle()
+                batches_by_name = self._next_batches(loader_keys)
+                closure_step = build_closure(batches_by_name)
+
+            if self.profiler: self.profiler.start(si)
+
+            self.i = 0
+            self.s = si
+            loss = self.optimizer.step(closure_step)
+            step_counter[0] += 1
+
+            if (si + 1) % n_steps_decay == 0:
+                self.scheduler.step()
+
+            if type(self.loss_weighting).__name__ == 'AdaptiveWeights':
+                if (si + 1) % 50 == 0:
+                    self.optimizer.zero_grad()
+                    per_term_w = [self._loss_term(k, batches_by_name) for k in self.active_losses]
+                    self.loss_weighting.update(per_term_w, self.model)
+
+            if self.profiler: self.profiler.exit(si)
+
+            if (si + 1) % testing_frequency == 0:
+                parts = [f"Step {si+1}/{n_steps}", f"Loss: {loss.item():.6f}", f"Loss_tot: {self.losses["total"][-1]:.6f}"]
+                for k in self.active_losses:
+                    parts.append(f"{k}: {self.last_losses[k]:.6f}")
+                parts.append(f"lr: {self.optimizer.param_groups[0]['lr']:.6f}")
+                log = ", ".join(parts)
+                print(log)
+                print("len(self.losses['total']) = ", len(self.losses['total']))
+
+
+        return self.losses, []
 
 
 

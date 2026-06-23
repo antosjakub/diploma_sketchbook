@@ -253,3 +253,21 @@ class PINN_SeparableTimes(nn.Module):
             out *= self.net_temporal(X[:,-1:])
             return out
 
+
+class PINN_base(nn.Module):
+    def __init__(self, input_dim, layers=[64], output_dim=1, activn_fn=nn.Tanh):
+        super().__init__()
+
+        net_layers = []
+        for l1, l2 in zip(layers[:-1], layers[1:]):
+            net_layers.append(nn.Linear(l1, l2))
+            net_layers.append(activn_fn())
+        first = nn.Linear(input_dim, layers[0])
+        self.net = nn.Sequential(
+            first, activn_fn(),
+            *net_layers,
+            nn.Linear(layers[-1], output_dim)
+        )
+
+    def forward(self, X):
+        return self.net(X)

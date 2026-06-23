@@ -710,9 +710,9 @@ def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settin
         #    print(i, "traj", X_ic_trajs[:,i].min(), X_ic_trajs[:,i].max())
         #    print(i, "dom-old", X_ic_full_domain[:,i].min(), X_ic_full_domain[:,i].max())
 
-        print(f"IC loader: X.shape = {X_ic.shape}, bs = {bs_ic}")
-        print(f" - full domain sampling (X.shape = {X_ic_full_domain.shape})")
-        print(f" - trajs sampling (X.shape = {X_ic_trajs.shape})")
+        #print(f"IC loader: X.shape = {X_ic.shape}, bs = {bs_ic}")
+        #print(f" - full domain sampling (X.shape = {X_ic_full_domain.shape})")
+        #print(f" - trajs sampling (X.shape = {X_ic_trajs.shape})")
     else:
         bs_pde = bs
         n_interior = n_res_points
@@ -758,15 +758,15 @@ def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settin
             X_pde_1,
             X_pde_2
         ], dim=0)
-        print(f"PDE loader (X.shape = {X_pde.shape}, bs = {bs_pde})")
-        print(f" - full_domain sampling (X.shape = {X_pde_1.shape})")
-        print(f" - trajs sampling (X.shape = {X_pde_2.shape})")
+        #print(f"PDE loader (X.shape = {X_pde.shape}, bs = {bs_pde})")
+        #print(f" - full_domain sampling (X.shape = {X_pde_1.shape})")
+        #print(f" - trajs sampling (X.shape = {X_pde_2.shape})")
     elif use_full_domain_sampling:
         X_pde = X_pde_1
-        print(f"PDE loader (X_full_domain.shape = {X_pde.shape}, bs = {bs_pde})")
+        #print(f"PDE loader (X_full_domain.shape = {X_pde.shape}, bs = {bs_pde})")
     elif use_trajs_sampling:
         X_pde = X_pde_2
-        print(f"PDE loader (X_trajs.shape = {X_pde.shape}, bs = {bs_pde})")
+        #print(f"PDE loader (X_trajs.shape = {X_pde.shape}, bs = {bs_pde})")
 
     precomputed = _precompute_active(pde_model, X_pde, None, X_ic, active_losses=active_losses, device=device)
     bundle = {}

@@ -103,8 +103,8 @@ def make_profiler(dir_name, args):
         return None
     return utility.Profiler(
         report_filename=f"{dir_name}/{args.profiler_report_filename}.txt",
-        start_step=100,
-        end_step=110,
+        start_step=95,
+        end_step=105,
     )
 
 

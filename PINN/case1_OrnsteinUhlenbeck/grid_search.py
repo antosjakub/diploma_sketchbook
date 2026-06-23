@@ -14,8 +14,9 @@ CASE_DIR = Path(__file__).resolve().parent
 
 
 # Choose which training entrypoint to use.
-# Supported values: "hardcoded", "3losses"
-VARIANT = "3losses"
+# Supported values: "hardcoded", "3losses", "vanilla"
+#VARIANT = "3losses"
+VARIANT = "vanilla"
 
 
 FIXED_PARAMS = {
@@ -78,10 +79,13 @@ FIXED_PARAMS = {
 #LINKED_SCORE_PDE_DIR = "gridsearch__hardcoded__2026-04-22--16-36-12/n_steps=19999__n_steps_decay=800__layers=128_128_128_128/score_pde/"
 LINKED_SCORE_PDE_DIR = None
 
-# `ll_ode` depends on a matching `score_pde` run, so modes are run in order
-# for each base combo instead of being treated as an independent search axis.
-MODES = ["score_pde", "ll_ode"]
+# For score-PINN variants, `ll_ode` depends on a matching `score_pde` run, so
+# modes are run in order for each base combo instead of being treated as an
+# independent search axis. Vanilla PINN uses only `q_pde`.
+#MODES = ["score_pde", "ll_ode"]
+#MODES = ["score_pde", "ll_ode"]
 #MODES = ["score_pde"]
+MODES = ["q_pde"]
 
 
 # Add or remove search axes here.
@@ -175,7 +179,13 @@ def get_entrypoint(variant: str) -> str:
         return "main_score_pinn_hardcoded.py"
     if variant == "3losses":
         return "main_score_pinn_3losses.py"
+    if variant == "vanilla":
+        return "main_vanilla_pinn.py"
     raise ValueError(f"Unsupported variant: {variant!r}")
+
+
+def supports_linked_score_pde(variant: str) -> bool:
+    return variant in {"hardcoded", "3losses"}
 
 
 def slug(value) -> str:
@@ -282,10 +292,22 @@ def run_one(entrypoint: str, run_dir: Path, config: dict) -> int:
 
 
 def validate_search_setup():
-    allowed_modes = {"score_pde", "ll_ode"}
+    allowed_modes_by_variant = {
+        "hardcoded": {"score_pde", "ll_ode"},
+        "3losses": {"score_pde", "ll_ode"},
+        "vanilla": {"q_pde"},
+    }
+    try:
+        allowed_modes = allowed_modes_by_variant[VARIANT]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported variant: {VARIANT!r}") from exc
     unknown_modes = sorted(set(MODES) - allowed_modes)
     if unknown_modes:
         raise ValueError(f"Unsupported modes in MODES: {unknown_modes}")
+    if not supports_linked_score_pde(VARIANT) and LINKED_SCORE_PDE_DIR is not None:
+        raise ValueError(
+            f"LINKED_SCORE_PDE_DIR is not supported for variant {VARIANT!r}."
+        )
     if "ll_ode" in MODES and "score_pde" not in MODES and LINKED_SCORE_PDE_DIR is None:
         raise ValueError(
             "ll_ode requires score_pde in MODES or LINKED_SCORE_PDE_DIR "
@@ -327,6 +349,30 @@ def main():
         combo_dir.mkdir(parents=True, exist_ok=True)
         print()
         print(f"[{combo_index}/{len(base_combos)}] {combo_dir.name}")
+
+        if VARIANT == "vanilla":
+            mode = "q_pde"
+            run_dir = combo_dir / mode
+            run_config = build_run_config(
+                base_combo=base_combo,
+                mode=mode,
+                output_dir=run_dir,
+                linked_score_pde_dir=None,
+            )
+            run_rc = run_one(entrypoint, run_dir, run_config)
+            run_records.append(
+                {
+                    "combo": base_combo,
+                    "mode": mode,
+                    "run_dir": str(run_dir.relative_to(CASE_DIR)),
+                    "return_code": run_rc,
+                }
+            )
+            if run_rc == 0:
+                n_ok += 1
+            else:
+                n_fail += 1
+            continue
 
         score_run_dir = combo_dir / "score_pde"
         ll_run_dir = combo_dir / "ll_ode"
@@ -413,7 +459,7 @@ def main():
     json_dump(search_root / "summary.json", summary)
 
     print()
-    utility.print_duration_h_m_s(gs_start_time, time.time(), label="Grid search")
+    print(utility.get_duration_h_m_s(gs_start_time, time.time(), label="Grid search"))
     print(f"ok={n_ok}, failed={n_fail}")
     print(f"Summary: {search_root.relative_to(CASE_DIR) / 'summary.json'}")
 
