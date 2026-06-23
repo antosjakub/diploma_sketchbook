@@ -1,3 +1,33 @@
+TD write
+- background:
+    - sde ito
+- pinns
+    -x fourier features
+    - samping: Euler Maruyama
+    - score pinns
+    - optimization strats notes
+    - torch basics for pinns
+    - ? nn basics - bs, backprop, ad (can add in later)
+    - ? lbfgs
+        - needs a fixed set of points
+        - slowly change points during training
+
+TD impl:
+    - causal nope - my causal sampling yes
+    - lbfgs on existing good runs
+    - save runs to diploma-sketchbook case1-..
+
+experiments
+    - try score pinns and lbfgs on cluster
+    - do large gs in d=3 for each case
+        - sampling - trajs / latin
+        - causal weighting
+        - loss weighting - fixed vs adaptive
+
+pavelka
+    - sent pinn chapter
+    - ask sde ito background public
+
 
 [put this into the diploma introduction itself]
 
@@ -57,6 +87,18 @@ where $\theta = \{W^{(l)}, b^{(l)}\}_{l=1}^{L+1}$ is the set of all trainable pa
 The nonlinearity $\sigma$ is essential: without it, the above given composition of hidden layes would collapse into a single linear affine map and the network's expressive power would be that of linear regression.
 
 The number of hidden layers $L$ (\emph{depth}) and the layer sizes $d_l$ (\emph{width}) together control the capacity of the model.
+
+
+\subsection{core concepts}
+
+- activations relu vs tanh
+
+- backpropagation
+
+- batch size
+
+
+
 
 \subsection{Training}
 
@@ -248,26 +290,41 @@ d) other
 \subsection{Domain sampling strategies}
 
 \subsubsection{Latin hypercube sampling}
-In high dimensions, uniform sampling becomes inefficient as it can leave large parts of the domain unsampled, and thus miss key regions.
-To ensure a better space coverage of the domain, a Latin hypercube sampling (LHS) can be utilized.
-In one dimension, LHC divides the range into M equally probable intervals and samples the domain such that no two points lie in the same interval.
+In high dimensions, uniform sampling becomes problematic as it can leave large parts of the domain unsampled, potentially missing key regions \cite{latin}.
+To ensure a better coverage of the domain, a Latin hypercube sampling (LHS) is prefered \cite{systematic_review}.
+In one dimension, LHC divides a segment into M equally probable intervals and samples the domain such that no two points lie in the same interval.
 In multi dimensional domains, 1-dimensional samples are generated independently and then paired to form d-dimensinoal points.
+% pg 11 system rev
 
-\subsubsection{Residual-based adaptive sampling}
-The training can be made even more efficient by concentrainng on regions where the networks struggles the most.
+\subsubsection{Residual-based adaptive resampling (RAR)}
+The sampling can be made more effective by concentrating the samples on regions where the network struggles the most.
+Concretely, we can sample the domain proportianally to the value of the residual.
+Following Lulu etc. \cite{deepxde}\cite{rar}, we consider two such approaches:
 
-One frequently used approach is to adaptively sample the domain proportianally to the value of the residual.
-The strategy is a follows:
-\begin{enumerate}
-\item before the training, sampled a fixed set of points $X$
-\item every $K$ epochs:
-\begin{enumerate}
-\item sample a large pools of candidates points $X_{cand}$
-\item evaluate the residual at $X_{cand}$
-\item pick $n$ points from $X_{cand}$ with probability proportial to the residual
-\end{enumerate}
-\item update $X$ with thus selected points
-\end{enumerate}
+\textbf{a) RAR-G (Redisual-based adaptive resampling with greed)}
+
+We simply sample a large pools of candidate points $X_{cand}$, and then pick a subset with the smallest residuum.
+
+\textbf{b) RAR-D (Redisual-based adaptive resampling with distribution)}
+
+We sample a large pools of candidate points $X_{cand}$, calculate the residuum at each point $\epsilon(X):=\mathcal R(x,u_\theta)$,
+and pick a subset of points with probability proportial to
+$$
+p(x)\sim \frac{\epsilon^k(x)}{\mathbb{E}[\epsilon^k(x)]}+c
+$$
+where $k,c\ge0$ are hyperparameters.
+
+% uniform
+% latin hyppercube
+% rar-g
+% rar-d
+\begin{figure}
+    \centering
+    \includegraphics[width=150mm]{figures/sampling_kc.png}
+    \caption{RAR-D}
+    \label{fig:rar-d}
+\end{figure}
+
 
 %\subsubsection{Langevin dynamics - TD}
 %(NeurIPS 2025)
@@ -286,22 +343,27 @@ The strategy is a follows:
 %    - keep top 30percent of highest-residual points, resample the rest with RAD weights.
 %
 
+\subsubsection{SDE sampling}
+Euler Maruyama
+
+
+
 \subsection{Appoximating the spatial derivatives}
 
 \subsubsection{Stochastic Dimension Gradient Descent (SDGD)}
 % https://arxiv.org/html/2307.12306v5#S3
 
-SDGD approximates the full gradient of the physics loss by decomposing the PDE operator into dimension-wise terms
-and sampling subsets during training, thus dramatically decreasing the memory requirements of AD and unlocking it applicability even in very high dimensions ($\sim 1000$).
+SDGD approximates the loss by decomposing the PDE operator into dimension-wise terms, sampling subsets during training.
+This dramatically decreases the memory requirements of AD and theoretically unlocks it to very high dimensions ($\sim 100$).
 
-Consider a general PDE of the form:
+Consider a linear PDE of the form:
 $$
 \mathcal{L}u(x) = R(x)
 $$
 where, $\mathcal{L}$ is a differential operator, for example,
 
 $$
-\mathcal{L} = \sum_{i=1}^d\frac{\partial^2}{\partial x_i^2}
+\mathcal{L} = \sum_{i=1}^d\frac{\partial^2}{\partial x_i^2}\;,\quad\text{or}
 $$
 $$
 \mathcal{L} = \sum_{i,j=1}^d\frac{\partial^2}{\partial x_i \partial x_j} + \sum_{i=1}^d a_i\frac{\partial}{\partial x_i}
@@ -322,16 +384,16 @@ $$
 \quad \text{and} \quad n=d^2
 $$
 
-We can therefore in general write
+We can therefore write
 $$
 \sum_{i=1}^n\mathcal{L}_i u(x) = R(x)
 $$
 
 Now consider a PINN approximation $u_\theta \approx u$. 
-The pde loss can then be written in the form
+The pde loss at a point $x\in\mathbb{R}^d$ can then be written in the form
 
 $$
-\ell_{pde}(\theta) 
+\ell_{pde}(\theta;x)
 = \big( \mathcal{L} u_\theta(x) - R(x) \big)^2
 = \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(x) - R(x) \right)^2
 $$
@@ -339,22 +401,40 @@ $$
 And the corresponding gradient w.r.t. the model weights is then
 
 $$
-\nabla_\theta \ell_{pde}(\theta) = \nabla_\theta \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(x) - R(x) \right)^2
-= 2 \left( \sum_{i=1}^n \mathcal{L}_i u_\theta - R \right) \left( \sum_{i=1}^n \nabla_\theta \mathcal{L}_i u_\theta \right)
+\nabla_\theta \ell_{pde}(\theta;x) = \nabla_\theta \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(x) - R(x) \right)^2
+= 2 \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(x) - R(x) \right) \left( \sum_{i=1}^n \nabla_\theta \mathcal{L}_i u_\theta(x) \right)
 $$
 
-The SDGD framework proceeds now as follows:
+Finally, we consider a subset $I \subset \{1, \dots, n\}$ with $|I| \ll n$, and approximate the last term from the equation above,
+$$
+\left( \sum_{i=1}^n \nabla_\theta \mathcal{L}_i u_\theta(x) \right)
+$$
+as
+$$
+\frac{n}{|I|} \left( \sum_{i \in I} \nabla_\theta \mathcal{L}_i u_\theta(x) \right)
+$$
+
+
+In the context of the training loop, SDGD is implemented as follows:
+
 \begin{enumerate}
+%\item consider some point $x\in\mathbb{R}^{d}$
+\item consider some batch of points $X\in\mathbb{R}^{bs\times d}$
 \item sample index set $I \subset \{1, \dots, n\}$ with $|I| \ll n$
-\item compute detached $\mathcal{L}_i u_\theta$ for all $i$ (forward pass)
-\item backpropagate only for $i \in I$ (memory $O(|I|)$ vs. $O(n)$)
+\item compute $\mathcal{L}_i u_\theta(X)$ for all $i=1,\dots,n$ and detach the computational graph behind the terms $i\notin I$ from memory
+\item backpropagate only through terms $i \in I$ as so:
+$$
+\nabla_\theta \ell_{pde}^I(\theta;X) = 2\,\frac{n}{|I|} \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(X) - R \right) \nabla_\theta \left( \sum_{i \in I} \mathcal{L}_i u_\theta(X) \right)
+$$
 \end{enumerate}
 
-The unbiased estimator is then
-$$
-\nabla_\theta \ell_{pde}^I(\theta) = 2\,\frac{n}{|I|} \left( \sum_{i=1}^n \mathcal{L}_i u_\theta - R \right) \left( \sum_{i \in I} \nabla_\theta \mathcal{L}_i u_\theta \right),
-\quad \mathbb{E}_I [\nabla_\theta \ell_{pde}^I] = \nabla_\theta \ell_{pde}
-$$
+the other $i\notin I$ are treated as scalars
+
+%$$
+%\mathbb{E}_I [\nabla_\theta \ell_{pde}^I] = \nabla_\theta \ell_{pde}
+%$$
+%(memory $O(|I|)$ vs. $O(n)$) 
+
 
 
 %For multiple points $\{\mathbf{x}_n\}_{n=1}^{N_r}$, normalize $\frac{1}{N_r N_L^2} \sum_n (\cdot)^2$;
@@ -418,37 +498,86 @@ SoftAdapt
 % https://github.com/levimcclenny/SA-PINNs
 - learnable attention params
 
+\section{Causal training}
+
+In the original PINN architecture, time is handled just as another input dimension without any special treatment.
+But since its incepetions it became apparant that this threatement is not adequete in some cases
+When training PINNs on time-dependent PDEs, the optimizer minimizes the residual over all time steps simultaneously.
+This can lead to causality violation: the network attempts to fit later-time dynamics before earlier-time states are correctly learned, producing globally low residual but physically meaningless solutions.
+\cite{causal_pinns}
+Thus a few competing strategies have emerged as a viable alternatives to the original formulation.
+
+\subsection{Time marching}
+One simple approach is to divide the interval into multiple segments and train a PINN for each one.
+\cite{time_adaptive_pinns}
+The networks have to be trained in series, as the intial considiton for the $k$-th network is taken as the terminal state of the $k-1$-th network.
+
+\subsection{Time sampling}
+Here, we train the neural network on a ever increasing temporal domain.
+sample in interval $[0,\tau t], \tau\sim \frac{step}{n_steps}T$
+\cite{time_adaptive_pinns}
+
+
 \subsection{Causal weighting}
 % Wang et al., "Respecting Causality is All You Need" / experts guide
-
-When training PINNs on time-dependent PDEs, the optimizer minimizes the residual over all time steps simultaneously.
-This can lead to \emph{causality violation}: the network attempts to fit later-time dynamics before earlier-time states are correctly learned, producing globally low residual but physically meaningless solutions.
+% also note that large batches are good for hard problems - enhanced convergence and accuracy
+% - but gpus not enough memory
+% - split large batch into smaller subbatches, parallelize loss compute across gpus
+% - compute grad desc. on all
+% - average model param update
 
 Causal weighting addresses this by partitioning the time domain $[0,T]$ into $M$ ordered segments
-$$
+$[t_{m-1}, t_m),\:m=1,\dots,M\,,\:
 0 = t_0 < t_1 < \cdots < t_M = T,
+$ and computig the pde loss as
+
 $$
-and assigning to each segment an exponential weight that depends on the cumulative residual of all preceding segments.
-Let
+\mathcal{L}_{pde} = \frac{1}{M}\sum_{m=1}^{M} w_m\, \mathcal{L}_{pde}^{(m)}
 $$
-\mathcal{L}_r^{(m)} = \frac{1}{|\mathcal{S}_m|}\sum_{n \in \mathcal{S}_m} \bigl|\mathcal{R}_\theta(t_n, x_n)\bigr|^2
+
+where
+$\mathcal{L}_{pde}^{(m)}$
+is the loss computed from the points falling in the $m$-th time segment $[t_{m-1}, t_m)$, 
+and the causal weight $w_m$ for segment $m$ is an exponential weight that depends on the cumulative residual of all preceding segments:
 $$
-be the mean squared PDE residual over the collocation points $\mathcal{S}_m$ falling in the $m$-th time segment $[t_{m-1}, t_m)$.
-The causal weight for segment $m$ is defined as
+w_m = \exp\!\Biggl(-\varepsilon \sum_{k=1}^{m-1} \mathcal{L}_{pde}^{(k)}\Biggr)
+\,,\quad m=1,\dots,M
 $$
-w_m = \exp\!\Biggl(-\varepsilon \sum_{k=1}^{m-1} \mathcal{L}_r^{(k)}\Biggr), \qquad m = 1, \dots, M,
 $$
-where $\varepsilon > 0$ is a causality parameter controlling the strictness of the temporal ordering.
+w_m = 1
+\,,\quad m=0
+$$
+also
+$$
+$\mathcal{L}^{(m)} = \mathcal{L}^{(m)}_{pde}$
+$\mathcal{L}^{(0)} = \lambda_{ic}\mathcal{L}^{(0)}_{ic}$
+$$
+Here, $\varepsilon > 0$ is a causality parameter controlling the strictness of the temporal ordering.
 When $\varepsilon = 0$, all segments are weighted equally (standard training).
 As $\varepsilon \to \infty$, the training concentrates entirely on the earliest segment whose residual has not yet converged.
 
-The causally weighted PDE loss is then
+
+All $w_m$ intiialize by 1
+
+Note that the weights $w_m$ are detached from the computational graph, that is, the backward pass sees them only as scalars with no computation graph behind them.
+
 $$
-\mathcal{L}_r^{\mathrm{causal}} = \frac{1}{M}\sum_{m=1}^{M} w_m\, \mathcal{L}_r^{(m)}.
+\mathcal{L}^{(1)} = 
+\mathcal{L}^{(1)}_{pde} +
+\mathcal{L}^{(1)}_{ic}
 $$
 
-Note that the weights $w_m$ are computed from the \emph{detached} (non-differentiated) per-segment losses: gradients flow only through $\mathcal{L}_r^{(m)}$, not through the weights themselves.
-This ensures that the causal mechanism acts as a curriculum schedule rather than altering the gradient landscape.
+$$
+\mathcal{L}^{(m)} = 
+\mathcal{L}^{(m)}_{pde} +
+\mathcal{L}^{(m)}_{ic}
+$$
+
+Notice though, that any discussion about the treatment of the boundary loss $\mathcal L_{bc}$ is not discussed.
+We can sum it with the pde loss and do the same procedure for
+$\mathcal L_{pde,bc} = \lambda_{pde}\matcal L_{pde} + \lambda_{pde}\matcal L_{bc}$
+
+
 
 
 
@@ -495,71 +624,107 @@ $$
 NNs learn low freq sol first
 
 
-\subsubsection{Fourier features}
-- for periodic patterns
-- FF embedds?
+\subsubsection{Random Fourier features}
+
+As reported by , neural networks are biased for learning low frequency signals first
+before proceeding to learn high freq ones.
+\cite{experts_guide}
+
+In 2019, Rahaman et al.
+consider uniform distributio of training data
+learn low freq smooth patterns before high freq ones
+learn low freq first even when high freq have large amplitudes
+low freq stable when perturbing netwrork params
+consider nns with relu activations trained via gradient descent
+use fourier analysis
+call this phenomena spectral bias
+\cite{spectral_bias_relu}
+
+More interesting for our case:
+extends to non-uniform data - in the context of pinns - one region sampled more than other
+use NTK (Neural Tanget Kernel) theory
+- looks at $K(x_i,x_j)=
+<\frac{\partial NN_\theta(x_i)}{\partial \theta},
+<\frac{\partial NN_\theta(x_j)}{\partial \theta}>$
+consider training for harmonic target function with freq $\kappa$
+speed of training convergence at a points $x$ is proportial to
+$O(\frac{\kappa^d}{p(x)})$ where $p(x)$ is a local data density
+$d$ - input dimension of the NN
+\cite{freq_bias_NTK}
+
+solution coming from computer vision
 $$
 \gamma(x) =
+\begin{pmatrix}
+    \cos(2\pi B x)\\
+    \sin(2\pi B x)
+\end{pmatrix}
 $$
+$B\in\mathbb R^{m\times d}$ sampled from Gaussian distribution $\mathcal N(0,\sigma^2)$
+spatial / tempotal
+\cite{fourfeat}
 
 
-\subsubsection{Random Weight Factorization}
-% arXiv:2308.08468, Sec 4.3
+%\subsubsection{Random Weight Factorization}
+%% arXiv:2308.08468, Sec 4.3
+%
+%Standard PINN training often suffers from slow convergence due to the loss landscape geometry.
+%Random Weight Factorization (RWF) \cite{rwf_modified_mlp} reparametrizes each weight matrix by factoring it into a diagonal scale matrix and a weight factor:
+%$$
+%W^{(l)} = \operatorname{diag}\!\bigl(\exp(s^{(l)})\bigr)\, V^{(l)}, \qquad l = 1,\dots,L{+}1,
+%$$
+%where $s^{(l)} \in \mathbb{R}^{d_l}$ is a trainable scale vector and $V^{(l)} \in \mathbb{R}^{d_l \times d_{l-1}}$ is the corresponding weight factor.
+%The exponential parametrization ensures that the per-neuron scales remain strictly positive and can span a wide range of magnitudes.
+%
+%The initialization proceeds as follows:
+%\begin{enumerate}
+%    \item Initialize a weight matrix $W^{(l)}$ via Glorot (Xavier) initialization.
+%    \item Sample the scale vector $s^{(l)} \sim \mathcal{N}(\mu,\, \sigma^2 I)$, with recommended defaults $\mu = 1.0$, $\sigma = 0.1$.
+%    \item Set $V^{(l)} = \operatorname{diag}\!\bigl(\exp(-s^{(l)})\bigr)\, W^{(l)}$, so that the effective weight $\operatorname{diag}(\exp(s^{(l)}))\, V^{(l)} = W^{(l)}$ matches the original Glorot initialization.
+%\end{enumerate}
+%The trainable parameters per layer are $\{s^{(l)},\, V^{(l)},\, b^{(l)}\}$.
+%During the forward pass, the output of each layer is computed efficiently as
+%$$
+%y = \bigl(x\, {V^{(l)}}^\top\bigr) \odot \exp(s^{(l)}) + b^{(l)},
+%$$
+%without materializing the full weight matrix $W^{(l)}$.
+%The factorization introduces additional degrees of freedom in the loss landscape, which helps the optimizer escape saddle points and accelerates convergence, particularly for multi-scale PDE solutions.
+%
+%
+%\subsubsection{Modified MLP}
+%% arXiv:2308.08468, Sec 6.4 (Wang et al.)
+%
+%A known limitation of standard MLPs in the PINN setting is that input information is progressively diluted through successive layers, making it difficult for deeper layers to retain sensitivity to the original coordinates.
+%The Modified MLP \cite{rwf_modified_mlp} addresses this by introducing two encoder sub-networks whose outputs are injected into every hidden layer via element-wise gating.
+%
+%Given input $x \in \mathbb{R}^{d_{\mathrm{in}}}$, two encodings are computed:
+%$$
+%U = \sigma(W_1\, x + b_1), \qquad V = \sigma(W_2\, x + b_2),
+%$$
+%where $W_1, W_2 \in \mathbb{R}^{h \times d_{\mathrm{in}}}$, $b_1, b_2 \in \mathbb{R}^h$, and $\sigma$ is the activation function (e.g.\ $\tanh$).
+%
+%The hidden layers are then defined recursively. Starting from $g^{(0)} = x$, for $l = 1, \dots, L$:
+%\begin{align}
+%    f^{(l)} &= W^{(l)}\, g^{(l-1)} + b^{(l)}, \\
+%    g^{(l)} &= \sigma\!\bigl(f^{(l)}\bigr) \odot U \;+\; \bigl(1 - \sigma\!\bigl(f^{(l)}\bigr)\bigr) \odot V,
+%\end{align}
+%where $\odot$ denotes element-wise multiplication.
+%The final output is a standard linear projection:
+%$$
+%u_\theta(x) = W^{(L+1)}\, g^{(L)} + b^{(L+1)}.
+%$$
+%
+%The gating mechanism $\sigma(f^{(l)}) \odot U + (1 - \sigma(f^{(l)})) \odot V$ acts as a learned interpolation between the two input encodings at each layer, ensuring that the network retains direct access to input-derived features at every depth.
+%Both techniques can be combined: RWF can be applied to all weight matrices in the Modified MLP, including the encoder matrices $W_1$ and $W_2$.
+%
+%
+%XPINN - mulitple pinns - overlapping domains
+%
+%PDE separable? -> sum of product of 1d networks
 
-Standard PINN training often suffers from slow convergence due to the loss landscape geometry.
-Random Weight Factorization (RWF) \cite{rwf_modified_mlp} reparametrizes each weight matrix by factoring it into a diagonal scale matrix and a weight factor:
-$$
-W^{(l)} = \operatorname{diag}\!\bigl(\exp(s^{(l)})\bigr)\, V^{(l)}, \qquad l = 1,\dots,L{+}1,
-$$
-where $s^{(l)} \in \mathbb{R}^{d_l}$ is a trainable scale vector and $V^{(l)} \in \mathbb{R}^{d_l \times d_{l-1}}$ is the corresponding weight factor.
-The exponential parametrization ensures that the per-neuron scales remain strictly positive and can span a wide range of magnitudes.
-
-The initialization proceeds as follows:
-\begin{enumerate}
-    \item Initialize a weight matrix $W^{(l)}$ via Glorot (Xavier) initialization.
-    \item Sample the scale vector $s^{(l)} \sim \mathcal{N}(\mu,\, \sigma^2 I)$, with recommended defaults $\mu = 1.0$, $\sigma = 0.1$.
-    \item Set $V^{(l)} = \operatorname{diag}\!\bigl(\exp(-s^{(l)})\bigr)\, W^{(l)}$, so that the effective weight $\operatorname{diag}(\exp(s^{(l)}))\, V^{(l)} = W^{(l)}$ matches the original Glorot initialization.
-\end{enumerate}
-The trainable parameters per layer are $\{s^{(l)},\, V^{(l)},\, b^{(l)}\}$.
-During the forward pass, the output of each layer is computed efficiently as
-$$
-y = \bigl(x\, {V^{(l)}}^\top\bigr) \odot \exp(s^{(l)}) + b^{(l)},
-$$
-without materializing the full weight matrix $W^{(l)}$.
-The factorization introduces additional degrees of freedom in the loss landscape, which helps the optimizer escape saddle points and accelerates convergence, particularly for multi-scale PDE solutions.
-
-
-\subsubsection{Modified MLP}
-% arXiv:2308.08468, Sec 6.4 (Wang et al.)
-
-A known limitation of standard MLPs in the PINN setting is that input information is progressively diluted through successive layers, making it difficult for deeper layers to retain sensitivity to the original coordinates.
-The Modified MLP \cite{rwf_modified_mlp} addresses this by introducing two encoder sub-networks whose outputs are injected into every hidden layer via element-wise gating.
-
-Given input $x \in \mathbb{R}^{d_{\mathrm{in}}}$, two encodings are computed:
-$$
-U = \sigma(W_1\, x + b_1), \qquad V = \sigma(W_2\, x + b_2),
-$$
-where $W_1, W_2 \in \mathbb{R}^{h \times d_{\mathrm{in}}}$, $b_1, b_2 \in \mathbb{R}^h$, and $\sigma$ is the activation function (e.g.\ $\tanh$).
-
-The hidden layers are then defined recursively. Starting from $g^{(0)} = x$, for $l = 1, \dots, L$:
-\begin{align}
-    f^{(l)} &= W^{(l)}\, g^{(l-1)} + b^{(l)}, \\
-    g^{(l)} &= \sigma\!\bigl(f^{(l)}\bigr) \odot U \;+\; \bigl(1 - \sigma\!\bigl(f^{(l)}\bigr)\bigr) \odot V,
-\end{align}
-where $\odot$ denotes element-wise multiplication.
-The final output is a standard linear projection:
-$$
-u_\theta(x) = W^{(L+1)}\, g^{(L)} + b^{(L+1)}.
-$$
-
-The gating mechanism $\sigma(f^{(l)}) \odot U + (1 - \sigma(f^{(l)})) \odot V$ acts as a learned interpolation between the two input encodings at each layer, ensuring that the network retains direct access to input-derived features at every depth.
-Both techniques can be combined: RWF can be applied to all weight matrices in the Modified MLP, including the encoder matrices $W_1$ and $W_2$.
-
-
-XPINN - mulitple pinns - overlapping domains
-
-PDE separable? -> sum of product of 1d networks
-
+\subsection{L-BFGS}
+limited memory
+quasi newton
 
 \subsection{my genious ideas TD}
 - have 3 networks - each focused on different frequency signals
@@ -567,6 +732,47 @@ PDE separable? -> sum of product of 1d networks
 - extreme machine learning
 (periodically give a LLM during the training a snapshot of the loss, the l2, l1 errs and give it some params to tweak)
 
+
+
+\section{Optimization}
+
+
+\subsection{GPU-CPU orchestration / term-by-term}
+- torch.profiler and chrome
+
+\subsection{GPU memory requirements of the loss computation}
+- benchmarks:
+    - normal
+    - HTE
+    - sdgd
+- observe:
+    - peak memory
+    - timeseries memory
+    - time
+
+sample X
+
+pde terms computation
+- forward: u(X)
+- grad of u
+- other terms
+- summ together
+
+loss = sum batch vals together and l2
+
+backpropagate?
+
+
+- float32 / float64
+
+\subsection{hardware}
+- n of gpus
+- vRAM
+
+\subsection{software}
+- jax prob better
+- torch for arch
+- AD - jacrev,... - jax like
 
 
 \section{Math recap}

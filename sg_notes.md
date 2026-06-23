@@ -1,5 +1,16 @@
 # General nots
 
+newest notes:
+    - spatial adaptibility approaches
+        - one full grid
+            - large system - more memory?
+        - combination technique
+            - faster
+            - reuse existing solvers
+            - super parallelizable
+
+
+
 tensor products of one-dimensional multiscale functions
 
 energy norm space grids

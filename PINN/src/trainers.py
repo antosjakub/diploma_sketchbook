@@ -239,13 +239,14 @@ class PINN_Trainer:
 
         for si in range(n_steps):
 
+            if self.profiler: self.profiler.start(si)
+
             if (si + 1) % resampling_frequency == 0:
                 print("New training data arrived!")
-                self._build_bundle()
-                batches_by_name = self._next_batches(loader_keys)
-                closure_step = build_closure(batches_by_name)
-
-            if self.profiler: self.profiler.start(si)
+                with record_function("resample"):
+                    self._build_bundle()
+                    batches_by_name = self._next_batches(loader_keys)
+                    closure_step = build_closure(batches_by_name)
 
             self.i = 0
             self.s = si
