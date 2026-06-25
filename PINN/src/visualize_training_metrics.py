@@ -14,25 +14,81 @@ def plot_l2(steps, l2_error, l2_error_name):
     plt.grid(True)
     plt.savefig(f'{l2_error_name}.png', dpi=150)
 
-def plot_loss(loss, loss_name):
+def plot_time_adapt_sampling(Ts, file_name):
+    print(f"Saving: {file_name}.png")
+    plt.figure(figsize=(10, 5))
+    plt.plot(Ts)
+    plt.xlabel('Step')
+    plt.ylabel('T (terminal time)')
+    plt.title('Time adaptive sampling')
+    plt.grid(True)
+    plt.savefig(f'{file_name}.png', dpi=150)
+
+
+
+def plot_hist_data_dict(hist_data_dict, file_name, label_fn, line_width_fn, color_fn, y_label, title):
+    """
+    hist_data_dict: ex. {'pde': [], 'bc': []}
+    """
     # Plot training loss. `loss` may be a list/tensor (total only) or a dict
     # mapping component name -> per-step values (e.g. {"total", "pde", "bc", "ic", "p_norm"}).
-    print(f"Saving: {loss_name}.png")
+    print(f"Saving: {file_name}.png")
     plt.figure(figsize=(10, 5))
-    if isinstance(loss, dict):
-        for name, series in loss.items():
+    if isinstance(hist_data_dict, dict):
+        # plasma good for causal weights w_m
+        #default_color_names = [
+        #    name for name, series in hist_data_dict.items()
+        #    if len(series) != 0 and color_fn(name) is None
+        #]
+        #if default_color_names:
+        #    # Use a narrow slice of a sequential colormap so the lines stay visually related.
+        #    plt.gca().set_prop_cycle(
+        #        color=plt.cm.plasma(torch.linspace(0.2, 0.8, len(default_color_names)))
+        #    )
+        for name, series in hist_data_dict.items():
             if len(series) == 0:
                 continue
-            plt.semilogy(series, label=name, linewidth=(2.0 if name == "total" else 1.0))
+            params = {
+                "label": label_fn(name),
+                "linewidth": line_width_fn(name)
+            }
+            if color_fn(name) != None:
+                plt.semilogy(series, **params, color=color_fn(name))
+            else:
+                plt.semilogy(series, **params)
         plt.legend()
     else:
-        plt.semilogy(loss)
+        plt.semilogy(hist_data_dict)
     plt.xlabel('Step')
-    plt.ylabel('Loss')
-    plt.title('Training Loss')
+    plt.ylabel(y_label)
+    plt.title(title)
     plt.grid(True)
-    plt.savefig(f'{loss_name}.png', dpi=150)
+    plt.savefig(f'{file_name}.png', dpi=150)
 
+
+# term_type: pde, bc
+# wl_type: weights, losses
+def plot_causal_weights_losses(hist_data_dict, file_name, wl_type, term_type, t_discr):
+    d = {}
+    for i in range(len(t_discr)-1):
+        d[f"{i+1}"] = rf"$, \:[t_{i}, t_{i+1}) = [{t_discr[i]}, {t_discr[i+1]})$"
+    if wl_type == 'losses':
+        linewidth_fn = lambda name: 1.0 if name == term_type else 1.0
+        label_fn = lambda name: fr"$\mathcal{{L}}^{{({name})}}$"+d[name] if name != term_type else rf"$\mathcal{{L}}_{{{term_type}}}$"
+        color_fn = lambda name: 'black' if name == term_type else None
+    elif wl_type == 'weights':
+        linewidth_fn = lambda name: 1.0
+        label_fn = lambda name: fr"$w_{name}$"+d[name]
+        color_fn = lambda name: None
+    plot_hist_data_dict(hist_data_dict, file_name, label_fn, linewidth_fn, color_fn, wl_type, f"Causal Weighting: {term_type} {wl_type}")
+
+
+
+def plot_GradNorm_weights(weights_data_dict, file_name):
+    plot_hist_data_dict(weights_data_dict, file_name, lambda name: rf"$\lambda_{{{name}}}$", lambda name: 1.0, lambda name: None, 'weights', 'GradNorm weights')
+
+def plot_loss(loss_data_dict, file_name):
+    plot_hist_data_dict(loss_data_dict, file_name, lambda name: rf"$\mathcal{{L}}_{{{name}}}$", lambda name: 1.0 if name == 'total' else 1.0, lambda name: 'black' if name == 'total' else None, 'loss', "Training loss")
 
 
 import sys

@@ -6,26 +6,28 @@ parser.add_argument("--description", default="", type=str, help="Smthg to help i
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--d", default=4, type=int, help="Number of spatial dimensions.")
 #parser.add_argument("--layers", default="256,256,256,256", type=str, help="")
-#parser.add_argument("--layers", default="64,64,64,64", type=str, help="")
-parser.add_argument("--layers", default="128,128,128,128", type=str, help="")
-parser.add_argument("--n_steps", default=999, type=int, help="")
-parser.add_argument("--n_steps_decay", default=1_600, type=int, help="Decay by 0.9 every 2000 steps.")
+parser.add_argument("--layers", default="64,64,64,64", type=str, help="")
+#parser.add_argument("--layers", default="128,128,128,128", type=str, help="")
+#parser.add_argument("--n_steps", default=4999, type=int, help="")
+parser.add_argument("--n_steps", default=499, type=int, help="")
+parser.add_argument("--n_steps_decay", default=1_000, type=int, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--gamma", default=0.9, type=float, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--lr", default=1e-3, type=float, help="")
-parser.add_argument("--bs", default=500, type=int, help="")
+parser.add_argument("--bs", default=1_000, type=int, help="")
 
 parser.add_argument("--lambda_pde", default=1.0, type=float, help="")
 parser.add_argument("--lambda_bc", default=10.0, type=float, help="")
 parser.add_argument("--lambda_ic", default=10.0, type=float, help="")
 parser.add_argument("--lambda_norm", default=0.1, type=float, help="Weight of the integral p dx = 1 normalization loss.")
-parser.add_argument("--use_adaptive_weights", action="store_true", help="Loss weighting.")
-parser.add_argument("--active_losses", default="pde,ic", type=str, help="Comma-separated subset of {pde,bc,ic,norm}. 'pde' is required.")
+parser.add_argument("--use_adaptive_weights", action="store_true", help="grad adaptive loss term weighting.")
+parser.add_argument("--active_losses", default="pde,bc,ic", type=str, help="Comma-separated subset of {pde,bc,ic,norm}. 'pde' is required.")
 parser.add_argument("--grad_clip_norm", default=None, type=float, help="Max-norm gradient clipping for the train step. None disables it.")
 
 parser.add_argument("--n_res_points", default=10_000, type=int, help="")
 parser.add_argument("--n_trajs", default=1_000, type=int, help="")
 parser.add_argument("--nt_steps", default=100, type=int, help="")
 parser.add_argument("--T", default=3.5, type=float, help="")
+#parser.add_argument("--T", default=0.75, type=float, help="")
 
 parser.add_argument("--L_min", default=-5.0, type=float, help="")
 parser.add_argument("--L_max", default=5.0, type=float, help="")
@@ -50,9 +52,17 @@ parser.add_argument("--f_pde_trajs", default=1, type=int, help="")
 parser.add_argument("--f_ic_full_domain", default=1, type=int, help="")
 parser.add_argument("--f_ic_trajs", default=1, type=int, help="")
 
+parser.add_argument("--f_pde", default=8, type=int, help="")
+parser.add_argument("--f_bc", default=1, type=int, help="")
+parser.add_argument("--f_ic", default=1, type=int, help="")
+
 parser.add_argument("--use_lbfgs", action="store_true", help="")
 
-parser.add_argument("--compile_model", action="store_true", help="")
+#parser.add_argument("--time_strategy", default="none", type=str, help="none, causal_loss_weighting, time_adapt_sampling")
+parser.add_argument("--time_strategy", default=0, type=int, choices=[0,1,2], help="0=none, 1=time_adapt_sampling, 2=causal_loss_weighting")
+# for causal_loss_weighting
+parser.add_argument("--t_discr", default="0.0, 0.5, 1.5, 3.5", type=str, help="")
+parser.add_argument("--eps", default=0.1, type=float, help="")
 
 
 #
@@ -99,7 +109,11 @@ import run_utils
 args = run_utils.parse_args_with_config(
     parser, [] if "__file__" not in globals() else None
 )
-args.enable_profiler = True
+#args.enable_profiler = True
+args.output_dir = 'run_latest_vanilla_cw'
+args.use_adaptive_weights = True
+args.clear_dir = True
+args.time_strategy = 0
 
 d = args.d  # space dims
 D = d + 1   # space + time dims
@@ -142,8 +156,6 @@ model = architecture.PINN(D, layers, 1).to(device)
 #model = architecture.PINN_base(D, layers, 1).to(device)
 if args.starting_model:
     model.load_state_dict(torch.load(args.starting_model, weights_only=True))
-if args.compile_model:
-    model.compile()
 
 
 
@@ -174,35 +186,33 @@ if args.enable_testing:
 else:
     testing_suite = None
 
-T = args.T
+
 sampling_type = args.sampling_type
 spatial_domain = run_utils.make_spatial_domain(d, args.L_min, args.L_max, device=device)
+
+sampling_settings_base = {
+    "T": args.T,
+    "spatial_domain": spatial_domain,
+    "n_res_points": args.n_res_points,
+    "bs": args.bs,
+}
 if sampling_type == "trajectories":
-    sampling_settings = {
-        "T": args.T,
-        "spatial_domain": spatial_domain,
-        "n_res_points": args.n_res_points,
-        "bs": args.bs,
+    sampling_settings = sampling_settings_base | {
         "n_trajs": args.n_trajs,
         "nt_steps": args.nt_steps,
     }
 elif sampling_type == "domain":
-    sampling_settings = {
-        "T": T,
-        "spatial_domain": spatial_domain,
-        "n_res_points": args.n_res_points,
-        "bs": args.bs,
+    sampling_settings = sampling_settings_base | {
         "use_rbas": args.use_rbas,
     }
 elif sampling_type == "domain_and_trajectories":
-    sampling_settings = {
-        "T": args.T,
-        "spatial_domain": spatial_domain,
-        "n_res_points": args.n_res_points,
-        "bs": args.bs,
+    sampling_settings = sampling_settings_base | {
         "n_trajs": args.n_trajs,
         "nt_steps": args.nt_steps,
         "use_rbas": args.use_rbas,
+        "f_pde": args.f_pde,
+        "f_bc": args.f_bc,
+        "f_ic": args.f_ic,
         "f_pde_full_domain": args.f_pde_full_domain,
         "f_pde_trajs": args.f_pde_trajs,
         "f_ic_full_domain": args.f_ic_full_domain,
@@ -219,6 +229,23 @@ trainer = PINN_Trainer(
     grad_clip_norm=args.grad_clip_norm,
 )
 #losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
+
+
+use_causal_loss_weighting = False
+use_time_adapt_sampling = False
+t_discr = None
+if args.time_strategy == 0:
+    print("time_strategy = none")
+elif args.time_strategy == 1:
+    print("time_strategy = time_adapt_sampling")
+    use_time_adapt_sampling = True
+elif args.time_strategy == 2:
+    print("time_strategy = causal_loss_weighting")
+    use_causal_loss_weighting = True
+    t_discr = torch.tensor(utility.floats_from_string_list(args.t_discr), device=device)
+else:
+    raise NameError("time_strategy is whaaat???")
+
 
 if args.use_lbfgs:
     trainer.optimizer = torch.optim.LBFGS(
@@ -250,6 +277,8 @@ else:
         use_sdgd=args.use_sdgd,
         sdgd_num_dims=sdgd_num_dims,
         one_batch_per_epoch = True,
+        use_causal_loss_weighting=use_causal_loss_weighting, t_discr=t_discr, eps=args.eps,
+        use_time_adapt_sampling=use_time_adapt_sampling
     )
 run_utils.merge_losses(losses, losses_adam)
 l2_errs += l2_errs_adam
@@ -265,9 +294,43 @@ print("\nTraining complete!")
 loss_name, l2_name = run_utils.save_run(dir_name, model, losses, l2_errs, args, head_fn=None, loss_weighting=loss_weighting if args.n_steps > 0 else None) 
 
 
+import visualize_training_metrics
+
+# individual loss term weighting - pde,bc,ic
+if args.use_adaptive_weights:
+    weights_hist_tensor = torch.stack(loss_weighting.weights_history, dim=1)
+    weights_hist = {}
+    for i, loss_name in enumerate(active_losses):
+        weights_hist[loss_name] = weights_hist_tensor[i]
+    file_name = f'{dir_name}/training_grad_norm'
+    visualize_training_metrics.plot_GradNorm_weights(weights_hist, file_name)
+
+if use_time_adapt_sampling:
+    file_name = f'{dir_name}/training_time_adapt_sampling'
+    visualize_training_metrics.plot_time_adapt_sampling(trainer.time_adapt_sampl_hist, file_name)
+
+if use_causal_loss_weighting:
+    def save_causal_weights_losses(causal_wl_hist, wl_type, term_type):
+        file_name = f'{dir_name}/training_causal_{wl_type}_{term_type}'
+        causal_wl_hist_tensor = torch.stack(causal_wl_hist, dim=1)
+        causal_wl_hist = {}
+        if wl_type == 'losses':
+            causal_wl_hist[term_type] = losses[term_type]
+        for i in range(len(t_discr)-1):
+            causal_wl_hist[f"{i+1}"] = causal_wl_hist_tensor[i]
+        visualize_training_metrics.plot_causal_weights_losses(causal_wl_hist, file_name, wl_type, term_type, t_discr)
+    save_causal_weights_losses(trainer.causal_weights_hist_pde, 'weights', 'pde')
+    save_causal_weights_losses(trainer.causal_losses_hist_pde,  'losses', 'pde')
+    if 'bc' in active_losses:
+        save_causal_weights_losses(trainer.causal_weights_hist_bc,  'weights', 'bc')
+        save_causal_weights_losses(trainer.causal_losses_hist_bc,   'losses', 'bc')
+
+file_name = f'{dir_name}/training_loss'
+visualize_training_metrics.plot_loss(losses, file_name)
+
 import plot_results
-plot_results.plot_run(
-    dir_name, model, pde_model, score_sde_model, args, device,
-    model_s=None,
-    losses=losses, l2_errs=l2_errs,
-)
+if args.enable_testing:
+    file_name = f'{dir_name}/training_l2_error'
+    plot_results.plot_l2(l2_errs, file_name, args.testing_frequency)
+
+plot_results.plot_viz(dir_name, model, pde_model, score_sde_model, args, device, model_s=None)

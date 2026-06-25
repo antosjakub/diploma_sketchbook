@@ -471,13 +471,18 @@ class Anisotropic_OU:
             return residual
 
         def bc_residual(self, X, model_q, precomputed):
-            # (Sigma grad q + x).n = 0
+            # (Sigma grad p + x p).n = 0
+            # (Sigma grad q + x).exp_q.n = 0
             X = X.detach().requires_grad_(True)
             q = model_q(X)
             grad_q = derivatives.compute_grad(X, q, torch.ones_like(q))[:,-1:]
             n = precomputed["normals"]
             Sigma_grad_q = torch.einsum('ij,bj->bi', self.Sigma, grad_q)
+            #return ( ( Sigma_grad_q + X[:,:-1] ) * torch.exp(q) * n ).sum(dim=1).unsqueeze(1)
             return ( ( Sigma_grad_q + X[:,:-1] ) * n ).sum(dim=1).unsqueeze(1)
+
+        def bc_residual_2(self, X, model_q, precomputed):
+            return torch.exp(model_q(X))
 
         def ic_residual(self, X, model_q, precomputed):
             return model_q(X) - precomputed["q0"]
@@ -498,7 +503,7 @@ class Anisotropic_OU:
                 "bc": {},
                 "ic": {
                     "q0": self.q0(X_ic[:,:-1]).detach()
-                },
+                } if X_ic is not None else {},
             }
 
 
@@ -597,7 +602,7 @@ class Anisotropic_OU:
                 "bc": {},
                 "ic": {
                     "q0": self.q0(X_ic[:,:-1]).detach()
-                },
+                } if X_ic is not None else {}
             }
 
 

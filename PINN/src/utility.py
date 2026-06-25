@@ -30,14 +30,16 @@ from torch.profiler import profile, ProfilerActivity
 from contextlib import nullcontext
 
 class Profiler():
-    def __init__(self,report_filename, start_step, end_step):
+    def __init__(self,report_filename, start_step, end_step, use_gpu=False):
         self.report_filename = report_filename
         self.start_step = start_step
         self.end_step = end_step
+        self.use_gpu = use_gpu
+        self.activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA] if use_gpu else [ProfilerActivity.CPU]
 
     def make(self) -> None:
         self.prof_ctx = profile(
-            activities=[ProfilerActivity.CPU],
+            activities=self.activities,
             profile_memory=True,
             record_shapes=True,
             with_stack=True,
@@ -49,11 +51,11 @@ class Profiler():
             print(f"\n[Profiler] Started at step {si}")
 
     def exit(self, si):
-        if si == self.end_step-1:
+        if si == self.end_step:
             self.prof_ctx.__exit__(None, None, None)
-            print(f"\n[Profiler] Stopped at step {si}. Results:")
-            prof_report = self.prof_ctx.key_averages().table(sort_by="cpu_time_total", row_limit=20)
-            print(prof_report)
+            print(f"\n[Profiler] Stopped at step {si}.")
+            prof_report = self.prof_ctx.key_averages().table(sort_by="gpu_time_total" if self.use_gpu else "cpu_time_total", row_limit=20)
+            #print(prof_report)
             # save profiler report
             #prof_ctx.export_chrome_trace(f"run_latest/{profiler_report_filename}.json")
             with open(f"{self.report_filename}.txt", "w") as f:
@@ -71,8 +73,11 @@ class Profiler():
 
 
 def layers_from_string(layers_string):
-    return list(map(lambda x: int(x), layers_string.split(",")))
+    return list(map(lambda x: int(x.strip()), layers_string.split(",")))
 
+
+def floats_from_string_list(string):
+    return list(map(lambda x: float(x.strip()), string.split(",")))
 
 
 import inspect

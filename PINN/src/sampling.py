@@ -425,21 +425,6 @@ from torch.utils.data import DataLoader
 
 
 
-def _precompute_active(pde_model, X_pde, X_bc, X_ic, active_losses, device):
-    """Call pde_model.precompute, padding inactive args with a 1-row dummy, then
-    strip keys that weren't requested."""
-    d = pde_model.d
-    dummy = torch.zeros(1, d + 1, device=device)
-    precomputed = pde_model.precompute(
-        X_pde if X_pde is not None else dummy,
-        X_bc  if X_bc  is not None else dummy,
-        X_ic  if X_ic  is not None else dummy,
-    )
-    for k in ("pde", "bc", "ic"):
-        if k not in active_losses:
-            precomputed.pop(k, None)
-    return precomputed
-
 
 def create_dataloaders__domain(
     model, pde_model, active_losses,
@@ -501,7 +486,7 @@ def create_dataloaders__domain(
         )
         X_norm = traj[:, -1, :]
 
-    precomputed = _precompute_active(pde_model, X_pde, X_bc, X_ic, active_losses, device)
+    precomputed = pde_model.precompute(X_pde, X_bc, X_ic)
     if normals_bc is not None and "bc" in active_losses:
         precomputed["bc"]["normals"] = normals_bc
     if "norm" in active_losses:
@@ -563,7 +548,7 @@ def create_dataloaders__trajectories(
         )
         X_norm = traj[:, -1, :]
 
-    precomputed = _precompute_active(pde_model, X_pde, X_bc, X_ic, active_losses, device)
+    precomputed = pde_model.precompute(X_pde, X_bc, X_ic)
     if normals_bc is not None and "bc" in active_losses:
         precomputed["bc"]["normals"] = normals_bc
     if "norm" in active_losses:
@@ -668,27 +653,29 @@ def create_pde_loader(sampling_type, pde_model, settings, device="cpu"):
         X_pde = X_pde_2
         print(f"PDE loader (X_trajs.shape = {X_pde.shape}, bs = {bs})")
 
-    precomputed = _precompute_active(pde_model, X_pde, None, None, active_losses=("pde",), device=device)
+    precomputed = pde_model.precompute(X_pde, None, None)
     return DataLoader(CollocationDataset(X_pde, precomputed["pde"]), batch_size=bs, shuffle=True)
 
 
 def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settings, device="cpu"):
     T = settings.get("T", 1.0)
     spatial_domain = settings.get("spatial_domain")
-    n_res_points = settings.get("n_res_points", 100_000)
     bs = settings.get("bs", 1_000)
+    n_res_points = settings.get("n_res_points", 100_000)
     n_trajs = settings.get("n_trajs", 1_000)
     nt_steps = settings.get("nt_steps", 1_000)
     d = pde_model.d
 
+    (bs_pde, bs_bc, bs_ic, _), (n_interior, n_boundary, n_initial, _) = split_res_points(n_res_points, bs,
+        settings.get("f_pde", 8) if "pde" in active_losses else 0,
+        settings.get("f_bc", 1) if "bc" in active_losses else 0,
+        settings.get("f_ic", 1) if "ic" in active_losses else 0,
+        f_norm=0
+    )
+    precomputed = {}
+
     X_ic = None
     if "ic" in active_losses:
-        (bs_pde, _, bs_ic, _), (n_interior, _, n_initial, _) = split_res_points(n_res_points, bs,
-            f_pde  =  9,
-            f_bc   =  0,
-            f_ic   =  1,
-            f_norm =  0,
-        )
         f_ic_full_domain = settings.get("f_ic_full_domain", 1)
         f_ic_trajs = settings.get("f_ic_trajs", 1)
         n_ic_full_domain = f_ic_full_domain * n_initial // (f_ic_full_domain + f_ic_trajs)
@@ -713,9 +700,16 @@ def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settin
         #print(f"IC loader: X.shape = {X_ic.shape}, bs = {bs_ic}")
         #print(f" - full domain sampling (X.shape = {X_ic_full_domain.shape})")
         #print(f" - trajs sampling (X.shape = {X_ic_trajs.shape})")
-    else:
-        bs_pde = bs
-        n_interior = n_res_points
+
+    X_bc = None
+    if "bc" in active_losses:
+        X_bc, normals_bc = sample_bc(n_boundary, d, sampling_strategy='lhs', device=device)
+        if spatial_domain is not None:
+            lo = spatial_domain[:, 0]
+            hi = spatial_domain[:, 1]
+            X_bc = scale_samples__spatial(X_bc, lo, hi)
+        if T != 1.0:
+            X_bc = scale_samples__temporal(X_bc, T)
 
     f_pde_full_domain = settings.get("f_pde_full_domain", 1)
     f_pde_trajs = settings.get("f_pde_trajs", 1)
@@ -768,12 +762,18 @@ def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settin
         X_pde = X_pde_2
         #print(f"PDE loader (X_trajs.shape = {X_pde.shape}, bs = {bs_pde})")
 
-    precomputed = _precompute_active(pde_model, X_pde, None, X_ic, active_losses=active_losses, device=device)
+
+    precomputed = pde_model.precompute(X_pde, X_bc, X_ic)
+    if "bc" in active_losses and normals_bc is not None:
+        precomputed["bc"]["normals"] = normals_bc
+
+    X_terms = {"pde": X_pde, "bc": X_bc, "ic": X_ic, "norm": None}
+    bs_terms = {"pde": bs_pde, "bc": bs_bc, "ic": bs_ic, "norm": None}
     bundle = {}
-    bundle["pde"] = DataLoader(CollocationDataset(X_pde, precomputed["pde"]), batch_size=bs_pde, shuffle=True)
-    if "ic" in active_losses:
-        bundle["ic"] = DataLoader(CollocationDataset(X_ic, precomputed["ic"]), batch_size=bs_ic, shuffle=True)
+    for k in active_losses:
+        bundle[k] = DataLoader(CollocationDataset(X_terms[k], precomputed[k]), batch_size=bs_terms[k], shuffle=True)
     return bundle
+
 
 def create_dataloaders(sampling_type, model, pde_model, settings, active_losses, device="cpu"):
     """

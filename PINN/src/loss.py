@@ -2,7 +2,40 @@ import torch
 import derivatives
 
 
-def sdgd_loss(X, model, pde_model, precomputed, num_dims_to_use: int):
+
+def causal_loss(X, res, t_discr, eps):
+    """
+    X.shape = (bs, D)
+    res.shape = (bs, 1)
+    t_discr = [0.0, 0.5, 1.5, 2.0] = [0.0=t0, ..., tM=T]
+    eps = 1.0
+    """
+    bin_indx = torch.bucketize(X[:,-1].contiguous(), t_discr[1:-1], right=True) # [t_{m-1}, t_m)
+    loss_cum = torch.tensor(0.0, dtype=res.dtype, device=res.device)
+    loss_tot = torch.tensor(0.0, dtype=res.dtype, device=res.device)
+    causal_weights = [] # save causal weights for debugg
+    causal_losses = [] # save losses for debugg?
+    for i in range(len(t_discr) - 1):
+        #print(i)
+        mask = (bin_indx == i)
+        loss_val = torch.mean(res[mask]**2) ## loss calc as MSE
+        #print("- loss_val =", loss_val)
+        w = torch.exp(-eps*loss_cum)
+        #print("- w =", w)
+        loss_tot += w * loss_val
+        loss_cum += loss_val.detach()
+        #print("- loss_tot =", loss_tot)
+        #print("- loss_cum =", loss_cum)
+        causal_weights.append(w)
+        causal_losses.append(loss_val.item())
+        # TD: loss_tot / M
+    # save causal_weights and causal_losses (mainly the weights)
+    return loss_tot / (len(t_discr)-1), torch.tensor(causal_weights), torch.tensor(causal_losses)
+
+
+def sdgd_res(X, model, pde_model, precomputed, num_dims_to_use: int):
+    # part of the pde_model
+    # compute the residuum, some terms detached, smart der compute - detach as you go
     # sample some indices
     bs,D = X.shape
     d = D-1
@@ -16,10 +49,8 @@ def sdgd_loss(X, model, pde_model, precomputed, num_dims_to_use: int):
         Ri = pde_model.pde_sgsd_single_term_residual(X, u, grad_u, spatial_laplace_u, i, precomputed)
         R_stoch += Ri
     # total loss
-    loss = 2 * R * d/num_dims_to_use * R_stoch
-    loss = torch.mean(loss)
-    # scalar
-    return loss
+    res = 2 * R * d/num_dims_to_use * R_stoch
+    return res
 
 def sdgd_loss_2(X, model, pde_model, num_dims_to_use: int):
     # sample some indices

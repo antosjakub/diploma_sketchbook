@@ -49,15 +49,10 @@ def _make_head_fn(tag, mode, score_sde_model, T):
 
 # ---------------- plotting ----------------
 
-def plot_training_metrics(dir_name, losses, l2_errs, args):
-    loss_name = f'{dir_name}/training_loss'
-    l2_name = f'{dir_name}/training_l2_error'
-    visualize_training_metrics.plot_loss(losses, loss_name)
-    if getattr(args, "enable_testing", False) and len(l2_errs) > 0:
-        n_steps_log = args.testing_frequency
-        n_logged_pnts = len(l2_errs)
-        steps = n_steps_log * torch.linspace(1, n_logged_pnts, n_logged_pnts, dtype=torch.int)
-        visualize_training_metrics.plot_l2(steps, l2_errs, l2_name)
+def plot_l2(l2_errs, file_name, testing_frequency):
+    n_logged_pnts = len(l2_errs)
+    steps = testing_frequency * torch.linspace(1, n_logged_pnts, n_logged_pnts, dtype=torch.int)
+    visualize_training_metrics.plot_l2(steps, l2_errs, file_name)
 
 
 def _plot_score_pde(dir_name, model, pde_model, score_sde_model, args, options):
@@ -190,13 +185,6 @@ def plot_viz(dir_name, model, pde_model, score_sde_model, args, device, model_s=
     else:
         raise ValueError(f"Unknown mode: {mode}")
 
-
-def plot_run(dir_name, model, pde_model, score_sde_model, args, device,
-             model_s=None, losses=None, l2_errs=None):
-    """Top-level: training metrics + viz plots. `losses`/`l2_errs` optional."""
-    if losses is not None:
-        plot_training_metrics(dir_name, losses, l2_errs if l2_errs is not None else [], args)
-    plot_viz(dir_name, model, pde_model, score_sde_model, args, device, model_s=model_s)
 
 
 # ---------------- loading saved runs ----------------
