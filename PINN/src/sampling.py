@@ -672,7 +672,6 @@ def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settin
         settings.get("f_ic", 1) if "ic" in active_losses else 0,
         f_norm=0
     )
-    precomputed = {}
 
     X_ic = None
     if "ic" in active_losses:
@@ -762,8 +761,11 @@ def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settin
         X_pde = X_pde_2
         #print(f"PDE loader (X_trajs.shape = {X_pde.shape}, bs = {bs_pde})")
 
-
-    precomputed = pde_model.precompute(X_pde, X_bc, X_ic)
+    custom_ic_fn = settings.get("custom_ic_fn", None)
+    if custom_ic_fn is not None:
+        precomputed = pde_model.precompute(X_pde, X_bc, None)
+    else:
+        precomputed = pde_model.precompute(X_pde, X_bc, X_ic)
     if "bc" in active_losses and normals_bc is not None:
         precomputed["bc"]["normals"] = normals_bc
 

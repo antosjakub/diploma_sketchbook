@@ -70,6 +70,7 @@ parser.add_argument("--enable_profiler", action="store_true", help="")
 parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
 # enable transfer learning / finetuning
 parser.add_argument("--starting_model", default=None, type=str, help="")
+parser.add_argument("--custom_ic_model", default=None, type=str, help="")
 
 parser.add_argument("--clear_dir", action="store_true", help="Erase contents of the output_dir before the training starts.")
 # load the pde mode with default parameters, optionally use the .json file to init the class
@@ -158,6 +159,21 @@ if args.starting_model:
     model.load_state_dict(torch.load(args.starting_model, weights_only=True))
 
 
+if args.custom_ic_model is not None:
+    print(f"Using a custom IC function: {args.custom_ic_model}")
+    parent_dir = os.path.dirname(args.custom_ic_model)
+    model_metadata = utility.json_load(f'{parent_dir}/model_metadata.json')
+    layers = utility.layers_from_string(model_metadata["args"]["layers"])
+    model_class = utility.get_module_classes(architecture)[
+        model_metadata["model_class"]
+    ]
+    model_ic = model_class(D, layers, 1).to(device)
+    model_ic.load_state_dict(torch.load(args.custom_ic_model, weights_only=True))
+    model_ic.eval()
+    custom_ic_fn = model_ic.forward
+else:
+    custom_ic_fn = None
+
 
 active_losses = tuple(k.strip() for k in args.active_losses.split(",") if k.strip())
 print(f"Active losses: {active_losses}")
@@ -196,6 +212,7 @@ sampling_settings_base = {
     "n_res_points": args.n_res_points,
     "bs": args.bs,
 }
+sampling_settings_base["custom_ic_fn"] = custom_ic_fn
 if sampling_type == "trajectories":
     sampling_settings = sampling_settings_base | {
         "n_trajs": args.n_trajs,

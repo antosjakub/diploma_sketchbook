@@ -80,7 +80,13 @@ class PINN_Trainer:
                 return torch.mean(res**2)
         elif k == "ic":
             b = batch_term_objs["ic"]
-            return self.pde_model.ic_loss(b[0], self.model, b[1])
+            custom_ic_fn = self.sampling_settings.get("custom_ic_fn", None)
+            if custom_ic_fn is not None:
+                return torch.mean((
+                    self.model(b[0]) - custom_ic_fn(b[0])
+                )**2)
+            else:
+                return self.pde_model.ic_loss(b[0], self.model, b[1])
         elif k == "norm":
             b = batch_term_objs["norm"]
             return self.normalization_loss(b[0], self.model, b[1])
