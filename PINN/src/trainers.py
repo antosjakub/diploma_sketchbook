@@ -145,7 +145,7 @@ class PINN_Trainer:
         return batch_term_objs
 
     def train_adam_minibatch(self,
-        n_steps, n_steps_decay, resampling_frequency=2000, testing_frequency=100,
+        n_steps, n_steps_decay, resampling_frequency=2000, logging_frequency=100,
         one_batch_per_epoch=False,
         use_sdgd=False, sdgd_num_dims=None,
         use_causal_loss_weighting=False, t_discr=None, eps=1.0,
@@ -214,7 +214,7 @@ class PINN_Trainer:
 
             if self.profiler: self.profiler.exit(si)
 
-            if (si + 1) % testing_frequency == 0:
+            if (si + 1) % logging_frequency == 0:
                 parts = [f"Step {si+1}/{n_steps}", f"Loss: {loss_value.item():.6f}"]
                 for k in self.active_losses:
                     parts.append(f"{k}: {last_losses_dict[k]:.6f}")
