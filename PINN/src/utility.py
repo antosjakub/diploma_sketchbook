@@ -25,6 +25,18 @@ def get_duration_h_m_s(t1, t2, label="Smthg"):
     parts.append(f"{s} seconds")
     return " ".join(parts)
 
+import os
+import architecture
+def load_model_from_json(model_path: str, device='cpu'):
+    parent_dir = os.path.dirname(model_path)
+    model_metadata = json_load(f'{parent_dir}/model_metadata.json')
+    layers = layers_from_string(model_metadata["args"]["layers"])
+    model_class = get_module_classes(architecture)[
+        model_metadata["model_class"]
+    ]
+    model= model_class(model_metadata["d"]+1, layers, model_metadata["output_dim"]).to(device)
+    model.load_state_dict(torch.load(model_path, weights_only=True))
+    return model
 
 from torch.profiler import profile, ProfilerActivity
 from contextlib import nullcontext
@@ -347,3 +359,48 @@ def generate_SPD(d, eps=1e-10, device=None, dtype=torch.float32):
 
 def make_fn_0_care_t(fn):
     return lambda X: fn(X[:,:-1])
+
+
+class TimeMarchModel:
+    """
+    collects all the pinn models together 
+    """
+    def __init__(self, time_march_discr, model_list, debugg=False):
+        self.t_disc = time_march_discr
+        self.model_list = model_list
+        assert len(self.model_list) == len(self.t_disc)-1
+        self.debugg = debugg
+    def __call__(self, X):
+        Y = torch.zeros((len(X),1), dtype=X.dtype, device=X.device)
+        t_disc = self.t_disc
+        for i in range(len(t_disc)-1):
+            #frac = 0.1
+            #t_left = t_disc[i] - frac*(t_disc[i]-t_disc[i-1]) if i-1>=0 else t_disc[i]
+            #t_right = t_disc[i+1] + frac*(t_disc[i+2]-t_disc[i+1]) if i+2 <= len(t_disc)-1 else t_disc[i+1]
+            #t_left_list.append(t_left)
+            #t_right_list.append(t_right)
+            t_left = t_disc[i]
+            t_right = t_disc[i+1]
+            if self.debugg:
+                print(t_left, t_right)
+            t = X[:,-1]
+            if i == 0:
+                mask = (t < t_right)
+            elif i == len(t_disc)-1:
+                mask = (t_left <= t)
+            else:
+                mask = (t_left <= t) & (t < t_right)
+            Y[mask] = self.model_list[i](X[mask])
+        return Y
+
+
+    def test(self):
+        model = lambda X: torch.sum(X, dim=1, keepdim=True)
+        self.model_list = 3*[model]
+        self.t_disc = [0.0, 0.5, 1.5, 3.5]
+        self.debugg = True
+        bs = 1_000
+        d = 5
+        X = torch.rand((bs, d+1))
+        X[:,-1] *= 3.5
+        Y = self(X)

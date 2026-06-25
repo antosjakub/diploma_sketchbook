@@ -118,7 +118,7 @@ def merge_losses(dst, src):
 
 
 
-def save_run(dir_name, model, losses, l2_errs, args, pde_model=None, head_fn=None, loss_weighting=None):
+def save_run(dir_name, model, losses, l2_errs, args, pde_model=None, head_fn=None, loss_weighting=None, output_dim=1):
     """Dump model state, loss dict, l2 errors, model metadata and (optionally) pde metadata.
 
     `head_fn`: optional tag identifying the architectural head (e.g. "hardcoded_ic"),
@@ -132,6 +132,7 @@ def save_run(dir_name, model, losses, l2_errs, args, pde_model=None, head_fn=Non
             {
                 "model_class": type(model).__name__,
                 "head_fn": head_fn,
+                "output_dim": output_dim,
                 "args": args.__dict__,
             },
             f,

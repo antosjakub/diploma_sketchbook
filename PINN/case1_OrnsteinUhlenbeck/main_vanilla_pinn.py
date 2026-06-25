@@ -124,6 +124,7 @@ print(f"Training vanilla-PINN for {d}D PDE")
 print(f"Domain: [0,1]^{d} x [0,1]")
 print(f"{'='*60}\n")
 print(args.layers)
+output_dim = 1
 
 
 dir_name, device = run_utils.setup_run(args)
@@ -153,7 +154,7 @@ print()
 #model = torch.compile(model, mode="reduce-overhead")
 #model = torch.compile(model)
 
-model = architecture.PINN(D, layers, 1).to(device)
+model = architecture.PINN(D, layers, output_dim).to(device)
 #model = architecture.PINN_base(D, layers, 1).to(device)
 if args.starting_model:
     model.load_state_dict(torch.load(args.starting_model, weights_only=True))
@@ -161,14 +162,7 @@ if args.starting_model:
 
 if args.custom_ic_model is not None:
     print(f"Using a custom IC function: {args.custom_ic_model}")
-    parent_dir = os.path.dirname(args.custom_ic_model)
-    model_metadata = utility.json_load(f'{parent_dir}/model_metadata.json')
-    layers = utility.layers_from_string(model_metadata["args"]["layers"])
-    model_class = utility.get_module_classes(architecture)[
-        model_metadata["model_class"]
-    ]
-    model_ic = model_class(D, layers, 1).to(device)
-    model_ic.load_state_dict(torch.load(args.custom_ic_model, weights_only=True))
+    model_ic = utility.load_model_from_json(args.custom_ic_model, device)
     model_ic.eval()
     custom_ic_fn = model_ic.forward
 else:
@@ -262,6 +256,7 @@ elif args.time_strategy == 2:
     t_discr = torch.tensor(utility.floats_from_string_list(args.t_discr), device=device)
 else:
     raise NameError("time_strategy is whaaat???")
+print()
 
 
 if args.use_lbfgs:
@@ -308,7 +303,7 @@ print(utility.get_duration_h_m_s(t1, time.time(), "Adam training"))
 
 print("\nTraining complete!")
 
-loss_name, l2_name = run_utils.save_run(dir_name, model, losses, l2_errs, args, head_fn=None, loss_weighting=loss_weighting if args.n_steps > 0 else None) 
+loss_name, l2_name = run_utils.save_run(dir_name, model, losses, l2_errs, args, head_fn=None, loss_weighting=loss_weighting if args.n_steps > 0 else None, output_dim=output_dim) 
 
 
 import visualize_training_metrics
