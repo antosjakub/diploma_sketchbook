@@ -25,18 +25,6 @@ def get_duration_h_m_s(t1, t2, label="Smthg"):
     parts.append(f"{s} seconds")
     return " ".join(parts)
 
-import os
-import architecture
-def load_model_from_json(model_path: str, device='cpu'):
-    parent_dir = os.path.dirname(model_path)
-    model_metadata = json_load(f'{parent_dir}/model_metadata.json')
-    layers = layers_from_string(model_metadata["args"]["layers"])
-    model_class = get_module_classes(architecture)[
-        model_metadata["model_class"]
-    ]
-    model= model_class(model_metadata["d"]+1, layers, model_metadata["output_dim"]).to(device)
-    model.load_state_dict(torch.load(model_path, weights_only=True))
-    return model
 
 from torch.profiler import profile, ProfilerActivity
 from contextlib import nullcontext

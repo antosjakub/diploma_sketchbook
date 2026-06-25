@@ -52,9 +52,9 @@ parser.add_argument("--f_pde_trajs", default=1, type=int, help="")
 parser.add_argument("--f_ic_full_domain", default=1, type=int, help="")
 parser.add_argument("--f_ic_trajs", default=1, type=int, help="")
 
-parser.add_argument("--f_pde", default=9, type=int, help="")
-parser.add_argument("--f_bc", default=1, type=int, help="")
-parser.add_argument("--f_ic", default=1, type=int, help="")
+#parser.add_argument("--f_pde", default=9, type=int, help="")
+#parser.add_argument("--f_bc", default=1, type=int, help="")
+#parser.add_argument("--f_ic", default=1, type=int, help="")
 
 parser.add_argument("--use_lbfgs", action="store_true", help="")
 
@@ -112,7 +112,7 @@ args = run_utils.parse_args_with_config(
 )
 #args.enable_profiler = True
 #args.use_adaptive_weights = True
-args.clear_dir = True
+#args.clear_dir = True
 
 d = args.d  # space dims
 D = d + 1   # space + time dims
@@ -160,7 +160,7 @@ if args.starting_model:
 
 if args.custom_ic_model is not None:
     print(f"Using a custom IC function: {args.custom_ic_model}")
-    model_ic = utility.load_model_from_json(args.custom_ic_model, device)
+    model_ic = architecture.load_model_from_json(args.custom_ic_model, device)
     model_ic.eval()
     custom_ic_fn = model_ic.forward
 else:
@@ -205,6 +205,17 @@ sampling_settings_base = {
     "bs": args.bs,
 }
 sampling_settings_base["custom_ic_fn"] = custom_ic_fn
+# divide the res points
+sampling_settings_base["f_bc"] = 1 if 'bc' in active_losses else 0
+sampling_settings_base["f_ic"] = 1 if 'ic' in active_losses else 0
+if len(active_losses) == 2:
+    sampling_settings_base["f_pde"] = 9
+elif len(active_losses) == 3:
+    sampling_settings_base["f_pde"] = 8
+else:
+    raise Exception
+print(sampling_settings_base)
+
 if sampling_type == "trajectories":
     sampling_settings = sampling_settings_base | {
         "n_trajs": args.n_trajs,
@@ -219,9 +230,9 @@ elif sampling_type == "domain_and_trajectories":
         "n_trajs": args.n_trajs,
         "nt_steps": args.nt_steps,
         "use_rbas": args.use_rbas,
-        "f_pde": args.f_pde,
-        "f_bc": args.f_bc,
-        "f_ic": args.f_ic,
+        #"f_pde": args.f_pde,
+        #"f_bc": args.f_bc,
+        #"f_ic": args.f_ic,
         "f_pde_full_domain": args.f_pde_full_domain,
         "f_pde_trajs": args.f_pde_trajs,
         "f_ic_full_domain": args.f_ic_full_domain,
