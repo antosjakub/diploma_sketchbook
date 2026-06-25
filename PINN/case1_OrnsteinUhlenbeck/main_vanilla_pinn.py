@@ -33,7 +33,7 @@ parser.add_argument("--L_min", default=-5.0, type=float, help="")
 parser.add_argument("--L_max", default=5.0, type=float, help="")
 
 parser.add_argument("--n_test_points", default=10_000, type=int, help="Number of test points for the testing suite.")
-parser.add_argument("--testing_frequency", default=100, type=int, help="")
+parser.add_argument("--logging_frequency", default=100, type=int, help="")
 parser.add_argument("--enable_testing", action="store_true", help="Compute L2/L1/rel errors during training (requires analytic solution).")
 
 parser.add_argument("--resampling_frequency", default=100, type=int, help="")
@@ -284,7 +284,7 @@ if args.use_lbfgs:
         n_steps=args.n_steps,
         n_steps_decay=args.n_steps_decay,
         resampling_frequency=args.resampling_frequency,
-        testing_frequency=args.testing_frequency,
+        logging_frequency=args.logging_frequency,
         use_sdgd=args.use_sdgd,
         sdgd_num_dims=sdgd_num_dims,
         one_batch_per_epoch = True,
@@ -294,7 +294,7 @@ else:
         n_steps=args.n_steps,
         n_steps_decay=args.n_steps_decay,
         resampling_frequency=args.resampling_frequency,
-        testing_frequency=args.testing_frequency,
+        logging_frequency=args.logging_frequency,
         use_sdgd=args.use_sdgd,
         sdgd_num_dims=sdgd_num_dims,
         one_batch_per_epoch = True,
@@ -352,6 +352,6 @@ visualize_training_metrics.plot_loss(losses, file_name)
 import plot_results
 if args.enable_testing:
     file_name = f'{dir_name}/training_l2_error'
-    plot_results.plot_l2(l2_errs, file_name, args.testing_frequency)
+    plot_results.plot_l2(l2_errs, file_name, args.logging_frequency)
 
 plot_results.plot_viz(dir_name, model, pde_model, score_sde_model, args, device, model_s=None)

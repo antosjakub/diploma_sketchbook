@@ -32,6 +32,9 @@ FIXED_PARAMS = {
     
     # 1)
     "T": 3.5,
+    "time_strategy": 0,
+    "t_discr": "0.0, 0.5, 1.5, 3.5",
+    "eps": 0.1,
     "L_min": -5.0,
     "L_max": 5.0,
     # 2)
@@ -40,15 +43,16 @@ FIXED_PARAMS = {
     #"n_steps": 399,
     "n_steps_decay": 1000, # = n_steps / 25
     # 3)
-    "resampling_frequency": 100, # res_freq * bs = n_res_points
     "bs": 1_000,
+    "resampling_frequency": 100, # res_freq * bs = n_res_points
     "n_res_points": 10_000,
+    "n_trajs": 1_000,
+    "nt_steps": 100,
     # do not want to touch:
     "gamma": 0.9,
     "lr": 1e-3,
 
-    "n_test_points": 10_000,
-    "testing_frequency": 100,
+    "logging_frequency": 100,
     "clear_dir": False,
 
     #"sampling_type": "trajectories",
@@ -58,16 +62,15 @@ FIXED_PARAMS = {
     "f_ic_full_domain": 1,
     "f_ic_trajs": 1,
 
-    "n_trajs": 1_000,
-    "nt_steps": 100,
+    "use_adaptive_weights": False,
 
     "active_losses": "pde,ic",
     "lambda_pde": 1.0,
     "lambda_bc": 10.0,
     "lambda_ic": 10.0,
 
-    #"use_adaptive_weights": True,
     #"enable_testing": False
+    #"n_test_points": 10_000,
 }
 
 # Set this when running only `ll_ode` against one already-trained score-PDE
@@ -97,7 +100,7 @@ MODES = ["q_pde"]
 SEARCH_AXES = {
     #"ic_type": ["cauchy", "gauss"],
     #"d": [6, 4, 8],
-    "d": [4],
+    #"time_strategy": [0,1,2]
     #"box": [
     #    {"L_min": -4.0, "L_max": 4.0},
     #    {"L_min": -6.0, "L_max": 6.0},
