@@ -6,10 +6,10 @@ parser.add_argument("--description", default="", type=str, help="Smthg to help i
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--d", default=4, type=int, help="Number of spatial dimensions.")
 #parser.add_argument("--layers", default="256,256,256,256", type=str, help="")
-parser.add_argument("--layers", default="64,64,64,64", type=str, help="")
-#parser.add_argument("--layers", default="128,128,128,128", type=str, help="")
-#parser.add_argument("--n_steps", default=4999, type=int, help="")
-parser.add_argument("--n_steps", default=499, type=int, help="")
+#parser.add_argument("--layers", default="64,64,64,64", type=str, help="")
+parser.add_argument("--layers", default="128,128,128,128", type=str, help="")
+parser.add_argument("--n_steps", default=4999, type=int, help="")
+#parser.add_argument("--n_steps", default=499, type=int, help="")
 parser.add_argument("--n_steps_decay", default=1_000, type=int, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--gamma", default=0.9, type=float, help="Decay by 0.9 every 2000 steps.")
 parser.add_argument("--lr", default=1e-3, type=float, help="")
@@ -20,7 +20,7 @@ parser.add_argument("--lambda_bc", default=10.0, type=float, help="")
 parser.add_argument("--lambda_ic", default=10.0, type=float, help="")
 parser.add_argument("--lambda_norm", default=0.1, type=float, help="Weight of the integral p dx = 1 normalization loss.")
 parser.add_argument("--use_adaptive_weights", action="store_true", help="grad adaptive loss term weighting.")
-parser.add_argument("--active_losses", default="pde,bc,ic", type=str, help="Comma-separated subset of {pde,bc,ic,norm}. 'pde' is required.")
+parser.add_argument("--active_losses", default="pde,ic", type=str, help="Comma-separated subset of {pde,bc,ic,norm}. 'pde' is required.")
 parser.add_argument("--grad_clip_norm", default=None, type=float, help="Max-norm gradient clipping for the train step. None disables it.")
 
 parser.add_argument("--n_res_points", default=10_000, type=int, help="")
@@ -42,7 +42,7 @@ parser.add_argument("--use_rbas", action="store_true", help="Residual-based adap
 parser.add_argument("--use_sdgd", action="store_true", help="Stochastic dimension gradient-descend (for loss in high dims)")
 parser.add_argument("--sdgd_num_dims", default=None, type=int, help="Number of dimensions to use for SDGD. If None, use all dimensions.")
 # smart Defaults
-parser.add_argument("--output_dir", default="run_latest_vanilla", type=str, help="")
+parser.add_argument("--output_dir", default="run_latest_vanilla_II", type=str, help="")
 
 parser.add_argument("--mode", default="q_pde", type=str, help="score_pde, ll_ode")
 parser.add_argument("--ic_type", default="laplace", type=str, help="gauss, cauchy, laplace")
@@ -52,7 +52,7 @@ parser.add_argument("--f_pde_trajs", default=1, type=int, help="")
 parser.add_argument("--f_ic_full_domain", default=1, type=int, help="")
 parser.add_argument("--f_ic_trajs", default=1, type=int, help="")
 
-parser.add_argument("--f_pde", default=8, type=int, help="")
+parser.add_argument("--f_pde", default=9, type=int, help="")
 parser.add_argument("--f_bc", default=1, type=int, help="")
 parser.add_argument("--f_ic", default=1, type=int, help="")
 
@@ -111,10 +111,8 @@ args = run_utils.parse_args_with_config(
     parser, [] if "__file__" not in globals() else None
 )
 #args.enable_profiler = True
-args.output_dir = 'run_latest_vanilla_cw'
-args.use_adaptive_weights = True
+#args.use_adaptive_weights = True
 args.clear_dir = True
-args.time_strategy = 0
 
 d = args.d  # space dims
 D = d + 1   # space + time dims
