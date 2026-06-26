@@ -12,6 +12,7 @@ class PINN_Trainer:
         sampling_type, sampling_settings,
         loss_weighting, testing_suite, active_losses=("pde", "bc", "ic", "norm"),
         profiler=None, device='cpu', dir_name=None, grad_clip_norm=None,
+        memory_tracker=None,
     ):
         self.model = model
         self.optimizer = optimizer
@@ -26,6 +27,8 @@ class PINN_Trainer:
         self.d = self.pde_model.d
         self.dir_name = dir_name
         self.grad_clip_norm = grad_clip_norm
+        self.memory_tracker = memory_tracker
+        self.memory_history = self.memory_tracker.history if self.memory_tracker is not None else None
 
         for k in active_losses:
             if k not in self.VALID_LOSS_KEYS:
@@ -176,6 +179,9 @@ class PINN_Trainer:
         self._build_bundle(0, n_steps, resampling_frequency, use_time_adapt_sampling)
 
         for si in range(n_steps):
+            memory_sample = None
+            if self.memory_tracker is not None:
+                memory_sample = self.memory_tracker.sample(si + 1)
 
             if self.profiler: self.profiler.start(si)
 
@@ -224,6 +230,8 @@ class PINN_Trainer:
                     l2_err, l1_err, rel_err = self.testing_suite.test_model(self.model, device=self.device)
                     l2_errs.append(l2_err)
                     log += f", L2: {l2_err:.6f}, L1: {l1_err:.6f}, rel_max: {rel_err:.6f}"
+                if memory_sample is not None:
+                    log += f"\n - {self.memory_tracker.format_sample(memory_sample)}"
                 print(log)
                 if use_causal_loss_weighting:
                     print(len(self.causal_weights_hist_pde), self.causal_weights_hist_pde[-1])

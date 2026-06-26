@@ -68,6 +68,7 @@ parser.add_argument("--eps", default=0.1, type=float, help="")
 #
 parser.add_argument("--enable_profiler", action="store_true", help="")
 parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
+parser.add_argument("--enable_memory_tracking", action="store_true", help="Log process RAM and GPU memory at each logging interval.")
 # enable transfer learning / finetuning
 parser.add_argument("--starting_model", default=None, type=str, help="")
 parser.add_argument("--custom_ic_model", default=None, type=str, help="")
@@ -110,9 +111,10 @@ import run_utils
 args = run_utils.parse_args_with_config(
     parser, [] if "__file__" not in globals() else None
 )
-#args.enable_profiler = True
-#args.use_adaptive_weights = True
-#args.clear_dir = True
+args.enable_profiler = False
+args.enable_memory_tracking = True
+args.use_adaptive_weights = True
+args.clear_dir = True
 
 d = args.d  # space dims
 D = d + 1   # space + time dims
@@ -247,6 +249,7 @@ trainer = PINN_Trainer(
     active_losses=active_losses, profiler=profiler, device=device,
     dir_name=dir_name,
     grad_clip_norm=args.grad_clip_norm,
+    memory_tracker=utility.MemoryTracker(device) if args.enable_memory_tracking else None
 )
 #losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
 
@@ -312,7 +315,12 @@ print(utility.get_duration_h_m_s(t1, time.time(), "Adam training"))
 
 print("\nTraining complete!")
 
-run_utils.save_run(dir_name, model, losses, l2_errs, args, device, head_fn=None, loss_weighting=loss_weighting if args.n_steps > 0 else None, output_dim=output_dim) 
+run_utils.save_run(
+    dir_name, model, losses, l2_errs, args, device,
+    head_fn=None,
+    loss_weighting=loss_weighting if args.n_steps > 0 else None,
+    output_dim=output_dim,
+) 
 import visualize_training_metrics
 import plot_results
 
@@ -356,5 +364,9 @@ if use_causal_loss_weighting:
         save_causal_weights_losses(trainer.causal_weights_hist_bc,  'weights', 'bc')
         save_causal_weights_losses(trainer.causal_losses_hist_bc,   'losses', 'bc')
 
+if args.enable_memory_tracking:
+    file_name = f'{dir_name}/training_memory_metrics'
+    visualize_training_metrics.plot_mem(trainer.memory_history, file_name)
+    utility.json_dump(f"{file_name}.json", trainer.memory_history)
 
 plot_results.plot_viz(dir_name, model, pde_model, score_sde_model, args, device, model_s=None)

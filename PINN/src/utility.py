@@ -1,6 +1,8 @@
 
 
 import json
+import os
+import torch
 def json_dump(file_path, d):
     with open(file_path, 'w', encoding='utf-8') as f:
         json.dump(d, f, indent=4)
@@ -29,6 +31,78 @@ def get_duration_h_m_s(t1, t2, label="Smthg"):
 from torch.profiler import profile, ProfilerActivity
 from contextlib import nullcontext
 
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
+
+class MemoryTracker:
+    def __init__(self, device):
+        self.device = device
+        self.process = psutil.Process(os.getpid()) if psutil is not None else None
+        self.use_gpu = getattr(device, "type", device) == "cuda" and torch.cuda.is_available()
+        self.peak_process_rss_bytes = 0
+        self.history = {
+            "step": [],
+            "process_rss_mb": [],
+            "process_peak_rss_mb": [],
+            "gpu_allocated_mb": [],
+            "gpu_reserved_mb": [],
+            "gpu_peak_allocated_mb": [],
+            "gpu_peak_reserved_mb": [],
+        }
+        if self.use_gpu:
+            torch.cuda.reset_peak_memory_stats(device)
+
+    def sample(self, step):
+        process_rss_bytes = self.process.memory_info().rss if self.process is not None else None
+        if process_rss_bytes is not None:
+            self.peak_process_rss_bytes = max(self.peak_process_rss_bytes, process_rss_bytes)
+
+        gpu_allocated_bytes = None
+        gpu_reserved_bytes = None
+        gpu_peak_allocated_bytes = None
+        gpu_peak_reserved_bytes = None
+        if self.use_gpu:
+            gpu_allocated_bytes = torch.cuda.memory_allocated(self.device)
+            gpu_reserved_bytes = torch.cuda.memory_reserved(self.device)
+            gpu_peak_allocated_bytes = torch.cuda.max_memory_allocated(self.device)
+            gpu_peak_reserved_bytes = torch.cuda.max_memory_reserved(self.device)
+
+        sample = {
+            "step": step,
+            "process_rss_mb": self._bytes_to_mb(process_rss_bytes),
+            "process_peak_rss_mb": self._bytes_to_mb(self.peak_process_rss_bytes) if process_rss_bytes is not None else None,
+            "gpu_allocated_mb": self._bytes_to_mb(gpu_allocated_bytes),
+            "gpu_reserved_mb": self._bytes_to_mb(gpu_reserved_bytes),
+            "gpu_peak_allocated_mb": self._bytes_to_mb(gpu_peak_allocated_bytes),
+            "gpu_peak_reserved_mb": self._bytes_to_mb(gpu_peak_reserved_bytes),
+        }
+        for key, value in sample.items():
+            self.history[key].append(value)
+        return sample
+
+    def format_sample(self, sample):
+        parts = []
+        if sample["process_rss_mb"] is not None:
+            parts.append(
+                f"RAM RSS/peak: {sample['process_rss_mb']:.1f}/{sample['process_peak_rss_mb']:.1f} MB"
+            )
+        if sample["gpu_allocated_mb"] is not None:
+            parts.append(
+                "GPU alloc/res/peak: "
+                f"{sample['gpu_allocated_mb']:.1f}/{sample['gpu_reserved_mb']:.1f}/{sample['gpu_peak_allocated_mb']:.1f} MB"
+            )
+        return ", ".join(parts)
+
+    @staticmethod
+    def _bytes_to_mb(value):
+        if value is None:
+            return None
+        return value / (1024 ** 2)
+
+
 class Profiler():
     def __init__(self,report_filename, start_step, end_step, device='cpu'):
         self.report_filename = report_filename
@@ -44,6 +118,52 @@ class Profiler():
             record_shapes=True,
             with_stack=True,
         )
+
+#    def _safe_attr(self, event, attr_name, default=None):
+#        try:
+#            return getattr(event, attr_name)
+#        except (AttributeError, AssertionError):
+#            return default
+#
+#    def _event_to_dict(self, event):
+#        return {
+#            "name": self._safe_attr(event, "key"),
+#            "count": self._safe_attr(event, "count"),
+#            "cpu_time_total_us": self._safe_attr(event, "cpu_time_total"),
+#            "self_cpu_time_total_us": self._safe_attr(event, "self_cpu_time_total"),
+#            "device_time_total_us": self._safe_attr(event, "device_time_total"),
+#            "self_device_time_total_us": self._safe_attr(event, "self_device_time_total"),
+#            "cpu_memory_usage_bytes": self._safe_attr(event, "cpu_memory_usage"),
+#            "self_cpu_memory_usage_bytes": self._safe_attr(event, "self_cpu_memory_usage"),
+#            "device_memory_usage_bytes": self._safe_attr(event, "device_memory_usage"),
+#            "self_device_memory_usage_bytes": self._safe_attr(event, "self_device_memory_usage"),
+#            "is_user_annotation": bool(self._safe_attr(event, "is_user_annotation", False)),
+#            "input_shapes": self._safe_attr(event, "input_shapes"),
+#        }
+#
+#    def _event_sort_key(self, row):
+#        return (
+#            row.get("device_time_total_us") or 0.0,
+#            row.get("cpu_time_total_us") or 0.0,
+#            row.get("self_device_time_total_us") or 0.0,
+#            row.get("self_cpu_time_total_us") or 0.0,
+#        )
+#
+#    def _write_event_summary(self, events, output_path, label):
+#        rows = [self._event_to_dict(event) for event in events]
+#        rows.sort(key=self._event_sort_key, reverse=True)
+#        payload = {
+#            "label": label,
+#            "sort_priority": [
+#                "device_time_total_us",
+#                "cpu_time_total_us",
+#                "self_device_time_total_us",
+#                "self_cpu_time_total_us",
+#            ],
+#            "num_events": len(rows),
+#            "events": rows,
+#        }
+#        json_dump(output_path, payload)
 
     def start(self, si):
         if si == self.start_step:
@@ -62,26 +182,15 @@ class Profiler():
             with open(f"{self.report_filename}.txt", "w") as f:
                 f.write(report)
 
-            from torch.autograd.profiler_util import EventList
-            filtered = EventList(
-                [evt for evt in avg if not evt.is_user_annotation],
-                use_device=avg._use_device,
-                profile_memory=avg._profile_memory,
-                with_flops=avg._with_flops,
-            )
-            report = filtered.table(sort_by, row_limit=20)
-            with open(f"{self.report_filename}_metal.txt", "w") as f:
-                f.write(report)
+            #operator_events = [evt for evt in avg if not evt.is_user_annotation]
+            #annotation_events = [evt for evt in avg if evt.is_user_annotation]
 
-            filtered = EventList(
-                [evt for evt in avg if evt.is_user_annotation],
-                use_device=avg._use_device,
-                profile_memory=avg._profile_memory,
-                with_flops=avg._with_flops,
-            )
-            report = filtered.table(sort_by, row_limit=20)
-            with open(f"{self.report_filename}_record_fun.txt", "w") as f:
-                f.write(report)
+            #self._write_event_summary(operator_events, f"{self.report_filename}_torch_ops.json", "internal profiler operator events")
+            #self._write_event_summary(annotation_events, f"{self.report_filename}_record_fun.json", "record_function events")
+
+
+
+
 
 #class Profiler_Dummy()
 #    def __init__(self):

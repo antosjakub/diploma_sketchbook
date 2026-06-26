@@ -98,6 +98,10 @@ def plot_GradNorm_weights(weights_data_dict, file_name):
 def plot_loss(loss_data_dict, file_name):
     plot_hist_data_dict(loss_data_dict, file_name, lambda name: rf"$\mathcal{{L}}_{{{name}}}$", lambda name: 1.0 if name == 'total' else 1.0, lambda name: 'black' if name == 'total' else None, 'loss', "Training loss")
 
+def plot_mem(mem_data_dict, file_name):
+    mem_series = {k: v for k, v in mem_data_dict.items() if k != "step"}
+    plot_hist_data_dict(mem_series, file_name, lambda name: name, lambda name: 1.0, lambda name: None, 'MB', "Memory")
+
 
 import sys
 if __name__ == "__main__":
