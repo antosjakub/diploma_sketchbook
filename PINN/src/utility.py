@@ -30,12 +30,12 @@ from torch.profiler import profile, ProfilerActivity
 from contextlib import nullcontext
 
 class Profiler():
-    def __init__(self,report_filename, start_step, end_step, use_gpu=False):
+    def __init__(self,report_filename, start_step, end_step, device='cpu'):
         self.report_filename = report_filename
         self.start_step = start_step
         self.end_step = end_step
-        self.use_gpu = use_gpu
-        self.activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA] if use_gpu else [ProfilerActivity.CPU]
+        self.use_gpu = True if device.type=='cuda' else False
+        self.activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA] if self.use_gpu else [ProfilerActivity.CPU]
 
     def make(self) -> None:
         self.prof_ctx = profile(
@@ -54,12 +54,34 @@ class Profiler():
         if si == self.end_step:
             self.prof_ctx.__exit__(None, None, None)
             print(f"\n[Profiler] Stopped at step {si}.")
-            prof_report = self.prof_ctx.key_averages().table(sort_by="gpu_time_total" if self.use_gpu else "cpu_time_total", row_limit=20)
-            #print(prof_report)
-            # save profiler report
-            #prof_ctx.export_chrome_trace(f"run_latest/{profiler_report_filename}.json")
+            self.prof_ctx.export_chrome_trace(f"{self.report_filename}_chroma.json")
+            avg = self.prof_ctx.key_averages()
+            sort_by="gpu_time_total" if self.use_gpu else "cpu_time_total"
+
+            report = avg.table(sort_by, row_limit=20)
             with open(f"{self.report_filename}.txt", "w") as f:
-                f.write(prof_report)
+                f.write(report)
+
+            from torch.autograd.profiler_util import EventList
+            filtered = EventList(
+                [evt for evt in avg if not evt.is_user_annotation],
+                use_device=avg._use_device,
+                profile_memory=avg._profile_memory,
+                with_flops=avg._with_flops,
+            )
+            report = filtered.table(sort_by, row_limit=20)
+            with open(f"{self.report_filename}_metal.txt", "w") as f:
+                f.write(report)
+
+            filtered = EventList(
+                [evt for evt in avg if evt.is_user_annotation],
+                use_device=avg._use_device,
+                profile_memory=avg._profile_memory,
+                with_flops=avg._with_flops,
+            )
+            report = filtered.table(sort_by, row_limit=20)
+            with open(f"{self.report_filename}_record_fun.txt", "w") as f:
+                f.write(report)
 
 #class Profiler_Dummy()
 #    def __init__(self):

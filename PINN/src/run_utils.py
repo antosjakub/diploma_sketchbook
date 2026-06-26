@@ -98,13 +98,14 @@ def make_spatial_domain(d, x_min, x_max, device=None, dtype=torch.float32):
     )
 
 
-def make_profiler(dir_name, args):
+def make_profiler(dir_name, args, device):
     if not args.enable_profiler:
         return None
     return utility.Profiler(
-        report_filename=f"{dir_name}/{args.profiler_report_filename}.txt",
+        report_filename=f"{dir_name}/{args.profiler_report_filename}",
         start_step=95,
         end_step=105,
+        device=device
     )
 
 
@@ -118,7 +119,7 @@ def merge_losses(dst, src):
 
 
 
-def save_run(dir_name, model, losses, l2_errs, args, pde_model=None, head_fn=None, loss_weighting=None, output_dim=1):
+def save_run(dir_name, model, losses, l2_errs, args, device, pde_model=None, head_fn=None, loss_weighting=None, output_dim=1):
     """Dump model state, loss dict, l2 errors, model metadata and (optionally) pde metadata.
 
     `head_fn`: optional tag identifying the architectural head (e.g. "hardcoded_ic"),
@@ -133,6 +134,7 @@ def save_run(dir_name, model, losses, l2_errs, args, pde_model=None, head_fn=Non
                 "model_class": type(model).__name__,
                 "head_fn": head_fn,
                 "output_dim": output_dim,
+                "device": device.type,
                 "args": args.__dict__,
             },
             f,
@@ -143,12 +145,12 @@ def save_run(dir_name, model, losses, l2_errs, args, pde_model=None, head_fn=Non
         pde_model.dump_pde_metadata(f'{dir_name}/pde_metadata.json')
 
     loss_name = f'{dir_name}/training_loss'
-    l2_name = f'{dir_name}/training_l2_error'
     torch.save(model.state_dict(), f'{dir_name}/model.pth')
     torch.save({k: torch.tensor(v) for k, v in losses.items()}, f'{loss_name}.pth')
-    torch.save(torch.tensor(l2_errs), f'{l2_name}.pth')
+    if len(l2_errs) > 0:
+        l2_name = f'{dir_name}/training_l2_error'
+        torch.save(torch.tensor(l2_errs), f'{l2_name}.pth')
     if isinstance(loss_weighting, loss.AdaptiveWeights) and len(loss_weighting.weights_history) > 0:
         weights_name = f'{dir_name}/training_loss_weights'
         torch.save(torch.stack(loss_weighting.weights_history), f'{weights_name}.pth')
     print("\nResults saved.")
-    return loss_name, l2_name

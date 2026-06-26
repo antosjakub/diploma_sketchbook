@@ -176,7 +176,7 @@ l2_errs = []
 
 optimizer, scheduler = run_utils.make_optim(model, args)
 loss_weighting = run_utils.make_loss_weighting(args, active_losses, device=device)
-profiler = run_utils.make_profiler(dir_name, args)
+profiler = run_utils.make_profiler(dir_name, args, device)
 
 sdgd_num_dims = args.sdgd_num_dims if args.sdgd_num_dims is not None else d
 if args.use_sdgd:
@@ -312,10 +312,17 @@ print(utility.get_duration_h_m_s(t1, time.time(), "Adam training"))
 
 print("\nTraining complete!")
 
-loss_name, l2_name = run_utils.save_run(dir_name, model, losses, l2_errs, args, head_fn=None, loss_weighting=loss_weighting if args.n_steps > 0 else None, output_dim=output_dim) 
-
-
+run_utils.save_run(dir_name, model, losses, l2_errs, args, device, head_fn=None, loss_weighting=loss_weighting if args.n_steps > 0 else None, output_dim=output_dim) 
 import visualize_training_metrics
+import plot_results
+
+file_name = f'{dir_name}/training_loss'
+visualize_training_metrics.plot_loss(losses, file_name)
+if args.enable_testing:
+    file_name = f'{dir_name}/training_l2_error'
+    plot_results.plot_l2(l2_errs, file_name, args.logging_frequency)
+
+
 
 # individual loss term weighting - pde,bc,ic
 if args.use_adaptive_weights:
@@ -324,10 +331,12 @@ if args.use_adaptive_weights:
     for i, loss_name in enumerate(active_losses):
         weights_hist[loss_name] = weights_hist_tensor[i]
     file_name = f'{dir_name}/training_grad_norm'
+    torch.save(weights_hist, f'{file_name}.pth')
     visualize_training_metrics.plot_GradNorm_weights(weights_hist, file_name)
 
 if use_time_adapt_sampling:
     file_name = f'{dir_name}/training_time_adapt_sampling'
+    torch.save(torch.tensor(trainer.time_adapt_sampl_hist), f'{file_name}.pth')
     visualize_training_metrics.plot_time_adapt_sampling(trainer.time_adapt_sampl_hist, file_name)
 
 if use_causal_loss_weighting:
@@ -339,6 +348,7 @@ if use_causal_loss_weighting:
             causal_wl_hist[term_type] = losses[term_type]
         for i in range(len(t_discr)-1):
             causal_wl_hist[f"{i+1}"] = causal_wl_hist_tensor[i]
+        torch.save(causal_wl_hist, f'{file_name}.pth')
         visualize_training_metrics.plot_causal_weights_losses(causal_wl_hist, file_name, wl_type, term_type, t_discr)
     save_causal_weights_losses(trainer.causal_weights_hist_pde, 'weights', 'pde')
     save_causal_weights_losses(trainer.causal_losses_hist_pde,  'losses', 'pde')
@@ -346,12 +356,5 @@ if use_causal_loss_weighting:
         save_causal_weights_losses(trainer.causal_weights_hist_bc,  'weights', 'bc')
         save_causal_weights_losses(trainer.causal_losses_hist_bc,   'losses', 'bc')
 
-file_name = f'{dir_name}/training_loss'
-visualize_training_metrics.plot_loss(losses, file_name)
-
-import plot_results
-if args.enable_testing:
-    file_name = f'{dir_name}/training_l2_error'
-    plot_results.plot_l2(l2_errs, file_name, args.logging_frequency)
 
 plot_results.plot_viz(dir_name, model, pde_model, score_sde_model, args, device, model_s=None)
