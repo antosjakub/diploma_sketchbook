@@ -12,6 +12,10 @@ import utility
 
 CASE_DIR = Path(__file__).resolve().parent
 
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument("--suffix", default="", type=str, help="suffix of the generated grid search folder")
+args = parser.parse_args()
 
 # Choose which training entrypoint to use.
 # Supported values: "hardcoded", "3losses", "vanilla"
@@ -68,6 +72,8 @@ FIXED_PARAMS = {
     "lambda_pde": 1.0,
     "lambda_bc": 10.0,
     "lambda_ic": 10.0,
+
+    "enable_profiler": True
 
     #"enable_testing": False
     #"n_test_points": 10_000,
@@ -325,7 +331,7 @@ def main():
     validate_search_setup()
 
     timestamp = time.strftime("%Y-%m-%d--%H-%M-%S", time.localtime())
-    search_root = CASE_DIR / f"gridsearch__{VARIANT}__{timestamp}"
+    search_root = CASE_DIR / f"gridsearch__{VARIANT}__{timestamp}__{args.suffix}"
     search_root.mkdir(parents=True, exist_ok=True)
 
     entrypoint = get_entrypoint(VARIANT)

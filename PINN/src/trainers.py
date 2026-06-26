@@ -322,7 +322,7 @@ class PINN_Trainer:
             if self.profiler: self.profiler.exit(si)
 
             if (si + 1) % testing_frequency == 0:
-                parts = [f"Step {si+1}/{n_steps}", f"Loss: {loss.item():.6f}", f"Loss_tot: {self.losses["total"][-1]:.6f}"]
+                parts = [f"Step {si+1}/{n_steps}", f"Loss: {loss.item():.6f}", f"Loss_tot: {self.losses['total'][-1]:.6f}"]
                 for k in self.active_losses:
                     parts.append(f"{k}: {self.last_losses[k]:.6f}")
                 parts.append(f"lr: {self.optimizer.param_groups[0]['lr']:.6f}")
