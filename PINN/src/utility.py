@@ -56,7 +56,7 @@ class Profiler():
             print(f"\n[Profiler] Stopped at step {si}.")
             self.prof_ctx.export_chrome_trace(f"{self.report_filename}_chroma.json")
             avg = self.prof_ctx.key_averages()
-            sort_by="gpu_time_total" if self.use_gpu else "cpu_time_total"
+            sort_by = "device_time_total" if self.use_gpu else "cpu_time_total"
 
             report = avg.table(sort_by, row_limit=20)
             with open(f"{self.report_filename}.txt", "w") as f:
