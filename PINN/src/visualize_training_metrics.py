@@ -2,12 +2,19 @@ import torch
 from matplotlib import pyplot as plt
 
 
+def _to_plot_series(data):
+    """Convert tensors to CPU arrays so matplotlib never sees device-backed values."""
+    if isinstance(data, torch.Tensor):
+        return data.detach().cpu().numpy()
+    return data
+
+
 
 def plot_l2(steps, l2_error, l2_error_name):
     # Plot L2
     print(f"Saving: {l2_error_name}.png")
     plt.figure(figsize=(10, 5))
-    plt.semilogy(steps, l2_error)
+    plt.semilogy(_to_plot_series(steps), _to_plot_series(l2_error))
     plt.xlabel('Step')
     plt.ylabel('Error')
     plt.title('l2 error')
@@ -17,7 +24,7 @@ def plot_l2(steps, l2_error, l2_error_name):
 def plot_time_adapt_sampling(Ts, file_name):
     print(f"Saving: {file_name}.png")
     plt.figure(figsize=(10, 5))
-    plt.plot(Ts)
+    plt.plot(_to_plot_series(Ts))
     plt.xlabel('Step')
     plt.ylabel('T (terminal time)')
     plt.title('Time adaptive sampling')
@@ -48,6 +55,7 @@ def plot_hist_data_dict(hist_data_dict, file_name, label_fn, line_width_fn, colo
         for name, series in hist_data_dict.items():
             if len(series) == 0:
                 continue
+            series = _to_plot_series(series)
             params = {
                 "label": label_fn(name),
                 "linewidth": line_width_fn(name)
@@ -58,7 +66,7 @@ def plot_hist_data_dict(hist_data_dict, file_name, label_fn, line_width_fn, colo
                 plt.semilogy(series, **params)
         plt.legend()
     else:
-        plt.semilogy(hist_data_dict)
+        plt.semilogy(_to_plot_series(hist_data_dict))
     plt.xlabel('Step')
     plt.ylabel(y_label)
     plt.title(title)
