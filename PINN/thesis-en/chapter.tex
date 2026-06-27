@@ -129,13 +129,37 @@ As we will see in the following section, this very same mechanism is exploited b
 The full training algorihm can be summarized as so:
 
 \begin{algorithm}[H]
-\caption{Standard NN Training (Mini-Batch Gradient Descent)}
+\caption{Full-Batch Gradient Descent}
 \begin{algorithmic}[1]
-    \Require $\mathcal{N}_{\theta}:\mathbb{R}^{d_{in}}\to\mathbb{R}^{d_{out}}$, training data $\{(x_i, y_i)\}_{i=1}^{N}$
+    \Require $\mathcal{N}_{\theta}:\mathbb{R}^{d_{in}}\to\mathbb{R}^{d_{out}}$, training data $\{(x_i, y_i)\}_{i=1}^{N}$, number of epochs $E$, learning rate $\mu$
     \State \textbf{Initialize} network parameters $\theta$
     \For{epoch $= 1, \dots, E$}
-        \State Randomly shuffle training data
-        \For{each mini-batch $\mathcal{B} \subset \{1,\dots,N\}$, $|\mathcal{B}|=B$}
+        \State Randomly shuffle the training data
+        \State \textbf{Forward pass:} compute $\hat{y}_i = \mathcal{N}_\theta(x_i), \:\forall i$
+        \State \textbf{Compute loss:}
+        $\ell(\theta) = \dfrac{1}{N}\displaystyle\sum_{i=1}^N
+                \bigl(\hat{y}_i - y_i\bigr)^2$
+        \State \textbf{Backward pass:} compute $\nabla_\theta \ell$ via backpropagation
+        \State \textbf{Update:} $\theta \leftarrow \theta - \eta\,\nabla_\theta \ell$
+    \EndFor
+    \State \Return $\theta$
+\end{algorithmic}
+\end{algorithm}
+
+This algorihm is called a \emph{full-batch gradient descent}, since it processes the entire training set simultaneously as a one single batch in a single step.
+However, in cases where the dataset is too big to precess all at once, we split it into mutliple batches and proceed iteratively until we go thus process the entire dataset.
+\cite{goodfellow}
+
+
+\begin{algorithm}[H]
+\caption{Mini-Batch Gradient Descent}
+\begin{algorithmic}[1]
+    \Require $\mathcal{N}_{\theta}:\mathbb{R}^{d_{in}}\to\mathbb{R}^{d_{out}}$, training data $\{(x_i, y_i)\}_{i=1}^{N}$, number of epochs $E$, batch size $B$, learning rate $\mu$
+    \State \textbf{Initialize} network parameters $\theta$
+    \For{epoch $= 1, \dots, E$}
+        \State Randomly shuffle the training data
+        \State Divide the data into batches of size $B$
+        \For{each batch $\mathcal{B} \subset \{1,\dots,N\}$, $|\mathcal{B}|=B$}
             \State \textbf{Forward pass:} compute $\hat{y}_i = \mathcal{N}_\theta(x_i)$ for $i\in\mathcal{B}$
             \State \textbf{Compute loss:}
             $\ell(\theta) = \dfrac{1}{B}\displaystyle\sum_{i\in\mathcal{B}}
@@ -149,6 +173,12 @@ The full training algorihm can be summarized as so:
 \end{algorithm}
 
 In the algorihm above, the subset $\mathcal B$ of the training data is called a \emph{batch}, and $B$ is called a \emph{batch size}.
+
+The deciding factor between using a single large batch or set of smaller ones is not just the size of the dataset.
+For exmaple, small batch sizes are more noisy and can thus offer a regulizing effect for the network - enabling it to escape local miniam. On the other hand, large batch sizes give a more accurrate estimate of the gradient.
+The choice also depends on the hardware, espetially when using GPUs - as they are quite limited by VRAM, and their architecture makes them prefer a power of 2 batchsize. 
+\cite{goodfellow}
+
 
 
 
@@ -222,51 +252,18 @@ vanilla pinn
 PINN simply take the FFNN architecture and make as a few choices tailored to the pde system at hand.
 
 Consider, for example, a PDE system of the form
-\begin{align*}
+\begin{align}
 \partial_t u + \mathcal N(u) = 0\\
 u = u_{ic}\\
 u = u_{bc}
-\end{align*}
+\end{align}
 where $\mathcal N$ is a general differenttial operator.
 
-Paraetrize the solution by a nn $\mathcal N_\theta=u_\theta$
+Parametrize the solution by a nn $\mathcal N_\theta=u_\theta$
 define the NN as so:
 $d_{in} = d+1 =: D$
 $d_{out} = 1$
 use smooth activations like hyperbolic tangent and a identity activation for the final output layer.
-
-We then define a pde, bc, and ic residuals at space time coordinate $x,t$ as
-\begin{align*}
-\mathcal R_{pde}(u;x,t) &= \partial_t u(x,t) + \mathcal N(u;x,t)\\
-\mathcal R_{bc}(u;x,t) &= u(x,t) - u_{bc}(x,t)\\
-\mathcal R_{ic}(u;x) &= u(x,0) - u_{ic}(x)
-\end{align*}
-
-The loss the neural network then seeks to minimize is linear combiantion fo the individual losses:
-\begin{align*}
-\ell = \lambda_{pde}\ell_{pde} + \lambda_{ic}\ell_{ic} + \lambda_{bc}\ell_{bc}
-\end{align*}
-
-where $\lambda_r\in\mathbb R_+$, and :
-\begin{align*}
-\ell_{pde}\left(\theta;\{(x_i,t_i)\}_{i=1}^{N_{pde}}\right)
-= \sum_{i=1}^{N_{pde}} \big(\mathcal R_{pde}(u_\theta;x_i,t_i)\big)^2,\quad
-\{(x_i,t_i)\}_{i=1}^{N_{pde}} \subset (0,T)\times\Omega\\
-\ell_{bc}\left(\theta;\{(x_i,t_i)\}_{i=1}^{N_{bc}}\right)
-= \sum_{i=1}^{N_{bc}} \big(\mathcal R_{bc}(u_\theta;x_i,t_i)\big)^2,\quad
-\{(x_i,t_i)\}_{i=1}^{N_{bc}} \subset (0,T)\times\partial\Omega\\
-\ell_{ic}\left(\theta;\{x_i\}_{i=1}^{N_{ic}}\right)
-= \sum_{i=1}^{N_{ic}} \big(\mathcal R_{ic}(u_\theta;x_i)\big)^2,\quad
-\{x_i\}_{i=1}^{N_{ic}} \subset \Omega
-\end{align*}
-
-In general, we can write
-$$
-\ell_{r}\left(\theta;\{\xi_i\}_{i=1}^{N_{r}}\right)
-= \sum_{i=1}^{N_{r}} \big(\mathcal R_{r}(u_\theta;\xi_i)\big)^2,\quad
-\{\xi_i\}_{i=1}^{N_{r}}
-$$
-
 
 
 
@@ -282,36 +279,87 @@ $$
 - sample new data every step
 }
 
-For the training dataset $X$ can be created once before the training.
+What remains is to define the strategy for computing the loss.
+This is what separates physics neural networks from other approaches of modelling physical systems.
 
-Or periodically sampled during the training.
+Returning to the system above, we defing a pde, bc, and ic residuals at a space time coordinate $(x,t)$ as
+\begin{align*}
+\mathcal R_{pde}(u;x,t) &= \partial_t u(x,t) + \mathcal N(u;x,t)\\
+\mathcal R_{bc}(u;x,t) &= u(x,t) - u_{bc}(x,t)\\
+\mathcal R_{ic}(u;x) &= u(x,0) - u_{ic}(x)
+\end{align*}
 
-Let us save the training data $\{(x_i,t_i)\}_{i=1}^{N_{pde}}$ as a tensor $\mathbf X_{pde}$ of size $(N_r,d+1)$
+The loss the neural network then seeks to minimize is a linear combiantion of the individual losses:
+\begin{align*}
+\ell = \lambda_{pde}\ell_{pde} + \lambda_{bc}\ell_{bc} + \lambda_{ic}\ell_{ic}
+\end{align*}
+
+where $\lambda_r>0$, and the individual losses are computed as a mean squared error over the residuum
+\begin{align*}
+\ell_{pde}\left(\theta;\{(x_i,t_i)\}_{i=1}^{N_{pde}}\right)
+= \frac{1}{N_{pde}}\sum_{i=1}^{N_{pde}} \big(\mathcal R_{pde}(u_\theta;x_i,t_i)\big)^2,\quad
+\{(x_i,t_i)\}_{i=1}^{N_{pde}} \subset (0,T)\times\Omega\\
+\ell_{bc}\left(\theta;\{(x_i,t_i)\}_{i=1}^{N_{bc}}\right)
+= \frac{1}{N_{bc}}\sum_{i=1}^{N_{bc}} \big(\mathcal R_{bc}(u_\theta;x_i,t_i)\big)^2,\quad
+\{(x_i,t_i)\}_{i=1}^{N_{bc}} \subset (0,T)\times\partial\Omega\\
+\ell_{ic}\left(\theta;\{x_i\}_{i=1}^{N_{ic}}\right)
+= \frac{1}{N_{ic}}\sum_{i=1}^{N_{ic}} \big(\mathcal R_{ic}(u_\theta;x_i)\big)^2,\quad
+\{x_i\}_{i=1}^{N_{ic}} \subset \Omega
+\end{align*}
+
+%In general, we can write
+%$$
+%\ell_{r}\left(\theta;\{\xi_i\}_{i=1}^{N_{r}}\right)
+%= \sum_{i=1}^{N_{r}} \big(\mathcal R_{r}(u_\theta;\xi_i)\big)^2,\quad
+%\{\xi_i\}_{i=1}^{N_{r}}
+%$$
+
+In the context of PINN, we don't talk of training data since there is no explicit target value $y_i$ for the input $x_i$.
+Instead, we seek to minimize the residuum over a chosen set of points spanning the domain.
+We call such a set of points a \emph{callocation} set, or just \emph{callocaiton} points.
+Our dataset thus consist of just a set of points from the domain.
+
+%Let us save the training data $\{(x_i,t_i)\}_{i=1}^{N_{pde}}$ as a tensor $\mathbf X_{pde}$ of size $(N_r,d+1)$
 
 \begin{algorithm}[H]
-\caption{Mini-batch PINN training}
+\caption{Full-Batch Gradient Descent}
 \begin{algorithmic}[1]
-    \Require Neural network $u_\theta: \mathbb{R}^{d+1}\to\mathbb{R}$, sampled data $\mathbf{X}_{pde}, \mathbf{X}_{ic}, \mathbf{X}_{bc}$
+    \Require 
+    \begin{itemize} 
+    \item $u_\theta:\mathbb{R}^{d+1}\to\mathbb{R}$
+    \item callocation points
+    \begin{itemize} 
+    \item $X_{pde}=\{(x_i, t_i)\}_{i=1}^{N_{pde}}$
+    \item $X_{bc}=\{(x_i, t_i)\}_{i=1}^{N_{bc}}$
+    \item $X_{ic}=\{(x_i)\}_{i=1}^{N_{ic}}$
+    \end{itemize} 
+    \item weights $\lambda_{pde}, \lambda_{bc}, \lambda_{ic}$
+    \end{itemize} 
     \State \textbf{Initialize} network parameters $\theta$
     \For{epoch $= 1, \dots, E$}
-        \State Shuffle training data
-        \For{each mini-batch $\mathcal{B} \subset \{1,\dots,N\}$, $|\mathcal{B}|=B$}
-            \State \textbf{Forward pass:} compute $\hat{y}_i = \mathcal{N}_\theta(x_i)$ for $i\in\mathcal{B}$
-            \State \textbf{Compute loss:}
-            $\ell(\theta) = \dfrac{1}{B}\displaystyle\sum_{i\in\mathcal{B}}
-                \bigl(\hat{y}_i - y_i\bigr)^2$
-            \State \textbf{Backward pass:} compute $\nabla_\theta \ell$ via backpropagation
-            \State \textbf{Update:} $\theta \leftarrow \theta - \eta\,\nabla_\theta \ell$
-        \EndFor
-        \State Every $k$ epochs, regenerate training data
+        \State Randomly shuffle the callocation points
+        \State \textbf{Forward pass:}
+        \begin{itemize} 
+            \item $u_{pde,i} = u_\theta(x_i,t_i),\quad \forall(x_i,t_i)\in X_{pde}$
+            \item $u_{bc,i} = u_\theta(x_i,t_i),\quad \forall(x_i,t_i)\in X_{bc}$
+            \item $u_{ic,i} = u_\theta(x_i,0),\quad \forall x_i\in X_{ic}$
+        \end{itemize} 
+        \State \textbf{Calculate residua and loss:}
+        \begin{itemize} 
+        \item $\ell_{pde}(\theta) = \dfrac{1}{N_{pde}}\displaystyle\sum_{i=1}^{N_{pde}} \big(\mathcal R_{pde}(u_{pde,i};x_i,t_i)\big)^2$
+        \item $\ell_{bc}(\theta) = \dfrac{1}{N_{bc}}\displaystyle\sum_{i=1}^{N_{bc}} \big(\mathcal R_{bc}(u_{bc,i};x_i,t_i)\big)^2$
+        \item $\ell_{ic}(\theta) = \dfrac{1}{N_{ic}}\displaystyle\sum_{i=1}^{N_{ic}} \big(\mathcal R_{ic}(u_{bc,i};x_i,0)\big)^2$
+        \item $\ell = \lambda_{pde}\ell_{pde} + \lambda_{bc}\ell_{bc} + \lambda_{ic}\ell_{ic}$
+        \end{itemize} 
+        \State \textbf{Backward pass:} compute $\nabla_\theta \ell$ via backpropagation
+        \State \textbf{Update:} $\theta \leftarrow \theta - \eta\,\nabla_\theta \ell$
     \EndFor
     \State \Return $\theta$
 \end{algorithmic}
 \end{algorithm}
 
-
 \begin{algorithm}[H]
-\caption{Full-batch PINN Training}
+\caption{Full-batch gradient descent}
 \begin{algorithmic}[1]
     \Require Neural network $u_\theta: \mathbb{R}^{d+1}\to\mathbb{R}$, weights $\lambda_{pde}, \lambda_{ic}, \lambda_{bc}$
     \State \textbf{Initialize} network parameters $\theta$
@@ -349,6 +397,29 @@ Let us save the training data $\{(x_i,t_i)\}_{i=1}^{N_{pde}}$ as a tensor $\math
 \end{algorithm}
 
 
+\begin{algorithm}[H]
+\caption{Mini-batch gradient descent}
+\begin{algorithmic}[1]
+    \Require Neural network $u_\theta: \mathbb{R}^{d+1}\to\mathbb{R}$, sampled data $\mathbf{X}_{pde}, \mathbf{X}_{ic}, \mathbf{X}_{bc}$
+    \State \textbf{Initialize} network parameters $\theta$
+    \For{epoch $= 1, \dots, E$}
+        \State Shuffle training data
+        \For{each mini-batch $\mathcal{B} \subset \{1,\dots,N\}$, $|\mathcal{B}|=B$}
+            \State \textbf{Forward pass:} compute $\hat{y}_i = \mathcal{N}_\theta(x_i)$ for $i\in\mathcal{B}$
+            \State \textbf{Compute loss:}
+            $\ell(\theta) = \dfrac{1}{B}\displaystyle\sum_{i\in\mathcal{B}}
+                \bigl(\hat{y}_i - y_i\bigr)^2$
+            \State \textbf{Backward pass:} compute $\nabla_\theta \ell$ via backpropagation
+            \State \textbf{Update:} $\theta \leftarrow \theta - \eta\,\nabla_\theta \ell$
+        \EndFor
+        \State Every $k$ epochs, regenerate training data
+    \EndFor
+    \State \Return $\theta$
+\end{algorithmic}
+\end{algorithm}
+
+
+
 \section{example archs}
 ex. burgers, Nbcic=100, 9layer NN 20width
 fixed set of points
@@ -356,11 +427,6 @@ fixed set of points
 $$
 u_t + \mathcal{N}[u] = 0
 $$
-
-\section{Sampling}
-
-
-
 
 \section{Most important}
 
