@@ -2,6 +2,7 @@
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta, positioning, shapes.geometric, calc}
 \usepackage{amsmath}
+\usepackage{amssymb}
 
 \begin{document}
 \begin{tikzpicture}[
@@ -98,17 +99,18 @@
 % Data points
 \node[align=center, below=1cm of output] (data) {
   Sample domains:\\[0.0cm]
-  $(0,T)\times\Omega,\: \Omega,$\\[0.0cm]
-  $(0,T)\times\partial\Omega$%\\[0.0cm]
+  $X_{pde}\sim(0,T)\times\Omega$\\[0.0cm]
+  $X_{bc}\sim(0,T)\times\partial\Omega$\\[0.0cm]
+  $X_{ic}\sim\Omega$
   %$\Omega$
 };
 \draw[arrow] (data) to[bend left] (output);
 
 % Auto-diff & residual
 \node[right=0.5cm of output] (ad) {Auto-diff};
-\node[right=0.6cm of ad] (r_pde) {$\ell_{pde} = ||\partial_t u_\theta + \mathcal{N}(u_\theta)||^2_{(0,T)\times\Omega}$};
-\node[above right=0.05cm and 0.6cm of ad] (r_ic) {$\ell_{ic} = ||u_\theta - u_{ic}||^2_{\Omega}$};
-\node[above right=0.5cm and 0.6cm of ad] (r_bc) {$\ell_{bc} = ||u_\theta - u_{bc}||^2_{(0,T)\times\partial\Omega}$};
+\node[right=0.6cm of ad] (r_pde) {$\ell_{pde} = \mathbb E[(\partial_t u_\theta + \mathcal{N}(u_\theta))^2]_{X_{pde}}$};
+\node[above right=0.05cm and 0.6cm of ad] (r_ic) {$\ell_{ic} = \mathbb E[(u_\theta - u_{ic})^2]_{X_{ic}}$};
+\node[above right=0.5cm and 0.6cm of ad] (r_bc) {$\ell_{bc} =  \mathbb E[(u_\theta - u_{bc})^2]_{X_{bc}}$};
 \draw[arrow] (output) -- (ad);
 \draw[arrow] (ad) -- (r_pde);
 %\draw[arrow] (output) to[bend left] (r_ic);

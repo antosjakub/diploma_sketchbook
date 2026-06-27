@@ -296,9 +296,9 @@ Our dataset thus consist of just a set of points from the domain.
 
 We define the collocation sets
 \begin{align*}
-X_{pde} = \{(x_i,t_i)\}_{i=1}^{N_{pde}} \subset (0,T)\times\Omega\\
-X_{bc} = \{(x_i,t_i)\}_{i=1}^{N_{bc}} \subset (0,T)\times\partial\Omega\\
-X_{ic} = \{x_i\}_{i=1}^{N_{ic}} \subset \Omega
+X_{pde} := \{(x_i,t_i)\}_{i=1}^{N_{pde}} \subset (0,T)\times\Omega\\
+X_{bc} := \{(x_i,t_i)\}_{i=1}^{N_{bc}} \subset (0,T)\times\partial\Omega\\
+X_{ic} := \{x_i\}_{i=1}^{N_{ic}} \subset \Omega
 \end{align*}
 
 The loss the neural network then seeks to minimize is a linear combiantion of the individual losses:
@@ -316,14 +316,15 @@ where $\lambda_r>0$, and the individual losses are computed as a mean squared er
 = \frac{1}{N_{ic}}\sum_{i=1}^{N_{ic}} \big(\mathcal R_{ic}(u_\theta;x_i)\big)^2
 \end{align*}
 
-%In general, we can write
-%$$
-%\ell_{r}\left(\theta;\{\xi_i\}_{i=1}^{N_{r}}\right)
-%= \sum_{i=1}^{N_{r}} \big(\mathcal R_{r}(u_\theta;\xi_i)\big)^2,\quad
-%\{\xi_i\}_{i=1}^{N_{r}}
-%$$
+To aid in notation, we can write for $X_r:=\{\xi_i\}_{i=1}^{N_{r}}$ the loss calcualtion more concisely
+$$
+\ell_{r}\left(\theta;X_r\right)
+= \frac{1}{N_r}\sum_{i=1}^{N_{r}} \big(\mathcal R_{r}(u_\theta;\xi_i)\big)^2
+= \mathbb E \left[\big(\mathcal R_{r}(u_\theta;\xi_i)\big)^2\right]_{\xi_i\in X_r}
+= \left\langle\big(\mathcal R_{r}(u_\theta;\xi_i)\big)^2\right\rangle_{\xi_i\in X_r}
+$$
 
-The training thus proceeds as follows
+The training then proceeds as follows
 
 
 %Let us save the training data $\{(x_i,t_i)\}_{i=1}^{N_{pde}}$ as a tensor $\mathbf X_{pde}$ of size $(N_r,d+1)$
