@@ -38,6 +38,9 @@ The 2019 publication by Karniadakis et al. was the seminal work that brought abo
 In combine machine learning with partial differential equation is a unique and simple way that was intuitive to both the machine learning and pde solving communities.
 https://www.sciencedirect.com/science/article/abs/pii/S0021999118307125
 
+
+We first provide a short introduction into feed-forward neural networks before discussing the specific architectural choices of PINNs.
+
 climate modelling
 
 flexibility of the arch
@@ -46,28 +49,37 @@ data + physs loss
 solve inverse problems - value of a fucntion or a coefficient from the data
 
 
-\chapter{Phyics-Informed Neural Networks (PINNs)}
 
-First introduced in 2019 by Karniadakis et. al., Physics-Informed Neural Networks combine the architecture and training loop of traditional neural networks
-with the information about the physics governing the system under consideration.
-This information is most commonly added in in a form of a loss function which the model is then trained to minimize.
-In the context of solving PDEs, the PDE system gets transformed into a language the NN understands.
+\chapter{Feed-forward neural networks}
+%{\color{red}
+%FOR ME: core concepts to cover:
+%
+%- activations relu vs tanh
+%
+%- backpropagation
+%
+%- batch size
+%}
 
-good integration into the neural network arch - training data sampling, automatic differentiation
-
-We first provide a short introduction into neural networks before moving into the PINNs.
-
-
-\section{Neural Networks}
 
 Fundamentaly, neural networks are parametric function approximators.
+
+Since their inception in .... numerous different competing architercure emerged
+each design to a particular problem
+
+more complex
+- recursive
+- transformer
+
+focues on the simple original one
+
 The universal approximation theorem \cite{uni_approx} guarantees that, under mild assumptions on the activation function, a sufficiently wide feed-forward network can approximate any continuous function on a compact domain to arbitrary accuracy.
 Their power lies in their simplicity and the flexibility with which the architecture can be tailored to the specific problem at hand.
-The downside of such flexibility is that it introduces a large number of architectural and hyperparametric choices, and identifying a good combination is not trivial.
+The downside of such flexibility is that it introduces a large number of architectural and hyperparametric choices, and identifying a good combination is often not trivial.
 
 \subsection{Architecture}
 
-A NN is a composition of affine transformations iterlaced with a pointwise nonlinearities called 'activation functions', denoted as $\sigma$ (e.g.\ $\tanh$, ReLU,...).
+A feed-forward neural network, sometimes also called a Multil-Layer Perceptron, is a composition of affine transformations connected by nonlinearities called \emph{activation functions}, denoted as $\sigma$ (e.g.\ $\tanh$, ReLU,...).
 
 A single hidden layer transforms its input $x \in \mathbb{R}^{d_{l-1}}$ as
 $$
@@ -86,16 +98,7 @@ where $\theta = \{W^{(l)}, b^{(l)}\}_{l=1}^{L+1}$ is the set of all trainable pa
 
 The nonlinearity $\sigma$ is essential: without it, the above given composition of hidden layes would collapse into a single linear affine map and the network's expressive power would be that of linear regression.
 
-The number of hidden layers $L$ (\emph{depth}) and the layer sizes $d_l$ (\emph{width}) together control the capacity of the model.
-
-
-\subsection{core concepts}
-
-- activations relu vs tanh
-
-- backpropagation
-
-- batch size
+The number of hidden layers $L$ (\emph{depth}) and the layer sizes $d_l$ (\emph{width}) together control the capacity, commonly noted as expressive power, of the model.
 
 
 
@@ -104,50 +107,74 @@ The number of hidden layers $L$ (\emph{depth}) and the layer sizes $d_l$ (\emph{
 
 Training a NN amounts to solving an optimization problem in the parameter space of $\theta$.
 
-Given training data $\{(x_i, y_i)\}_{i=1}^N$ and a loss functional $\mathcal{L}(\theta)$ measuring the difference between network predictions $\mathcal{N}_\theta(x_i)$ and targets $y_i$ (most commonly the mean squared error), one seeks
+Given training data $\{(x_i, y_i)\}_{i=1}^N$ and a loss functional $\ell(\theta)$ measuring the difference between network predictions $\mathcal{N}_\theta(x_i)$ and targets $y_i$ (most commonly using the mean squared error as the metric), one seeks to find
 $$
-\theta^{\star} = \arg\min_{\theta}\, \mathcal{L}(\theta)
+\theta^{\star} = \arg\min_{\theta}\, \ell(\theta)
 $$
-Because $\mathcal{L}$ is in general non-convex and high-dimensional (the networks we will consider have on the order of $10^4$--$10^6$ parameters), the minimization is carried out by first-order iterative methods, starting from \emph{(stochastic) gradient descent}
+Because $\ell$ is in general non-convex and high-dimensional (the networks we will consider have on the order of $10^4$--$10^7$ parameters),
+the minimization is carried out by first-order iterative methods, starting from \emph{(stochastic) gradient descent}
 $$
-\theta \leftarrow \theta - \eta\, \nabla_\theta \mathcal{L}(\theta)
+\theta \leftarrow \theta - \eta\, \nabla_\theta \ell(\theta)
 $$
-with learning rate $\eta > 0$. In practice, more complex variants such as Adam \cite{adam} are preferred, as they converge faster and are less sensitive to the choice of $\eta$.
+with learning rate $\eta > 0$. In practice, more complex variants such as Adam \cite{king_adam} are preferred, as they converge faster and are less sensitive to the choice of $\eta$.
 
 A core part of the the training pipeline that enables efficient compuation of the gradient w.r.t the network parameters $\theta$ is \emph{automatic differentiation} (AD).
-Since the ouput of $\mathcal{N}_\theta$ is computed from a finite sequence of elementary operations whose derivatives are known analytically ($\frac{d}{dx} x^2 = 2x$, etc.),
-we can simply apply the chain rule to obtain $\nabla_\theta \mathcal{L}$ exactly (up to floating-point round-off).
+Since the ouput of $\mathcal{N}_\theta$ is computed from a finite sequence of elementary operations whose derivatives are known analytically, ($\frac{d}{dx}(x\cdot w) = w, \frac{d}{dx}\tanh{x} = sech^2 x$, etc.),
+we can simply apply the chain rule to obtain $\nabla_\theta \ell$ exactly (up to floating-point round-off).
 
 % note: forward and backpropagation
 
-As we will see in the following section, this very same mechanism is exploited by PINNs to differentiate the network with respect to its spatial and temporal inputs.
+As we will see in the following section, this very same mechanism is exploited by PINNs to differentiate the network with respect to its spatial and temporal inputs, thus computing the individual terms in the given partial differential equation.
 
 The full training algorihm can be summarized as so:
 
 \begin{algorithm}[H]
 \caption{Standard NN Training (Mini-Batch Gradient Descent)}
 \begin{algorithmic}[1]
-    \Require $\mathcal{N}:\mathbb{R}^{d_{in}}\to\mathbb{R}^{d_{out}}$, training data $\{(x_i, y_i)\}_{i=1}^{N}$
+    \Require $\mathcal{N}_{\theta}:\mathbb{R}^{d_{in}}\to\mathbb{R}^{d_{out}}$, training data $\{(x_i, y_i)\}_{i=1}^{N}$
     \State \textbf{Initialize} network parameters $\theta$
     \For{epoch $= 1, \dots, E$}
         \State Randomly shuffle training data
         \For{each mini-batch $\mathcal{B} \subset \{1,\dots,N\}$, $|\mathcal{B}|=B$}
             \State \textbf{Forward pass:} compute $\hat{y}_i = \mathcal{N}_\theta(x_i)$ for $i\in\mathcal{B}$
             \State \textbf{Compute loss:}
-            $\mathcal{L}(\theta) = \dfrac{1}{B}\displaystyle\sum_{i\in\mathcal{B}}
+            $\ell(\theta) = \dfrac{1}{B}\displaystyle\sum_{i\in\mathcal{B}}
                 \bigl(\hat{y}_i - y_i\bigr)^2$
-            \State \textbf{Backward pass:} compute $\nabla_\theta \mathcal{L}$ via backpropagation
-            \State \textbf{Update:} $\theta \leftarrow \theta - \eta\,\nabla_\theta \mathcal{L}$
+            \State \textbf{Backward pass:} compute $\nabla_\theta \ell$ via backpropagation
+            \State \textbf{Update:} $\theta \leftarrow \theta - \eta\,\nabla_\theta \ell$
         \EndFor
     \EndFor
     \State \Return $\theta$
 \end{algorithmic}
 \end{algorithm}
 
+In the algorihm above, the subset $\mathcal B$ of the training data is called a \emph{batch}, and $B$ is called a \emph{batch size}.
 
 
-\section{PINN Architecture}
-We base out PINN architecture on a few crutial publications and based took the inspiration of our implemntation from some existing established codebases.
+
+\chapter{Phyics-Informed Neural Networks (PINNs)}
+
+First introduced in 2019 by Karniadakis et. al., Physics-Informed Neural Networks combine
+the architecture and training loop of traditional FF neural networks
+with the information about the physics governing the system under consideration.
+This information is added in in a form of a specific loss function which the model is then trained to minimize.
+
+Pior to the introduction of PINNs, neural netoworks were used in the scientific computing
+as approximators of the training data.
+
+The new idea introduces by PINNs was to include in the loss also a term modellling how much the network vialotes physics of the problem.
+For some class of problems, the PDE modelling the system can be utilized.
+
+However, one might also drop the labels training data entirely, and purely minimize the physics loss of the pde.
+
+
+In the context of solving PDEs, the PDE system gets transformed into a language the NN understands.
+good integration into the neural network arch - training data sampling, automatic differentiation
+
+neural networks
+build on top of feed-forward nn
+
+We base our PINN architecture on a few crutial publications and based took the inspiration of our implemntation from some existing established codebases.
 Namely:
 \begin{itemize}
     \item studies published by Karniadakis et. al, including
@@ -161,6 +188,30 @@ Needed to code from scratch - relatively novel field, no codebase has access to 
 
 physics-informed - PDE in the loss function
 
+
+
+\section{Architecture}
+{\color{red}
+- input dim
+- ouput dim
+
+- loss
+
+- diagram
+
+give general arch before moving to more specific ones
+
+vanilla pinn
+- feed forward
+- tanh activations - smooth derivatives
+- loss functions based on the physics - the PDE of the system
+- convergence to a glob min if sol unique, pde well-possed, NN expressive, and enough points
+
+- simple problem
+    - 100s-1000s pnts paired with lbfgs
+- more efficient - stoch grad desc
+}
+
 \begin{figure}
     \centering
     \includegraphics[width=150mm]{pinn_arch.pdf}
@@ -168,18 +219,74 @@ physics-informed - PDE in the loss function
     \label{fig:pinn_arch}
 \end{figure}
 
-- give diagram of NN
+PINN simply take the FFNN architecture and make as a few choices tailored to the pde system at hand.
 
-- loss = pde residual
+Consider, for example, a PDE system of the form
+\begin{align*}
+\partial_t u + \mathcal N(u) = 0\\
+u = u_{ic}\\
+u = u_{bc}
+\end{align*}
+where $\mathcal N$ is a general differenttial operator.
 
-- sampling
-- random sampling (vs mini-batch)
+Paraetrize the solution by a nn $\mathcal N_\theta=u_\theta$
+define the NN as so:
+$d_{in} = d+1 =: D$
+$d_{out} = 1$
+use smooth activations like hyperbolic tangent and a identity activation for the final output layer.
 
-- algorithm
+We then define a pde, bc, and ic residuals at space time coordinate $x,t$ as
+\begin{align*}
+\mathcal R_{pde}(u;x,t) &= \partial_t u(x,t) + \mathcal N(u;x,t)\\
+\mathcal R_{bc}(u;x,t) &= u(x,t) - u_{bc}(x,t)\\
+\mathcal R_{ic}(u;x) &= u(x,0) - u_{ic}(x)
+\end{align*}
 
-- tanh activations - smooth derivatives
+The loss the neural network then seeks to minimize is linear combiantion fo the individual losses:
+\begin{align*}
+\ell = \lambda_{pde}\ell_{pde} + \lambda_{ic}\ell_{ic} + \lambda_{bc}\ell_{bc}
+\end{align*}
 
-\subsection{PINN Training}
+where $\lambda_r\in\mathbb R_+$, and :
+\begin{align*}
+\ell_{pde}\left(\theta;\{(x_i,t_i)\}_{i=1}^{N_{pde}}\right)
+= \sum_{i=1}^{N_{pde}} \big(\mathcal R_{pde}(u_\theta;x_i,t_i)\big)^2,\quad
+\{(x_i,t_i)\}_{i=1}^{N_{pde}} \subset (0,T)\times\Omega\\
+\ell_{bc}\left(\theta;\{(x_i,t_i)\}_{i=1}^{N_{bc}}\right)
+= \sum_{i=1}^{N_{bc}} \big(\mathcal R_{bc}(u_\theta;x_i,t_i)\big)^2,\quad
+\{(x_i,t_i)\}_{i=1}^{N_{bc}} \subset (0,T)\times\partial\Omega\\
+\ell_{ic}\left(\theta;\{x_i\}_{i=1}^{N_{ic}}\right)
+= \sum_{i=1}^{N_{ic}} \big(\mathcal R_{ic}(u_\theta;x_i)\big)^2,\quad
+\{x_i\}_{i=1}^{N_{ic}} \subset \Omega
+\end{align*}
+
+In general, we can write
+$$
+\ell_{r}\left(\theta;\{\xi_i\}_{i=1}^{N_{r}}\right)
+= \sum_{i=1}^{N_{r}} \big(\mathcal R_{r}(u_\theta;\xi_i)\big)^2,\quad
+\{\xi_i\}_{i=1}^{N_{r}}
+$$
+
+
+
+
+
+
+
+\section{Training}
+
+{\color{red}
+
+- sample once, epoch = 1 pass thought the dataset
+
+- sample new data every step
+}
+
+For the training dataset $X$ can be created once before the training.
+
+Or periodically sampled during the training.
+
+Let us save the training data $\{(x_i,t_i)\}_{i=1}^{N_{pde}}$ as a tensor $\mathbf X_{pde}$ of size $(N_r,d+1)$
 
 \begin{algorithm}[H]
 \caption{Mini-batch PINN training}
@@ -191,10 +298,10 @@ physics-informed - PDE in the loss function
         \For{each mini-batch $\mathcal{B} \subset \{1,\dots,N\}$, $|\mathcal{B}|=B$}
             \State \textbf{Forward pass:} compute $\hat{y}_i = \mathcal{N}_\theta(x_i)$ for $i\in\mathcal{B}$
             \State \textbf{Compute loss:}
-            $\mathcal{L}(\theta) = \dfrac{1}{B}\displaystyle\sum_{i\in\mathcal{B}}
+            $\ell(\theta) = \dfrac{1}{B}\displaystyle\sum_{i\in\mathcal{B}}
                 \bigl(\hat{y}_i - y_i\bigr)^2$
-            \State \textbf{Backward pass:} compute $\nabla_\theta \mathcal{L}$ via backpropagation
-            \State \textbf{Update:} $\theta \leftarrow \theta - \eta\,\nabla_\theta \mathcal{L}$
+            \State \textbf{Backward pass:} compute $\nabla_\theta \ell$ via backpropagation
+            \State \textbf{Update:} $\theta \leftarrow \theta - \eta\,\nabla_\theta \ell$
         \EndFor
         \State Every $k$ epochs, regenerate training data
     \EndFor
@@ -214,12 +321,12 @@ physics-informed - PDE in the loss function
                 %$\hat{u}^i_{pde} = u_\theta(x_i^d)$
                 %$\hat{u}_i = \mathcal{N}_\theta(x_i^d)$
         \State \textbf{Compute loss for each redisual:}
-               \State $\mathcal{L}_{pde} = \mathbb{E}\left[(\partial_t\,u_{\theta} - \alpha\,\Delta\,u_{\theta} - f)^2\right]_{\sim\:\mathcal{U}((0,T)\times\Omega)}$
-               \State $\mathcal{L}_{ic} = \mathbb{E}\left[(u_{\theta} - u_{ic})^2\right]_{\sim\:\mathcal{U}(\Omega)}$
-               \State $\mathcal{L}_{bc} = \mathbb{E}\left[(u_{\theta} - u_{bc})^2\right]_{\sim\:\mathcal{U}((0,T)\times\partial\Omega)}$
-               %\State $\mathcal{L}_{pde} = \mathbb{E}\left[(\partial_t\,\hat{u}_{pde} - \alpha\,\Delta\,\hat{u}_{pde} - f)^2\right]_{\sim\:\mathcal{U}((0,T)\times\Omega)}$
-               %\State $\mathcal{L}_{ic} = \mathbb{E}\left[(\hat{u}_{ic} - u_{ic})^2\right]_{\sim\:\mathcal{U}(\Omega)}$
-               %\State $\mathcal{L}_{bc} = \mathbb{E}\left[(\hat{u}_{bc} - u_{bc})^2\right]_{\sim\:\mathcal{U}((0,T)\times\partial\Omega)}$
+               \State $\ell_{pde} = \mathbb{E}\left[(\partial_t\,u_{\theta} - \alpha\,\Delta\,u_{\theta} - f)^2\right]_{\sim\:\mathcal{U}((0,T)\times\Omega)}$
+               \State $\ell_{ic} = \mathbb{E}\left[(u_{\theta} - u_{ic})^2\right]_{\sim\:\mathcal{U}(\Omega)}$
+               \State $\ell_{bc} = \mathbb{E}\left[(u_{\theta} - u_{bc})^2\right]_{\sim\:\mathcal{U}((0,T)\times\partial\Omega)}$
+               %\State $\ell_{pde} = \mathbb{E}\left[(\partial_t\,\hat{u}_{pde} - \alpha\,\Delta\,\hat{u}_{pde} - f)^2\right]_{\sim\:\mathcal{U}((0,T)\times\Omega)}$
+               %\State $\ell_{ic} = \mathbb{E}\left[(\hat{u}_{ic} - u_{ic})^2\right]_{\sim\:\mathcal{U}(\Omega)}$
+               %\State $\ell_{bc} = \mathbb{E}\left[(\hat{u}_{bc} - u_{bc})^2\right]_{\sim\:\mathcal{U}((0,T)\times\partial\Omega)}$
 
                %$\mathcal{R}^{pde} = \partial_t\,\mathcal{N}_\theta(X) - \alpha\,\Delta\,\mathcal{N}_\theta(X) - f$ \\
         %\State $\mathcal{R}_{pde} = \partial_t\,\hat{u}_{pde} - \alpha\,\Delta\,\hat{u}_{pde} - f(X)$
@@ -227,19 +334,30 @@ physics-informed - PDE in the loss function
         %\State $\mathcal{R}_{ic} = \hat{u}_{ic} - u_{ic}(X)$
         %       $\mathcal{R} = \mathcal{F}\!\left[\mathcal{N}_\theta\right](x_j^c)$
         %\State \textbf{PDE loss:}
-        %       $\mathcal{L}_{\text{data}} = \dfrac{1}{N_d}\displaystyle\sum_i \bigl(\hat{u}_i - u_i^d\bigr)^2$
+        %       $\ell_{\text{data}} = \dfrac{1}{N_d}\displaystyle\sum_i \bigl(\hat{u}_i - u_i^d\bigr)^2$
         %\State \textbf{BC loss:}
-        %       $\mathcal{L}_{\text{data}} = \dfrac{1}{N_d}\displaystyle\sum_i \bigl(\hat{u}_i - u_i^d\bigr)^2$
+        %       $\ell_{\text{data}} = \dfrac{1}{N_d}\displaystyle\sum_i \bigl(\hat{u}_i - u_i^d\bigr)^2$
         %\State \textbf{IC loss:}
-        %       $\mathcal{L}_{\text{phys}} = \dfrac{1}{N_c}\displaystyle\sum_j r_j^2$
+        %       $\ell_{\text{phys}} = \dfrac{1}{N_c}\displaystyle\sum_j r_j^2$
         \State \textbf{Total loss:}
-               $\mathcal{L} = \lambda_{pde}\mathcal{L}_{pde} + \lambda_{ic}\,\mathcal{L}_{ic} + \lambda_{bc}\,\mathcal{L}_{bc}$
+               $\ell = \lambda_{pde}\ell_{pde} + \lambda_{ic}\,\ell_{ic} + \lambda_{bc}\,\ell_{bc}$
         \State \textbf{Backward pass \& update:}
-               $\theta \leftarrow \theta - \eta\,\nabla_\theta \mathcal{L}$
+               $\theta \leftarrow \theta - \eta\,\nabla_\theta \ell$
     \EndFor
     \State \Return $\theta$
 \end{algorithmic}
 \end{algorithm}
+
+
+\section{example archs}
+ex. burgers, Nbcic=100, 9layer NN 20width
+fixed set of points
+
+$$
+u_t + \mathcal{N}[u] = 0
+$$
+
+\section{Sampling}
 
 
 
@@ -276,7 +394,7 @@ Laplace computation - memory increases:
 - qudratically $O(d^2)$ for $A = A(x)$ since $div(A(x)\nabla) = \sum_{ij}^d a_{ij}(x)\frac{\partial^2 u}{\partial x_{ij}}$
 actually:
 The memory scales quadratically as d increases due to
-- the growing network size at the first input layer of uθ, and
+- the growing network size at the first input layer of $u_\theta$, and
 - the increasing number of second-order derivatives
 
 The catch is that the network must be expressive enough (enough params) to represent the solution, and the optimization landscape can be very rough.
@@ -504,18 +622,20 @@ In the original PINN architecture, time is handled just as another input dimensi
 But since its incepetions it became apparant that this threatement is not adequete in some cases
 When training PINNs on time-dependent PDEs, the optimizer minimizes the residual over all time steps simultaneously.
 This can lead to causality violation: the network attempts to fit later-time dynamics before earlier-time states are correctly learned, producing globally low residual but physically meaningless solutions.
-\cite{causal_pinns}
+%\cite{causal_pinns}
+
 Thus a few competing strategies have emerged as a viable alternatives to the original formulation.
 
 \subsection{Time marching}
 One simple approach is to divide the interval into multiple segments and train a PINN for each one.
-\cite{time_adaptive_pinns}
+%\cite{time_adaptive_pinns}
 The networks have to be trained in series, as the intial considiton for the $k$-th network is taken as the terminal state of the $k-1$-th network.
 
-\subsection{Time sampling}
+\subsection{Time-adaptive sampling}
 Here, we train the neural network on a ever increasing temporal domain.
 sample in interval $[0,\tau t], \tau\sim \frac{step}{n_steps}T$
-\cite{time_adaptive_pinns}
+
+%\cite{time_adaptive_pinns}
 
 
 \subsection{Causal weighting}
@@ -532,25 +652,20 @@ $[t_{m-1}, t_m),\:m=1,\dots,M\,,\:
 $ and computig the pde loss as
 
 $$
-\mathcal{L}_{pde} = \frac{1}{M}\sum_{m=1}^{M} w_m\, \mathcal{L}_{pde}^{(m)}
+\ell_{pde} = \frac{1}{M}\sum_{m=1}^{M} w_m\, \ell_{pde}^{(m)}
 $$
 
 where
-$\mathcal{L}_{pde}^{(m)}$
+$\ell_{pde}^{(m)}$
 is the loss computed from the points falling in the $m$-th time segment $[t_{m-1}, t_m)$, 
 and the causal weight $w_m$ for segment $m$ is an exponential weight that depends on the cumulative residual of all preceding segments:
 $$
-w_m = \exp\!\Biggl(-\varepsilon \sum_{k=1}^{m-1} \mathcal{L}_{pde}^{(k)}\Biggr)
-\,,\quad m=1,\dots,M
+w_m = \exp\!\Biggl(-\varepsilon \sum_{k=1}^{m-1} \ell_{pde}^{(k)}\Biggr)
+\,,\quad m=2,\dots,M
 $$
 $$
 w_m = 1
-\,,\quad m=0
-$$
-also
-$$
-$\mathcal{L}^{(m)} = \mathcal{L}^{(m)}_{pde}$
-$\mathcal{L}^{(0)} = \lambda_{ic}\mathcal{L}^{(0)}_{ic}$
+\,,\quad m=1
 $$
 Here, $\varepsilon > 0$ is a causality parameter controlling the strictness of the temporal ordering.
 When $\varepsilon = 0$, all segments are weighted equally (standard training).
@@ -560,24 +675,6 @@ As $\varepsilon \to \infty$, the training concentrates entirely on the earliest 
 All $w_m$ intiialize by 1
 
 Note that the weights $w_m$ are detached from the computational graph, that is, the backward pass sees them only as scalars with no computation graph behind them.
-
-$$
-\mathcal{L}^{(1)} = 
-\mathcal{L}^{(1)}_{pde} +
-\mathcal{L}^{(1)}_{ic}
-$$
-
-$$
-\mathcal{L}^{(m)} = 
-\mathcal{L}^{(m)}_{pde} +
-\mathcal{L}^{(m)}_{ic}
-$$
-
-Notice though, that any discussion about the treatment of the boundary loss $\mathcal L_{bc}$ is not discussed.
-We can sum it with the pde loss and do the same procedure for
-$\mathcal L_{pde,bc} = \lambda_{pde}\matcal L_{pde} + \lambda_{pde}\matcal L_{bc}$
-
-
 
 
 
@@ -784,8 +881,6 @@ $$ x^T A\,x \ge 0, \quad \forall x\in\mathbb{R}^n, \: x\neq 0 $$
 
 \cite{experts_guide}
 \cite{systematic_review}
-
-
 
 
 
