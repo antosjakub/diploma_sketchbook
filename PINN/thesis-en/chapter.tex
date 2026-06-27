@@ -289,6 +289,18 @@ Returning to the system above, we defing a pde, bc, and ic residuals at a space 
 \mathcal R_{ic}(u;x) &= u(x,0) - u_{ic}(x)
 \end{align*}
 
+In the context of PINN, we don't talk of training data since there is no explicit target value $y_i$ for the input $x_i$.
+Instead, we seek to minimize the residuum over a chosen set of points spanning the domain.
+We call such a set of points a \emph{callocation} set, or just \emph{callocaiton} points.
+Our dataset thus consist of just a set of points from the domain.
+
+We define the collocation sets
+\begin{align*}
+X_{pde} = \{(x_i,t_i)\}_{i=1}^{N_{pde}} \subset (0,T)\times\Omega\\
+X_{bc} = \{(x_i,t_i)\}_{i=1}^{N_{bc}} \subset (0,T)\times\partial\Omega\\
+X_{ic} = \{x_i\}_{i=1}^{N_{ic}} \subset \Omega
+\end{align*}
+
 The loss the neural network then seeks to minimize is a linear combiantion of the individual losses:
 \begin{align*}
 \ell = \lambda_{pde}\ell_{pde} + \lambda_{bc}\ell_{bc} + \lambda_{ic}\ell_{ic}
@@ -296,15 +308,12 @@ The loss the neural network then seeks to minimize is a linear combiantion of th
 
 where $\lambda_r>0$, and the individual losses are computed as a mean squared error over the residuum
 \begin{align*}
-\ell_{pde}\left(\theta;\{(x_i,t_i)\}_{i=1}^{N_{pde}}\right)
-= \frac{1}{N_{pde}}\sum_{i=1}^{N_{pde}} \big(\mathcal R_{pde}(u_\theta;x_i,t_i)\big)^2,\quad
-\{(x_i,t_i)\}_{i=1}^{N_{pde}} \subset (0,T)\times\Omega\\
-\ell_{bc}\left(\theta;\{(x_i,t_i)\}_{i=1}^{N_{bc}}\right)
-= \frac{1}{N_{bc}}\sum_{i=1}^{N_{bc}} \big(\mathcal R_{bc}(u_\theta;x_i,t_i)\big)^2,\quad
-\{(x_i,t_i)\}_{i=1}^{N_{bc}} \subset (0,T)\times\partial\Omega\\
-\ell_{ic}\left(\theta;\{x_i\}_{i=1}^{N_{ic}}\right)
-= \frac{1}{N_{ic}}\sum_{i=1}^{N_{ic}} \big(\mathcal R_{ic}(u_\theta;x_i)\big)^2,\quad
-\{x_i\}_{i=1}^{N_{ic}} \subset \Omega
+\ell_{pde}\left(\theta;X_{pde}\right)
+= \frac{1}{N_{pde}}\sum_{i=1}^{N_{pde}} \big(\mathcal R_{pde}(u_\theta;x_i,t_i)\big)^2\\
+\ell_{bc}\left(\theta;X_{bc}\right)
+= \frac{1}{N_{bc}}\sum_{i=1}^{N_{bc}} \big(\mathcal R_{bc}(u_\theta;x_i,t_i)\big)^2\\
+\ell_{ic}\left(\theta;X_{ic}\right)
+= \frac{1}{N_{ic}}\sum_{i=1}^{N_{ic}} \big(\mathcal R_{ic}(u_\theta;x_i)\big)^2
 \end{align*}
 
 %In general, we can write
@@ -314,10 +323,8 @@ where $\lambda_r>0$, and the individual losses are computed as a mean squared er
 %\{\xi_i\}_{i=1}^{N_{r}}
 %$$
 
-In the context of PINN, we don't talk of training data since there is no explicit target value $y_i$ for the input $x_i$.
-Instead, we seek to minimize the residuum over a chosen set of points spanning the domain.
-We call such a set of points a \emph{callocation} set, or just \emph{callocaiton} points.
-Our dataset thus consist of just a set of points from the domain.
+The training thus proceeds as follows
+
 
 %Let us save the training data $\{(x_i,t_i)\}_{i=1}^{N_{pde}}$ as a tensor $\mathbf X_{pde}$ of size $(N_r,d+1)$
 
@@ -327,12 +334,7 @@ Our dataset thus consist of just a set of points from the domain.
     \Require 
     \begin{itemize} 
     \item $u_\theta:\mathbb{R}^{d+1}\to\mathbb{R}$
-    \item callocation points
-    \begin{itemize} 
-    \item $X_{pde}=\{(x_i, t_i)\}_{i=1}^{N_{pde}}$
-    \item $X_{bc}=\{(x_i, t_i)\}_{i=1}^{N_{bc}}$
-    \item $X_{ic}=\{(x_i)\}_{i=1}^{N_{ic}}$
-    \end{itemize} 
+    \item callocation sets $X_{pde}, X_{bc}, X_{ic}$
     \item weights $\lambda_{pde}, \lambda_{bc}, \lambda_{ic}$
     \end{itemize} 
     \State \textbf{Initialize} network parameters $\theta$
