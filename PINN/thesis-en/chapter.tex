@@ -1,3 +1,5 @@
+{\color{red}
+
 TD write
 - background:
     - sde ito
@@ -27,26 +29,273 @@ experiments
 pavelka
     - sent pinn chapter
     - ask sde ito background public
+}
+
+\chapter{Abstract}
 
 
-[put this into the diploma introduction itself]
+Partial differential equations are ...
+
+
+Solving the diffusion equation using machine learning in higher dimension
+
+
+\textbf{Keywords}:
+partial differential equations,
+diffusion equations,
+Fokker-Planck,
+curse of dimensionality,
+scientific machine learning,
+PINNS,
+sparse grids combination technique,
+
+
+
+\chapter{Introduction}
+
+PDEs for modelling physical phenomena
+
+curse of dimensionality
+
+Machine learning in Scientific computing
+
+Partial differential equations (PDEs) are essential mathematical 
+tools for describing complex natural phenomena and engineering sys-tems
+Traditional numerical meth-ods, such as the finite element method (FEM)
+and the finite difference method (FDM), rely on spatial and temporal discretization to ap-proximate solutions by
+constructing fine computational meshe
+\cite{systematic_review}
+
+increasingly used for modeling and simulating physical systems
+despite some empirical success, PINNs are still facing many challenges
+that define open areas for research and
+further methodological advancements.
+In recent years, there have been numerous studies focusing on improving the
+performance of PINNs, mostly by
+- neural network architectures
+\cite{experts_guide}
+fPINNS, XPINNS, varPINNS, ...
+
+
+Most physical and engineering problems can be described by partial differential equations (PDEs),
+which are typically solved using numerical methods such as the finite difference method and the finite element method.
+However, conventional numerical discretization approaches face significant challenges in terms of computational efficiency
+and convergence speed when dealing with complex nonlinear PDEs, such as high-
+dimensional nonlinear PDEs, stiff PDEs, PDEs with complex boundary conditions or irregular geometries,
+and multi-scale PDEs. Recently, physics-informed neural networks (PINNs) have emerged as a transforma-
+tive methodology for solving complex PDEs by integrating physical laws intrinsically into deep learning architectures.
+While PINNs effectively overcome mesh dependency and dimensionality constraints inherent in traditional numerical methods,
+they still encounter persistent challenges related to training convergence and generalization robustness
+\cite{systematic_review}
 
 In the past few years, solving PDEs using machine and deep learning methods has emerged as a new and rapidly growing field of scientific machine learning.
 Leveraging the universal approximation theorem \cite{uni_approx} and high expressivity of neural networks, the 
+
+first by Lagaris et. at. \cite{lagaris}
+
+Karniadakis in 2019 changes the game \cite{comprehensive}
+
+climate modelling etc.
+
+
+data + physs loss
+solve inverse problems - value of a fucntion or a coefficient from the data
 
 The 2019 publication by Karniadakis et al. was the seminal work that brought about the 
 In combine machine learning with partial differential equation is a unique and simple way that was intuitive to both the machine learning and pde solving communities.
 https://www.sciencedirect.com/science/article/abs/pii/S0021999118307125
 
-
-We first provide a short introduction into feed-forward neural networks before discussing the specific architectural choices of PINNs.
-
-climate modelling
-
 flexibility of the arch
 
-data + physs loss
-solve inverse problems - value of a fucntion or a coefficient from the data
+
+We focues on semi large dims
+
+very large dims possible with
+- 100s 1000s but sol at a point:
+
+for very high dims
+- multilevel picard method
+- deep backward storchastic eq?
+- deep galerkin
+on the machine learning side
+
+and feynman-kac monte carlo formulation
+
+
+no systematic or even mention of existing sparse grids approach
+
+here: diffusin eq. - spread - fokker planck, etc.
+commonly probabilistic setting.
+high-dimensionality naturally arrises in FP
+
+Sparse grids
+- basically FD but on carfully chosed low discret points meshes
+- by on bounded seconds ders able to make tradeoff tham make it possible to scale to higher dims
+
+
+This thesis is structured as follows.
+First, backgroung on diffusion pdes and stochasic differential equations
+Issues we encounter when naively scaling to higher dimensions
+Sparse grids
+feed-forward neural networks
+PINNs - specifics etc and simple experiments demostraining they scaling to higher dims
+Results:
+simple heat eq
+more challenging smoluchowski
+initial conditions uhlenbeck processes.
+
+\chapter{Introduction 0}
+
+%% PDEs and diffusion pdes
+Partial differential equations are one of the core tools in mathematical physics,
+modelling wide range of physical and engineering phenomena.
+%including heat transfer, diffusion, fluid flow, wave propagation, biological systems, etc.
+An important subclass form diffusion-type equations, describing the evolution of quantities
+that spread over time, such as temperature, concentration,
+probability density, or chemical particles in a medium.
+Specific examples include the heat equation, the diffusion equation, and the Fokker-Planck equation.
+
+%% standard mesh FEM etc
+The standard approaches for solving such equaitons numerically
+discretinze the domain before . FD, FEM, FVM. Those method are a de facto standard
+for low-dimensional problems, and here good convergence estimates.
+However, they suffer from the curse of dimensionality,
+as scaling them up to higher dimensions exponentially rises the set of discretization points.
+Thus quickly approaching the memery limitation of existing hardware.
+
+%% SG
+Several approaches have been developed to combat this challenge.
+One of which are sparse grids and notably, the sparse grid combination technique.
+Sparse grids combination technique circumvents the curse of dimensionality
+by constructing a combinations of lower-dimensional grids,
+thus avoiding the full tensor-product construction.
+Under suitable smoothness assumptions on the solution (smoothening effect of parab?), they provide
+a compromise between approximation accuracy and computational cost, making
+them attractive for moderately high-dimensional problems.
+Sparse grids retain a strong connection to classical, and the formulation of the combiantion technique
+allows reusing exisitng solvers, can run in parallel.
+
+%% Scientific machine learnaing
+From the other directiion, scientific machine learning active research field.
+THe universal approximation theorem [3] guarantees that, under mild assump-
+tions on the activation function, a sufficiently wide feed-forward network can
+approximate any continuous function on a compact domain to arbitrary accuracy.
+As such neural networks are capable of representing complicated functions.
+flexinble
+now not only empirical, but also theoretical developments
+
+%% PINNS history
+Early neural-network approaches to differential
+equations were first proposed by Lagaris et al. [4] in 1999.
+However, it was not until 2019, when
+the work of Raissi, Perdikaris, and Karniadakis [5] introtion fo physics-informed neural networks
+that caused large interest in teh field.
+
+%% PINNS basic
+One of the main advantages of PINNs is their simplicity and integraion into the
+existing neural network formulation.
+When compared to standard solveer, PINNs are mesh-free formulation. Instead
+of constructing a full computational grid, the PDE residual is evaluated at selected
+collocation points. This gives PINNs a natural appeal for high-dimensional
+problems, where traditional mesh-based methods suffer from rapidly increasing
+computational cost.s
+
+%% modern PINNS
+Nevertheless, PINNs also have important limitations. Their performance
+depends on the choice of network architecture, sampling strategy, optimization
+method, and weighting of the different loss terms.
+Although many new model arch variants and extensions have been proposed, including
+variants such as fPINNs, XPINNs, and variational PINNs, 
+the reliable and efficient use of PINNs in higher-dimensional
+settings remains an active area of research
+
+%% This thesis goal:
+This thesis investigates the use of machine learning methods for solving
+diffusion-type partial differential equations in moderate-higher dimensional setting.
+These problems are especially relevant
+because probability density functions often live in high-dimensional state spaces.
+
+%% This thesis struct:
+The first chapters introduce the
+mathematical background of diffusion equations, stochastic differential equations,
+and Fokker-Planck equations.
+Sparse grids and sparse grid combination technique
+After that, feed-forward neural networks and physics-
+7informed neural networks are presented
+The numerical part of the thesis considers selected diffusion-type problems
+including the heat equation, the Smoluchowski equation, to Ornstein-Uhlenbeck processes.
+These results are used to evaluate the
+accuracy, scalability, and limitations of the considered methods.
+The results are analyzed with respect to accuracy, computational cost,
+and scalability in higher dimensions.
+
+
+\chapter{Introduction III}
+
+The numerical solution of partial differential equations in high-dimensional spaces is one of the central challenges in modern scientific computing. Partial differential equations are used to model a wide range of physical and engineering phenomena, including heat transfer, diffusion, fluid flow, wave propagation, and stochastic dynamics. Among these models, diffusion equations are of particular importance because they describe the spreading of quantities in time and space. Closely related equations, such as the Fokker--Planck equation, also describe the evolution of probability densities associated with stochastic differential equations.
+
+In low dimensions, diffusion equations can often be solved accurately using classical numerical methods. Finite difference methods and finite element methods approximate the solution by discretizing the computational domain and replacing the continuous problem by a finite-dimensional system. These methods are mathematically well understood and have been successfully applied in many areas of science and engineering. However, their direct extension to higher dimensions is severely limited by the curse of dimensionality. If a uniform grid with $n$ points in each coordinate direction is used in a $d$-dimensional domain, the total number of grid points is $n^d$. Even for moderate values of $n$ and $d$, this number becomes prohibitively large.
+
+This dimensional scaling is not only a technical inconvenience, but a fundamental obstacle for many applications. High-dimensional diffusion and Fokker--Planck equations arise naturally when modelling systems with many degrees of freedom. Examples include molecular systems, interacting particle models, stochastic control, uncertainty quantification, and financial mathematics. In such problems, the unknown solution may represent a probability density over a high-dimensional state space. Solving the corresponding PDE on a full grid is usually impossible, and alternative approximation strategies are required.
+
+Several approaches have been developed to address this difficulty. On the classical numerical side, sparse grids provide one way to reduce the cost of high-dimensional approximation. Instead of using all points of a full tensor-product grid, sparse grid methods select or combine lower-dimensional grid structures in a way that preserves much of the approximation power while using significantly fewer degrees of freedom. The sparse grid combination technique is especially attractive because it constructs an approximation from a linear combination of solutions on several anisotropic grids. For sufficiently smooth problems, sparse grids can reduce the computational complexity compared with full-grid methods and are therefore well suited for moderately high-dimensional PDEs.
+
+At the same time, machine learning has become increasingly important in scientific computing. Neural networks are capable of representing complicated functions and have been used successfully in many high-dimensional approximation tasks. This has motivated the development of neural-network-based methods for solving PDEs. Early work by Lagaris et al. \cite{lagaris} showed that neural networks could be used to approximate solutions of differential equations. More recently, physics-informed neural networks (PINNs) have attracted significant attention, especially following the work of Raissi, Perdikaris, and Karniadakis \cite{comprehensive}. PINNs approximate the unknown solution by a neural network and train it by minimizing a loss function that includes the residual of the PDE as well as boundary and initial condition errors.
+
+The key idea behind PINNs is to combine data-driven approximation with physical constraints. The governing equation is not treated as external information, but is built directly into the optimization problem. This makes PINNs flexible and relatively easy to apply to different PDEs. They can be used for forward problems, where the equation and parameters are known, as well as inverse problems, where unknown coefficients or functions are inferred from data. Since the method does not require a fixed mesh, it is particularly appealing for problems where mesh generation is difficult or where the dimension is too large for standard discretization.
+
+Nevertheless, PINNs also have important limitations. Their performance depends on the choice of network architecture, sampling strategy, optimization method, and weighting of the different loss terms. In practice, PINNs may have difficulties with convergence, generalization, boundary accuracy, stiffness, and multiscale behaviour. Although many improved variants have been proposed, including domain-decomposition methods, variational PINNs, fractional PINNs, and extended PINNs \cite{experts_guide}, the efficient and reliable solution of higher-dimensional PDEs remains an open research problem \cite{systematic_review}.
+
+This thesis focuses on solving diffusion equations using machine learning methods in higher dimensions. The aim is not only to apply physics-informed neural networks to diffusion-type problems, but also to understand their behaviour in comparison with structured numerical approaches such as sparse grids. The thesis is concerned with semi-high-dimensional problems, where full-grid discretization is already expensive, but where systematic numerical experiments are still possible.
+
+The diffusion equation is used as a starting point because it is mathematically fundamental and allows clear evaluation of numerical behaviour. More challenging equations, such as the Smoluchowski equation and Fokker--Planck equations related to Ornstein--Uhlenbeck processes, are then considered to study problems with stronger probabilistic motivation. These models provide a natural setting for investigating how neural networks and sparse grid techniques behave as the dimension increases.
+
+The structure of the thesis is as follows. The first chapters introduce the mathematical background of diffusion equations, stochastic differential equations, and Fokker--Planck equations. The curse of dimensionality is then discussed, with emphasis on why standard discretization methods become impractical in higher dimensions. The thesis next introduces sparse grids and the sparse grid combination technique. After that, feed-forward neural networks and physics-informed neural networks are presented. The final chapters contain numerical experiments for selected diffusion-type problems, followed by a discussion of the accuracy, computational efficiency, and scalability of the methods considered.
+
+
+
+\chapter{Introduction II}
+
+Many physical and engineering processes are governed by partial differential equations (PDEs). These equations describe how quantities evolve in space and time and are used to model phenomena such as heat conduction, diffusion, fluid motion, wave propagation, and transport processes. Diffusion equations form a particularly important class of PDEs, since they describe the spreading or smoothing of a quantity over time. They also appear in probability theory, where the Fokker--Planck equation describes the time evolution of probability densities associated with stochastic differential equations.
+
+For decades, PDEs have been solved primarily by classical numerical methods, including finite difference methods, finite element methods, and finite volume methods. These methods approximate the continuous problem by discretizing the computational domain and solving a finite-dimensional algebraic system. In low spatial dimensions, they are highly successful and form the basis of many scientific and engineering simulations. However, their applicability becomes limited when the dimension of the problem increases. A full tensor-product discretization requires a number of grid points that grows exponentially with the dimension, leading to the well-known curse of dimensionality. This makes many high-dimensional PDEs computationally infeasible using standard discretization techniques.
+
+The curse of dimensionality is especially relevant for diffusion-type equations in probabilistic settings. For example, Fokker--Planck equations often describe probability densities over the state space of a stochastic system. If the underlying system has many degrees of freedom, the associated PDE becomes high-dimensional. Such equations occur in statistical physics, molecular dynamics, finance, uncertainty quantification, and other areas. Although Monte Carlo and stochastic methods can sometimes avoid solving the full density equation directly, there remains strong interest in deterministic and machine-learning-based methods that can approximate high-dimensional PDE solutions more efficiently.
+
+Scientific machine learning has recently become an active research field at the intersection of numerical analysis, machine learning, and scientific computing. Neural networks offer a flexible way of approximating functions in high-dimensional spaces, and their success in data-driven modelling has motivated their use for solving differential equations. Early neural-network approaches to differential equations were proposed by Lagaris et al. \cite{lagaris}, while the modern development of physics-informed neural networks (PINNs) was strongly influenced by the work of Raissi, Perdikaris, and Karniadakis \cite{comprehensive}. PINNs solve PDEs by representing the unknown solution with a neural network and training it to satisfy the governing equation, boundary conditions, and initial conditions through a physics-informed loss function.
+
+One of the main advantages of PINNs is their mesh-free formulation. Instead of constructing a full computational grid, the PDE residual is evaluated at selected collocation points. This gives PINNs a natural appeal for high-dimensional problems, where traditional mesh-based methods suffer from rapidly increasing computational cost. PINNs can also incorporate observational data, which makes them suitable not only for forward problems but also for inverse problems, such as estimating unknown parameters, coefficients, or source terms from measurements.
+
+However, despite their empirical success, PINNs are not a complete solution to the challenges of high-dimensional PDEs. Their training can be unstable, slow, or sensitive to hyperparameter choices. The balance between the PDE residual, boundary conditions, initial conditions, and possible data terms can strongly affect the final approximation. Furthermore, PINNs may struggle with stiff systems, multiscale behaviour, sharp gradients, complicated geometries, or high-dimensional domains \cite{systematic_review}. Many recent studies therefore focus on improving PINN performance through modified architectures, adaptive sampling strategies, domain decomposition, variational formulations, or fractional and extended PINN variants \cite{experts_guide}.
+
+This thesis studies the solution of diffusion equations using machine learning methods in higher dimensions. The main objective is to investigate how physics-informed neural networks behave when applied to diffusion-type PDEs beyond the simplest low-dimensional cases. The thesis focuses on semi-high-dimensional settings, where the dimension is sufficiently large to expose the limitations of classical full-grid methods, but still manageable enough to allow controlled numerical experiments and comparisons.
+
+A second important component of this thesis is the sparse grid combination technique. Sparse grids provide a classical numerical approach designed to reduce the cost of high-dimensional approximation. Instead of using a full tensor-product grid, sparse grid methods combine solutions computed on anisotropic lower-resolution grids. Under appropriate smoothness assumptions, this can significantly reduce the number of degrees of freedom while maintaining good approximation accuracy. This makes sparse grids a useful reference point between classical discretization methods and neural-network-based methods.
+
+The thesis combines these perspectives to study diffusion-type PDEs from both numerical and machine-learning viewpoints. It begins with the mathematical background of diffusion equations, stochastic differential equations, and Fokker--Planck equations. It then discusses the curse of dimensionality and explains why direct discretization becomes problematic in higher dimensions. After that, sparse grids, feed-forward neural networks, and physics-informed neural networks are introduced. The numerical part of the thesis considers model problems such as the heat equation, the Smoluchowski equation, and examples related to Ornstein--Uhlenbeck processes. These experiments are used to evaluate the accuracy, scalability, and limitations of the considered methods.
+
+
+
+\chapter{Introduction I}
+
+Partial differential equations (PDEs) are among the most important mathematical tools for modelling physical, biological, and engineering systems. They arise naturally in the description of transport processes, fluid flow, heat transfer, quantum mechanics, population dynamics, and many other phenomena. Among them, diffusion-type equations play a particularly central role, as they describe the evolution of quantities that spread over time, such as temperature, concentration, probability density, or chemical particles in a medium. Important examples include the heat equation, the diffusion equation, and the Fokker--Planck equation, which appears in the probabilistic description of stochastic dynamical systems.
+
+Classical numerical methods for solving PDEs include the finite difference method, the finite element method, and finite volume methods. These approaches rely on discretizing the spatial and temporal domain and approximating the solution on a computational mesh. For low-dimensional problems, such methods are well established and highly effective. However, their computational cost increases rapidly as the dimension of the problem grows. This phenomenon, commonly known as the curse of dimensionality, makes the direct application of standard grid-based numerical methods infeasible for many high-dimensional PDEs. In particular, equations such as high-dimensional diffusion equations or Fokker--Planck equations require a number of discretization points that grows exponentially with dimension when full tensor-product grids are used.
+
+In recent years, machine learning methods have emerged as a promising alternative for solving PDEs in scientific computing. Neural networks are flexible function approximators, and their expressive power makes them suitable candidates for representing high-dimensional solution functions. Building on the universal approximation theorem \cite{uni_approx}, early work by Lagaris et al. \cite{lagaris} proposed neural-network-based approaches for solving differential equations. Later, physics-informed neural networks (PINNs) became one of the most influential frameworks in this area, especially after the work of Raissi, Perdikaris, and Karniadakis \cite{comprehensive}. PINNs incorporate the governing physical laws directly into the loss function by penalizing the residual of the differential equation together with boundary and initial conditions. This allows the method to solve PDEs without requiring a traditional mesh and makes it applicable both to forward and inverse problems.
+
+Despite their flexibility, PINNs still face several important challenges. Their performance can strongly depend on the neural network architecture, the choice of collocation points, the relative weighting of loss terms, and the optimization procedure. Training can become difficult for stiff equations, multiscale problems, complex boundary conditions, or higher-dimensional domains. Although many extensions have been proposed, including variants such as fPINNs, XPINNs, and variational PINNs \cite{experts_guide}, the reliable and efficient use of PINNs in higher-dimensional settings remains an active area of research \cite{systematic_review}.
+
+This thesis investigates the use of machine learning methods for solving diffusion-type equations in higher dimensions. The main focus is on semi-high-dimensional problems, where the dimension is large enough for classical full-grid discretizations to become expensive, but still within a range where structured numerical comparisons are possible. The thesis considers diffusion equations and related Fokker--Planck-type models, which naturally arise in probabilistic settings and stochastic differential equations. These problems are especially relevant because probability density functions often live in high-dimensional state spaces.
+
+In addition to neural-network-based methods, this thesis also considers sparse grids and the sparse grid combination technique. Sparse grids can be understood as carefully selected combinations of lower-dimensional grids that avoid the full tensor-product construction. Under suitable smoothness assumptions, they provide a compromise between approximation accuracy and computational cost, making them attractive for moderately high-dimensional PDEs. Unlike fully mesh-free neural network approaches, sparse grids retain a strong connection to classical numerical discretization while reducing the dimensional scaling of the problem.
+
+The goal of this thesis is therefore to compare and study approaches for solving diffusion equations in higher dimensions, with particular attention to the interaction between classical numerical methods, sparse grid techniques, and physics-informed neural networks. The work explores how these methods behave as the dimension increases, what difficulties arise when scaling standard approaches, and how machine learning can be used to approximate solutions of diffusion-type PDEs.
+
+The thesis is structured as follows. First, the necessary mathematical background on diffusion equations, Fokker--Planck equations, and stochastic differential equations is introduced. Next, the curse of dimensionality and the difficulties of naively scaling classical discretization methods to higher dimensions are discussed. The following chapters introduce sparse grids, feed-forward neural networks, and the PINN framework. Numerical experiments are then presented, starting with simple heat equation examples and continuing to more challenging models such as the Smoluchowski equation and problems related to Ornstein--Uhlenbeck processes. Finally, the results are analyzed with respect to accuracy, computational cost, and scalability in higher dimensions.
+
+
+
 
 
 
@@ -126,7 +375,7 @@ we can simply apply the chain rule to obtain $\nabla_\theta \ell$ exactly (up to
 
 As we will see in the following section, this very same mechanism is exploited by PINNs to differentiate the network with respect to its spatial and temporal inputs, thus computing the individual terms in the given partial differential equation.
 
-The full training algorihm can be summarized as so:
+The full training algorihm for feed-forward neural networks can thus summarized as so:
 
 \begin{algorithm}[H]
 \caption{Full-Batch Gradient Descent}
@@ -181,66 +430,197 @@ The choice also depends on the hardware, espetially when using GPUs - as they ar
 
 
 
+\chapter{PINNs I}
+
+Physics-informed neural networks (PINNs) are a class of neural-network-based methods for solving problems governed by differential equations. They combine the approximation capabilities of feed-forward neural networks with prior knowledge about the physical or mathematical structure of the system under consideration. This prior knowledge is usually given in the form of a differential equation, together with suitable initial and boundary conditions.
+
+The central idea of PINNs is to represent the unknown solution of a differential equation by a neural network. Instead of training the network only on labelled input-output data, the network is trained to satisfy the governing equation itself. This is achieved by constructing a loss function that penalizes the residual of the differential equation, as well as deviations from the prescribed initial and boundary conditions. In this way, the physical model becomes part of the training objective.
+
+Before the development of PINNs, neural networks were already used in scientific computing mainly as flexible approximators of available data. In such settings, the network learns a mapping from input data to output data, but it does not necessarily respect the physical laws that generated the data. PINNs extend this idea by incorporating a priori domain knowledge directly into the learning process. As a result, the network is not only fitted to data, but is also constrained by the underlying mathematical model.
+
+In the context of PDEs, the neural network takes the independent variables, such as space and time, as inputs and returns an approximation of the solution. For example, for a time-dependent problem in a spatial domain $\Omega \subset \mathbb{R}^d$, one may define a neural network
+\[
+    u_\theta : \Omega \times [0,T] \to \mathbb{R},
+\]
+where $\theta$ denotes the trainable parameters of the network. The goal is to choose $\theta$ such that $u_\theta$ approximates the true solution $u$ of the PDE.
+
+A general PDE problem can be written in the form
+\[
+    \mathcal{N}[u](x,t) = 0, \qquad (x,t) \in \Omega \times (0,T],
+\]
+together with boundary and initial conditions
+\[
+    \mathcal{B}[u](x,t) = 0, \qquad (x,t) \in \partial \Omega \times (0,T],
+\]
+and
+\[
+    u(x,0) = u_0(x), \qquad x \in \Omega.
+\]
+Here, $\mathcal{N}$ denotes the differential operator defining the PDE, and $\mathcal{B}$ denotes the boundary operator. In the PINN framework, the exact solution $u$ is replaced by the neural network approximation $u_\theta$. The PDE residual is then given by
+\[
+    r_\theta(x,t) = \mathcal{N}[u_\theta](x,t).
+\]
+
+The derivatives appearing in the residual are computed using automatic differentiation. This is one of the main advantages of PINNs, since it allows the differential equation to be evaluated directly from the neural network representation without constructing finite difference stencils or finite element basis functions. The resulting residual can be evaluated at a set of collocation points sampled from the computational domain.
+
+The loss function typically consists of several terms. A common form is
+\[
+    \mathcal{L}(\theta)
+    =
+    \lambda_r \mathcal{L}_r(\theta)
+    +
+    \lambda_b \mathcal{L}_b(\theta)
+    +
+    \lambda_0 \mathcal{L}_0(\theta),
+\]
+where $\mathcal{L}_r$ is the residual loss corresponding to the PDE, $\mathcal{L}_b$ is the boundary loss, and $\mathcal{L}_0$ is the initial condition loss. The constants $\lambda_r$, $\lambda_b$, and $\lambda_0$ are weights that determine the relative importance of the different terms. If measurement data are available, an additional data loss term can also be included.
+
+An important feature of PINNs is that they can be trained even when no labelled solution data are available. In that case, the method relies entirely on the governing equation and the prescribed initial and boundary conditions. This makes PINNs attractive for solving forward PDE problems, where the aim is to approximate the solution of a known equation. At the same time, PINNs can also be applied to inverse problems, where unknown parameters, coefficients, or source terms are inferred from partial observations.
+
+From a computational point of view, PINNs fit naturally into the existing machine learning pipeline. The solution is represented by a standard feed-forward neural network, the residual is computed using automatic differentiation, and the parameters are optimized using gradient-based methods. This makes PINNs relatively flexible and easy to implement in modern deep learning frameworks.
+
+However, PINNs also have important limitations. The optimization problem is often non-convex and can be difficult to solve. The accuracy of the method depends on the architecture of the network, the distribution of collocation points, the choice of optimizer, and the balance between the different loss terms. In higher-dimensional problems, training can become expensive and unstable, and the method may require careful tuning. For this reason, understanding the practical behaviour of PINNs is essential before applying them to more challenging diffusion-type equations.
+
+The following sections describe the specific PINN architecture used in this thesis, the construction of the loss function, the sampling of collocation points, and the implementation details relevant to the numerical experiments.
+
+
+
+
 
 \chapter{Phyics-Informed Neural Networks (PINNs)}
 
-First introduced in 2019 by Karniadakis et. al., Physics-Informed Neural Networks combine
-the architecture and training loop of traditional FF neural networks
+
+First introduces by Lagaris et. at. \cite{lagaris} in 1997,
+and later reformulated by Karniadakis et. al., Physics-Informed Neural Networks combine
+the architecture and training loop of traditional feed-forward neural networks
 with the information about the physics governing the system under consideration.
-This information is added in in a form of a specific loss function which the model is then trained to minimize.
+This information is added in in a form of a specific loss function which the model is trained to minimize.
 
 Pior to the introduction of PINNs, neural netoworks were used in the scientific computing
-as approximators of the training data.
+as interpolators of measurement data. 
+In this context, the network learns a mapping from input data to output data,
+but it does not necessarily respect the physical laws unterlying the phenomena.
 
-The new idea introduces by PINNs was to include in the loss also a term modellling how much the network vialotes physics of the problem.
-For some class of problems, the PDE modelling the system can be utilized.
+The novel idea introduced by PINNs was to extend the loss function by an extra term incorporating the knowledge about the phycics.
+As a result, the resulting network becomes less prone to overfitting, and is much more constrained by the physics.
 
-However, one might also drop the labels training data entirely, and purely minimize the physics loss of the pde.
+On the other hand, such a formulation allow us to train the network even when no labelel measurement data are available.
+In that case, the loss relies entirely on the governing equation and the prescribed initial and boundary conditions.
+This feature makes them useful as differential equation solvers.
+
+The main attractiveness of PINNs is that they fit naturally into the existing
+machine learning pipeline. The solution is represented by a standard feed-forward
+neural network, the residual is computed using automatic differentiation, and
+the parameters are optimized using gradient-descent methods.
+This makes PINNs relatively flexible and easy to implement in the existing deep learning frameworks.
+
+However, PINNs also have important limitations.
+The loss landscape in generally non-convex and the resulting optimization problem can be difficult to solve.
+The accuracy of the method is very sensitive to the choice of hyperparameters, such as
+on the architecture of the network,
+the choice of optimizer,
+the balance between the different loss terms,
+and 
+the distribution of training points.
+This problem is even more pronounced in PINNs as we shall see later on.
+In more complex settings, such as our higher-dimensional problems,
+training can become expensive and unstable, and
+the method may require careful tuning.
+For this reason, understanding the
+practical behaviour of PINNs is essential before applying them to more challenging
+diffusion-type equations.
+
+The following sections describe the specific PINN architecture used in this
+thesis, the construction of the loss function, the sampling of collocation points,
+and the implementation details relevant to the numerical experiments.
 
 
-In the context of solving PDEs, the PDE system gets transformed into a language the NN understands.
-good integration into the neural network arch - training data sampling, automatic differentiation
 
-neural networks
-build on top of feed-forward nn
 
-We base our PINN architecture on a few crutial publications and based took the inspiration of our implemntation from some existing established codebases.
-Namely:
-\begin{itemize}
-    \item studies published by Karniadakis et. al, including
-    \begin{itemize}
-        \item HTE
-        \item SDGD
-    \end{itemize}
-    \item deepxde - rar
-\end{itemize}
-Needed to code from scratch - relatively novel field, no codebase has access to the latest architecutres combined that we wanted to explore - relevant to high dims
-
-physics-informed - PDE in the loss function
-
+%We base our PINN architecture on a few crutial publications and based took the inspiration of our implemntation from some existing established codebases.
+%Namely:
+%\begin{itemize}
+%    \item studies published by Karniadakis et. al, including
+%    \begin{itemize}
+%        \item HTE
+%        \item SDGD
+%    \end{itemize}
+%    \item deepxde - rar
+%\end{itemize}
+%Needed to code from scratch - relatively novel field, no codebase has access to the latest architecutres combined that we wanted to explore - relevant to high dims
+%
+%physics-informed - PDE in the loss function
+%
+%diff eq in network, learns physics, dooes not overfit the training data:
+%PINNs differ from traditional neural networks in their ability to incorporate a priori domain knowledge of the problem in the form of differential equations.
+%This additional information enables PINNs to make more accurate predictions outside of the given measurement data.
+%Furthermore, the additional physics knowledge regularizes the predicted solution in the presence of noisy measurement data, enabling PINNs to learn the true underlying signal rather than overfitting the noisy data.
+%https://www.mathworks.com/discovery/physics-informed-neural-networks.html
 
 
 \section{Architecture}
-{\color{red}
-- input dim
-- ouput dim
+%{\color{red}
+%- input dim
+%- ouput dim
+%- loss
+%- diagram
+%
+%give general arch before moving to more specific ones
+%
+%vanilla pinn
+%- feed forward
+%- tanh activations - smooth derivatives
+%- loss functions based on the physics - the PDE of the system
+%- convergence to a glob min if sol unique, pde well-possed, NN expressive, and enough points
+%
+%- simple problem
+%    - 100s-1000s pnts paired with lbfgs
+%- more efficient - stoch grad desc
+%}
 
-- loss
+The basic architecture of a physics-informed neural network
+is commonly a standard feed-forward neural network as described in chapter 3.
+The main differenting factor of PINNs is not the architecture itself,
+but rather the construction of the loss and a few training specific details
+depending on the differetial equation at hand.
 
-- diagram
+Consider, for example, a system of the form
+\begin{align}
+\partial_t u(x,t) + \mathcal L(u;x,t) = 0& \quad\Omega\times(0,T)\\
+u(x) = u_{ic}(x)& \quad\Omega\\
+u(x,t) = u_{bc}(x,t)& \quad\partial\Omega\times(0,T)
+\end{align}
 
-give general arch before moving to more specific ones
+where
+$\Omega\subset\mathbb R^d$,
+$\mathcal L$ is a general spatial differential operator, and $u_{bc}, u_{ic}$ are the given boundary and initial data.
+Provided it exists, the solution of the PDE is then a mapping
+$$
+u: \Omega \times [0,T] \to \mathbb{R} \,.
+$$
 
-vanilla pinn
-- feed forward
-- tanh activations - smooth derivatives
-- loss functions based on the physics - the PDE of the system
-- convergence to a glob min if sol unique, pde well-possed, NN expressive, and enough points
+In the context of PINNs, we parametrize the solution by a neural network
+$$
+u_\theta : \Omega \times [0,T] \to \mathbb{R}
+$$
+where $\theta$ denotes the trainable parameters of the network.
 
-- simple problem
-    - 100s-1000s pnts paired with lbfgs
-- more efficient - stoch grad desc
-}
+Since the input consists of the spatial variable $x \in \mathbb{R}^d$ together with time $t \in \mathbb{R}$, the input dimension of the network is
+$d_{\mathrm{in}} = d + 1$, and for a scalar PDE, the output dimension is $d_{\mathrm{out}} = 1$.
+
+In the case where PDE existence theory guarantees a smooth solution,
+we prefer a smooth activation function for the hidden layers,
+generally a hyperbolic tangent, followed by a identity activation for the final output layer.
+However, even in the case of initial / boundary data from $C(\Omega)$ whose first derivatives are discontinuous,
+the hyperbolic tangent is the dominant choice in the literature.
+% This is because the differential operator
+Moreover, diffusion equaitons tend to smooth out any of discontinuous initial / boundary data.
+Henceforth, we will only consider architectures with $\tanh$ activations.
+%The choice of activation function is particularly important in PINNs. Since
+%the network represents a solution of a differential equation, it is often necessary
+%for the network output to be differentiable with respect to its inputs. For this
+%reason, smooth activation functions are commonly preferred. A standard choice is
+%the hyperbolic tangent activation function,
 
 \begin{figure}
     \centering
@@ -249,22 +629,188 @@ vanilla pinn
     \label{fig:pinn_arch}
 \end{figure}
 
-PINN simply take the FFNN architecture and make as a few choices tailored to the pde system at hand.
 
-Consider, for example, a PDE system of the form
-\begin{align}
-\partial_t u + \mathcal N(u) = 0\\
-u = u_{ic}\\
-u = u_{bc}
-\end{align}
-where $\mathcal N$ is a general differenttial operator.
 
-Parametrize the solution by a nn $\mathcal N_\theta=u_\theta$
-define the NN as so:
-$d_{in} = d+1 =: D$
-$d_{out} = 1$
-use smooth activations like hyperbolic tangent and a identity activation for the final output layer.
+\section{Residuum and Loss}
+As previously mentioned,
+the central feature separating physics-informed neural networks from other neural network based strategies for modelling differential equations
+is the specific construction of the loss.
 
+Returning to the system 5.1 above, we now define a PDE, BC, and IC \emph{residua} at a space time coordinate $(x,t)$ as
+\begin{align*}
+\mathcal R_{pde}(u;x,t) &= \partial_t u(x,t) + \mathcal L(u;x,t)\\
+\mathcal R_{bc}(u;x,t) &= u(x,t) - u_{bc}(x,t)\\
+\mathcal R_{ic}(u;x) &= u(x,0) - u_{ic}(x)
+\end{align*}
+
+Next, in our formulation of PINNs, the training data does not contain the target values $u_i$ for the inputs $(x_i,t_i)$,
+as we don't have access to the solution $u$.
+Instead, the training data only contain a set of points spanning the domain.
+We call such a set of points a \emph{callocation set}, or just \emph{callocaiton points}.
+
+Our dataset thus consist of three sets of callocation points, one for each domain
+\begin{align*}
+X_{pde}& := \{(x_i,t_i)\}_{i=1}^{N_{pde}} \subset (0,T)\times\Omega\\
+X_{bc}& := \{(x_i,t_i)\}_{i=1}^{N_{bc}} \subset (0,T)\times\partial\Omega\\
+X_{ic}& := \{x_i\}_{i=1}^{N_{ic}} \subset \Omega
+\end{align*}
+%Where the callocation points are either sampled beforehand or during training.
+
+The loss the neural network then seeks to minimize is a linear combiantion
+\begin{align*}
+\ell = \lambda_{pde}\ell_{pde} + \lambda_{bc}\ell_{bc} + \lambda_{ic}\ell_{ic}
+\end{align*}
+
+where $\lambda_r>0$, and the individual losses are computed as a mean squared error of the residuum over the sample callocation points
+\begin{align*}
+\ell_{pde}\left(\theta;X_{pde}\right)
+&= \frac{1}{N_{pde}}\sum_{i=1}^{N_{pde}} \big(\mathcal R_{pde}(u_\theta;x_i,t_i)\big)^2\\
+\ell_{bc}\left(\theta;X_{bc}\right)
+&= \frac{1}{N_{bc}}\sum_{i=1}^{N_{bc}} \big(\mathcal R_{bc}(u_\theta;x_i,t_i)\big)^2\\
+\ell_{ic}\left(\theta;X_{ic}\right)
+&= \frac{1}{N_{ic}}\sum_{i=1}^{N_{ic}} \big(\mathcal R_{ic}(u_\theta;x_i)\big)^2
+\end{align*}
+
+To aid in notation, the expression for the loss of a particular term, over a given callocation set $X_r:=\{\xi_i\}_{i=1}^{N_{r}}$, can be expressed more concisely, as
+$$
+\ell_{r}\left(\theta;X_r\right)
+= \frac{1}{N_r}\sum_{i=1}^{N_{r}} \big(\mathcal R_{r}(u_\theta;\xi_i)\big)^2
+%= \mathbb E \left[\big(\mathcal R_{r}(u_\theta;\xi_i)\big)^2\right]_{\xi_i\in X_r}
+= \left\langle\big(\mathcal R_{r}(u_\theta;\xi_i)\big)^2\right\rangle_{\xi_i\in X_r}
+$$
+
+
+\section{Automatic differentiation (AD)}
+{\color{red}
+
+second der
+
+
+}
+
+
+So far, we haven't specified how the individual spatial and temporal derivatives
+making up the PDE residuum are to be computed. Let us adress this now.
+
+% We briefly touched on it when discussing feed forward neural networks.
+As mentioned in chapter 4, during the training of neural networks,
+we employ automatic differentiation to obtain the gradient of the loss function
+with respect to the model weights.
+
+In PINNs we reuse this strategy to calculate the gradient of the network w.r.t its input $(t,x)$,
+$\nabla_{(t,x)} u_\theta(t,x)$, thus obtaining $\nabla_t u = \partial_t u$ and $\nabla_x u$.
+We can repeat this procedure to obtain higher order derivatives.
+
+Since its central nature in the of PINNs, lets us devote more time to understanding
+what exactly is going on under the hood, as this knowledge will prove to be
+crutial for scaling PINNs to high dimensional domains.
+
+\subsection{Fundamentals}
+Neural networks are composed of a elementary mathematical operations and activation functions.
+The majority of the network is a compositoin of transformations units of the type
+$$
+h = \sigma(x^T W + b)
+$$
+where $W\in\mathbb R^{M\times N},b\in\mathbb R^N$ are parameters of the network and $x\in\mathbb R^M$ is some input
+
+Lets now consider a case where all variables are scalars:
+$$
+h = \sigma(x w + b)
+$$
+We can interpret this calculation as a directed acyclic graph (DAG), see fig 1.
+
+To calculate a gradient of the output of neural network with respect to some variable, lets say $x$
+we just apply the chain rule multiple times:
+$$
+\frac{d h}{d x} = 
+\frac{d h}{d z} 
+\frac{d z}{d y} 
+\frac{d y}{d x} 
+$$
+$$
+\frac{\partial z}{\partial y} = 
+$$
+
+
+- decomposes into elementary operations
+- uses chain rule
+- exact up to machine precision
+
+
+
+DAG - directed acyclic graph
+
+Let us explore this further - as it will show be to for PINNS.
+Building a computational graph during the forward pass as operations are performed
+Tracking relationships between values through their operations
+Computing gradients during the backward pass by applying the chain rule recursively
+
+
+\subsubsection{Automatic differentiation in PINNs}
+
+wrt to input - only need eval at point - not at neighborhood
+
+graph in a graph in a graph??
+
+how do they stack?
+
+memory needs?
+
+
+Diagrams:
+- decompose the network into elem units
+- forward vs reverse mode grad comp
+
+\subsubsection{Implementation}
+leaves and root
+Function object
+    - knows how to compute forward and also its der in backprop step
+DAG - directed acyclic graph consisting of Funciton objects
+leaves = input tensor
+roots = output tensor
+
+By tracing this graph from roots to leaves,
+you can automatically compute the gradients using the chain rule.
+
+The backward pass kicks off when `'.backward()`' is called on the DAG root. autograd then:
+- computes the gradients from each $.grad_fn$,
+- accumulates them in the respective tensor's .grad attribute
+- using the chain rule, propagates all the way to the leaf tensors.
+
+when doing backward propagation,
+PyTorch accumulates the gradients,
+i.e. the value of computed gradients is added to the
+grad property of all leaf nodes of computational graph
+
+
+\subsubsection{Automatic differentiation vs. Finite differences}
+
+\cite{fd_ad}
+FD for no hessian operators - laplace, grad, etc ??
+- only 2 extra points - laplace stencil and central der
+
+Training error the main issue for DF
+
+- fd
+    - mem cheaper
+for second order diff operator:
+    - ad and fd almost same training time
+    - but observe training
+    - different loss landscape
+        - that one for ad better
+    - ad:
+        - lower residual tarining error
+        - faster loss convergence
+
+gradient-descent training kernel G for two-layer FFNN
+AD and FD have similar large singular/eigenvalues, as FD approximates AD,
+but FD produces relatively larger small singular/eigenvalues due to numerical differentiation artifacts
+These small values matter because training is sensitive to the low end of the spectrum
+- similar as when Ax=b - condition numer sigma max / sigma min
+
+same problem, increase the number of neurons
+the error rises linaerly
+- need to increase n of steps
 
 
 
@@ -279,52 +825,8 @@ use smooth activations like hyperbolic tangent and a identity activation for the
 - sample new data every step
 }
 
-What remains is to define the strategy for computing the loss.
-This is what separates physics neural networks from other approaches of modelling physical systems.
 
-Returning to the system above, we defing a pde, bc, and ic residuals at a space time coordinate $(x,t)$ as
-\begin{align*}
-\mathcal R_{pde}(u;x,t) &= \partial_t u(x,t) + \mathcal N(u;x,t)\\
-\mathcal R_{bc}(u;x,t) &= u(x,t) - u_{bc}(x,t)\\
-\mathcal R_{ic}(u;x) &= u(x,0) - u_{ic}(x)
-\end{align*}
-
-In the context of PINN, we don't talk of training data since there is no explicit target value $y_i$ for the input $x_i$.
-Instead, we seek to minimize the residuum over a chosen set of points spanning the domain.
-We call such a set of points a \emph{callocation} set, or just \emph{callocaiton} points.
-Our dataset thus consist of just a set of points from the domain.
-
-We define the collocation sets
-\begin{align*}
-X_{pde} := \{(x_i,t_i)\}_{i=1}^{N_{pde}} \subset (0,T)\times\Omega\\
-X_{bc} := \{(x_i,t_i)\}_{i=1}^{N_{bc}} \subset (0,T)\times\partial\Omega\\
-X_{ic} := \{x_i\}_{i=1}^{N_{ic}} \subset \Omega
-\end{align*}
-
-The loss the neural network then seeks to minimize is a linear combiantion of the individual losses:
-\begin{align*}
-\ell = \lambda_{pde}\ell_{pde} + \lambda_{bc}\ell_{bc} + \lambda_{ic}\ell_{ic}
-\end{align*}
-
-where $\lambda_r>0$, and the individual losses are computed as a mean squared error over the residuum
-\begin{align*}
-\ell_{pde}\left(\theta;X_{pde}\right)
-= \frac{1}{N_{pde}}\sum_{i=1}^{N_{pde}} \big(\mathcal R_{pde}(u_\theta;x_i,t_i)\big)^2\\
-\ell_{bc}\left(\theta;X_{bc}\right)
-= \frac{1}{N_{bc}}\sum_{i=1}^{N_{bc}} \big(\mathcal R_{bc}(u_\theta;x_i,t_i)\big)^2\\
-\ell_{ic}\left(\theta;X_{ic}\right)
-= \frac{1}{N_{ic}}\sum_{i=1}^{N_{ic}} \big(\mathcal R_{ic}(u_\theta;x_i)\big)^2
-\end{align*}
-
-To aid in notation, we can write for $X_r:=\{\xi_i\}_{i=1}^{N_{r}}$ the loss calcualtion more concisely
-$$
-\ell_{r}\left(\theta;X_r\right)
-= \frac{1}{N_r}\sum_{i=1}^{N_{r}} \big(\mathcal R_{r}(u_\theta;\xi_i)\big)^2
-= \mathbb E \left[\big(\mathcal R_{r}(u_\theta;\xi_i)\big)^2\right]_{\xi_i\in X_r}
-= \left\langle\big(\mathcal R_{r}(u_\theta;\xi_i)\big)^2\right\rangle_{\xi_i\in X_r}
-$$
-
-The training then proceeds as follows
+The training regime is analogous to that of feed-forward neural network:
 
 
 %Let us save the training data $\{(x_i,t_i)\}_{i=1}^{N_{pde}}$ as a tensor $\mathbf X_{pde}$ of size $(N_r,d+1)$
@@ -383,7 +885,7 @@ The training then proceeds as follows
         %\State $\mathcal{R}_{pde} = \partial_t\,\hat{u}_{pde} - \alpha\,\Delta\,\hat{u}_{pde} - f(X)$
         %\State $\mathcal{R}_{bc} = \hat{u}_{pde} - u_{bc}(X)$
         %\State $\mathcal{R}_{ic} = \hat{u}_{ic} - u_{ic}(X)$
-        %       $\mathcal{R} = \mathcal{F}\!\left[\mathcal{N}_\theta\right](x_j^c)$
+        %       $\mathcal{R} = \mathcal{N}\!\left[\mathcal{N}_\theta\right](x_j^c)$
         %\State \textbf{PDE loss:}
         %       $\ell_{\text{data}} = \dfrac{1}{N_d}\displaystyle\sum_i \bigl(\hat{u}_i - u_i^d\bigr)^2$
         %\State \textbf{BC loss:}
@@ -424,16 +926,62 @@ The training then proceeds as follows
 
 
 \section{example archs}
-ex. burgers, Nbcic=100, 9layer NN 20width
-fixed set of points
 
-$$
-u_t + \mathcal{N}[u] = 0
-$$
+original pinn implemntation
+ex. burgers, Schroedinger, allen-cahn
+- fixed set of pnts
+100s - 1000s
+lbfgs
+sampled before hand using LHS
+- small networks
+9 layers, 20 neurons
+5 layers 100 neurons
+4 layers 200 neurons
+
+SDGD
+adam
+4 layer, 128
+100k epochs
+liner LR decay to 0
+optional:
+    - parallelilze batches over multiple gpus
+        - res    
+        - loss
+        - grad update
+    - average grad updates
+bs - pg 17
+
+score pinns
+adam
+hard ic and bc, if non-smooth - no hard contrains, use 20 for bc ic
+- sample every step
+4x512, 4x128
+100k steps
+decay by 0.9 every 10k steps
+each epoch, sample 10k res points from sde
+
+
+AD vs FP
+4layer with 50 = 1,50,50,50,1
+100 res, fixed, ful batch
+Adam
+
+
+
 
 \section{Most important}
 
+General challlanges
+
+- pose a multi-objective optimization problem - weighting the losses
+- issue with high freq
+- computation cost of high-ord ders
+- limited convergence theory and unified training strategies
+https://www.mathworks.com/discovery/physics-informed-neural-networks.html
+
+
 crutial in high dim:
+
 
 - problem formulation
 
@@ -453,6 +1001,13 @@ crutial in high dim:
 
 
 \section{The curse of dimensionality}
+
+
+
+\subsection{sampling}
+In higher dimensions, we cannot simply fix the collocation points upfront as we need many points to get a sufficient covering of the domain.
+
+
 
 Need to throughly sample, but
 sampling in d-dimens demands $N_colloc\sim vol(\Omega)$.
@@ -545,7 +1100,7 @@ This dramatically decreases the memory requirements of AD and theoretically unlo
 
 Consider a linear PDE of the form:
 $$
-\mathcal{L}u(x) = R(x)
+\mathcal{L}u(x) = f(x)
 $$
 where, $\mathcal{L}$ is a differential operator, for example,
 
@@ -573,7 +1128,7 @@ $$
 
 We can therefore write
 $$
-\sum_{i=1}^n\mathcal{L}_i u(x) = R(x)
+\sum_{i=1}^n\mathcal{L}_i u(x) = f(x)
 $$
 
 Now consider a PINN approximation $u_\theta \approx u$. 
@@ -581,15 +1136,15 @@ The pde loss at a point $x\in\mathbb{R}^d$ can then be written in the form
 
 $$
 \ell_{pde}(\theta;x)
-= \big( \mathcal{L} u_\theta(x) - R(x) \big)^2
-= \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(x) - R(x) \right)^2
+= \big( \mathcal{L} u_\theta(x) - f(x) \big)^2
+= \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(x) - f(x) \right)^2
 $$
 
 And the corresponding gradient w.r.t. the model weights is then
 
 $$
-\nabla_\theta \ell_{pde}(\theta;x) = \nabla_\theta \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(x) - R(x) \right)^2
-= 2 \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(x) - R(x) \right) \left( \sum_{i=1}^n \nabla_\theta \mathcal{L}_i u_\theta(x) \right)
+\nabla_\theta \ell_{pde}(\theta;x) = \nabla_\theta \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(x) - f(x) \right)^2
+= 2 \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(x) - f(x) \right) \left( \sum_{i=1}^n \nabla_\theta \mathcal{L}_i u_\theta(x) \right)
 $$
 
 Finally, we consider a subset $I \subset \{1, \dots, n\}$ with $|I| \ll n$, and approximate the last term from the equation above,
@@ -941,6 +1496,38 @@ backpropagate?
 - AD - jacrev,... - jax like
 
 
+
+\section{Experiments}
+
+- memory footprint of AD
+    - grad u
+    - laplace u
+    - div(A grad u)
+    - hessian u
+
+
+\section{grid search exploration}
+importance of weights of losses
+    - hard constrains
+    - fixed losses
+    - adaptive loss weighting via GradNorm
+
+
+
+
+
+\chapter{Conclusion}
+
+speed and precision still on the side of sparse grids?
+
+established convergence theory
+
+pinns - hyperparameter tuning
+
+
+
+
+
 \section{Math recap}
 
 Positive semidefinite matrix $A\in\mathbb{R}^{n \times n}$ is a symmetric matrix, that satisfies:
@@ -950,8 +1537,6 @@ $$ x^T A\,x \ge 0, \quad \forall x\in\mathbb{R}^n, \: x\neq 0 $$
 
 \cite{experts_guide}
 \cite{systematic_review}
-
-
 
 
 

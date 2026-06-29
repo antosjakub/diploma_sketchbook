@@ -107,8 +107,8 @@
 \draw[arrow] (data) to[bend left] (output);
 
 % Auto-diff & residual
-\node[right=0.5cm of output] (ad) {Auto-diff};
-\node[right=0.6cm of ad] (r_pde) {$\ell_{pde} = \mathbb E[(\partial_t u_\theta + \mathcal{N}(u_\theta))^2]_{X_{pde}}$};
+\node[right=0.5cm of output] (ad) {auto-diff};
+\node[right=0.6cm of ad] (r_pde) {$\ell_{pde} = \mathbb E[(\partial_t u_\theta + \mathcal{L}(u_\theta))^2]_{X_{pde}}$};
 \node[above right=0.05cm and 0.6cm of ad] (r_ic) {$\ell_{ic} = \mathbb E[(u_\theta - u_{ic})^2]_{X_{ic}}$};
 \node[above right=0.5cm and 0.6cm of ad] (r_bc) {$\ell_{bc} =  \mathbb E[(u_\theta - u_{bc})^2]_{X_{bc}}$};
 \draw[arrow] (output) -- (ad);
@@ -128,7 +128,7 @@ $\ell = \lambda_{pde}\ell_{pde} + \lambda_{ic}\ell_{ic} + \lambda_{bc}\ell_{bc}$
 
 % PDE example
 \node[draw, rectangle, align=right, above=1.5cm of ad, fill=orange!20, minimum width=2.5cm] (pde) {
-$\partial_t u + \mathcal{N}(u) = 0$\\[0.0cm]
+$\partial_t u + \mathcal{L}(u) = 0$\\[0.0cm]
 $u = u_{ic}$\\[0.0cm]
 $u = u_{bc}$
 };
