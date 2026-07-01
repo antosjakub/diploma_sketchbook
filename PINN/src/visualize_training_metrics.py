@@ -10,17 +10,6 @@ def _to_plot_series(data):
 
 
 
-def plot_l2(steps, l2_error, l2_error_name):
-    # Plot L2
-    print(f"Saving: {l2_error_name}.png")
-    plt.figure(figsize=(10, 5))
-    plt.semilogy(_to_plot_series(steps), _to_plot_series(l2_error))
-    plt.xlabel('Step')
-    plt.ylabel('Error')
-    plt.title('l2 error')
-    plt.grid(True)
-    plt.savefig(f'{l2_error_name}.png', dpi=150)
-
 def plot_time_adapt_sampling(Ts, file_name):
     print(f"Saving: {file_name}.png")
     plt.figure(figsize=(10, 5))
@@ -33,7 +22,7 @@ def plot_time_adapt_sampling(Ts, file_name):
 
 
 
-def plot_hist_data_dict(hist_data_dict, file_name, label_fn, line_width_fn, color_fn, y_label, title):
+def plot_hist_data_dict(hist_data_dict, file_name, label_fn, line_width_fn, color_fn, y_label, title, x=None):
     """
     hist_data_dict: ex. {'pde': [], 'bc': []}
     """
@@ -102,6 +91,12 @@ def plot_mem(mem_data_dict, file_name):
     mem_series = {k: v for k, v in mem_data_dict.items() if k != "step"}
     plot_hist_data_dict(mem_series, file_name, lambda name: name, lambda name: 1.0, lambda name: None, 'MB', "Memory")
 
+def plot_test_rel_l2(test_data_dict, file_name):
+    plot_hist_data_dict(test_data_dict, file_name, lambda name: name, lambda name: 1.0, lambda name: None, 'rel L2 error', "Testing: Relative L2 error")
+def plot_test_res_mse(test_data_dict, file_name):
+    plot_hist_data_dict(test_data_dict, file_name, lambda name: name, lambda name: 1.0, lambda name: None, 'MSE', "Testing: Residual MSE")
+
+
 
 import sys
 if __name__ == "__main__":
@@ -124,5 +119,4 @@ if __name__ == "__main__":
     n_logged_pnts = len(l2_error)
     steps = n_steps_log*torch.linspace(1,n_logged_pnts,n_logged_pnts, dtype=torch.int)
 
-    plot_l2(steps, l2_error, l2_error_name)
     plot_loss(loss, loss_name)

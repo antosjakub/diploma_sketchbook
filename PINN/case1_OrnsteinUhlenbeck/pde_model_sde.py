@@ -485,7 +485,7 @@ class Anisotropic_OU:
             return torch.exp(model_q(X))
 
         def ic_residual(self, X, model_q, precomputed):
-            return model_q(X) - precomputed["q0"]
+            return model_q(X) - precomputed["ic"]
 
         def pde_loss(self, X, model_q, precomputed):
             res = self.pde_residual(X, model_q, precomputed)
@@ -502,7 +502,7 @@ class Anisotropic_OU:
                 "pde": {},
                 "bc": {},
                 "ic": {
-                    "q0": self.q0(X_ic[:,:-1]).detach()
+                    "ic": self.q0(X_ic[:,:-1]).detach()
                 } if X_ic is not None else {},
             }
 

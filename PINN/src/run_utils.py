@@ -119,7 +119,7 @@ def merge_losses(dst, src):
 
 
 
-def save_run(dir_name, model, losses, l2_errs, args, device, pde_model=None, head_fn=None, loss_weighting=None, output_dim=1):
+def save_run(dir_name, model, losses, args, device, pde_model=None, head_fn=None, loss_weighting=None, output_dim=1):
     """Dump model state, loss dict, l2 errors, model metadata and (optionally) pde metadata.
 
     `head_fn`: optional tag identifying the architectural head (e.g. "hardcoded_ic"),
@@ -147,9 +147,6 @@ def save_run(dir_name, model, losses, l2_errs, args, device, pde_model=None, hea
     loss_name = f'{dir_name}/training_loss'
     torch.save(model.state_dict(), f'{dir_name}/model.pth')
     torch.save({k: torch.tensor(v) for k, v in losses.items()}, f'{loss_name}.pth')
-    if len(l2_errs) > 0:
-        l2_name = f'{dir_name}/training_l2_error'
-        torch.save(torch.tensor(l2_errs), f'{l2_name}.pth')
     if isinstance(loss_weighting, loss.AdaptiveWeights) and len(loss_weighting.weights_history) > 0:
         weights_name = f'{dir_name}/training_loss_weights'
         torch.save(torch.stack(loss_weighting.weights_history), f'{weights_name}.pth')

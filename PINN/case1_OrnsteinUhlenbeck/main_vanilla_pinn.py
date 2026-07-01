@@ -1,82 +1,74 @@
 import argparse
 
 parser = argparse.ArgumentParser()
+# basic
 parser.add_argument("--config", default=None, type=str, help="Path to a JSON file with parameter values.")
 parser.add_argument("--description", default="", type=str, help="Smthg to help identify it in grid search.")
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
+parser.add_argument("--grad_clip_norm", default=None, type=float, help="Max-norm gradient clipping for the train step. None disables it.")
+# don't touch this
+parser.add_argument("--gamma", default=0.9, type=float, help="Decay by 0.9 every 2000 steps.")
+parser.add_argument("--lr", default=1e-3, type=float, help="")
+# dir
+parser.add_argument("--output_dir", default="run_latest_vanilla_I", type=str, help="")
+parser.add_argument("--clear_dir", action="store_true", help="Erase contents of the output_dir before the training starts.")
+# problem specific
 parser.add_argument("--d", default=4, type=int, help="Number of spatial dimensions.")
+parser.add_argument("--T", default=3.5, type=float, help="")
+parser.add_argument("--L_min", default=-5.0, type=float, help="")
+parser.add_argument("--L_max", default=5.0, type=float, help="")
+parser.add_argument("--mode", default="q_pde", type=str, help="score_pde, ll_ode")
+parser.add_argument("--ic_type", default="laplace", type=str, help="gauss, cauchy, laplace")
+# common arch choices
+parser.add_argument("--glorot_init", action="store_true", help="")
+parser.add_argument("--use_lbfgs", action="store_true", help="")
+# reporting / profiling
+parser.add_argument("--enable_profiler", action="store_true", help="")
+parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
+parser.add_argument("--enable_memory_tracking", action="store_true", help="Log process RAM and GPU memory at each logging interval.")
+# commonly edited
 #parser.add_argument("--layers", default="256,256,256,256", type=str, help="")
-#parser.add_argument("--layers", default="64,64,64,64", type=str, help="")
-parser.add_argument("--layers", default="128,128,128,128", type=str, help="")
+#parser.add_argument("--layers", default="32,32,32,32", type=str, help="")
+parser.add_argument("--layers", default="64,64,64,64", type=str, help="")
+#parser.add_argument("--layers", default="128,128,128,128", type=str, help="")
+parser.add_argument("--bs", default=100, type=int, help="")
 parser.add_argument("--n_steps", default=4999, type=int, help="")
 #parser.add_argument("--n_steps", default=499, type=int, help="")
 parser.add_argument("--n_steps_decay", default=1_000, type=int, help="Decay by 0.9 every 2000 steps.")
-parser.add_argument("--gamma", default=0.9, type=float, help="Decay by 0.9 every 2000 steps.")
-parser.add_argument("--lr", default=1e-3, type=float, help="")
-parser.add_argument("--bs", default=1_000, type=int, help="")
-
+# loss weights
 parser.add_argument("--lambda_pde", default=1.0, type=float, help="")
 parser.add_argument("--lambda_bc", default=10.0, type=float, help="")
 parser.add_argument("--lambda_ic", default=10.0, type=float, help="")
 parser.add_argument("--lambda_norm", default=0.1, type=float, help="Weight of the integral p dx = 1 normalization loss.")
 parser.add_argument("--use_adaptive_weights", action="store_true", help="grad adaptive loss term weighting.")
 parser.add_argument("--active_losses", default="pde,ic", type=str, help="Comma-separated subset of {pde,bc,ic,norm}. 'pde' is required.")
-parser.add_argument("--grad_clip_norm", default=None, type=float, help="Max-norm gradient clipping for the train step. None disables it.")
-
+# sampling
 parser.add_argument("--n_res_points", default=10_000, type=int, help="")
 parser.add_argument("--n_trajs", default=1_000, type=int, help="")
 parser.add_argument("--nt_steps", default=100, type=int, help="")
-parser.add_argument("--T", default=3.5, type=float, help="")
-#parser.add_argument("--T", default=0.75, type=float, help="")
-
-parser.add_argument("--L_min", default=-5.0, type=float, help="")
-parser.add_argument("--L_max", default=5.0, type=float, help="")
-
-parser.add_argument("--n_test_points", default=10_000, type=int, help="Number of test points for the testing suite.")
-parser.add_argument("--logging_frequency", default=100, type=int, help="")
-parser.add_argument("--enable_testing", action="store_true", help="Compute L2/L1/rel errors during training (requires analytic solution).")
-
-parser.add_argument("--resampling_frequency", default=100, type=int, help="")
-
-parser.add_argument("--use_rbas", action="store_true", help="Residual-based adaptive sampling")
-parser.add_argument("--use_sdgd", action="store_true", help="Stochastic dimension gradient-descend (for loss in high dims)")
-parser.add_argument("--sdgd_num_dims", default=None, type=int, help="Number of dimensions to use for SDGD. If None, use all dimensions.")
-# smart Defaults
-parser.add_argument("--output_dir", default="run_latest_vanilla_II", type=str, help="")
-
-parser.add_argument("--mode", default="q_pde", type=str, help="score_pde, ll_ode")
-parser.add_argument("--ic_type", default="laplace", type=str, help="gauss, cauchy, laplace")
+parser.add_argument("--resampling_frequency", default=10_000, type=int, help="")
 parser.add_argument("--sampling_type", default="domain_and_trajectories", type=str, help="trajectories, domain")
 parser.add_argument("--f_pde_full_domain", default=1, type=int, help="")
 parser.add_argument("--f_pde_trajs", default=1, type=int, help="")
 parser.add_argument("--f_ic_full_domain", default=1, type=int, help="")
 parser.add_argument("--f_ic_trajs", default=1, type=int, help="")
-
-#parser.add_argument("--f_pde", default=9, type=int, help="")
-#parser.add_argument("--f_bc", default=1, type=int, help="")
-#parser.add_argument("--f_ic", default=1, type=int, help="")
-
-parser.add_argument("--use_lbfgs", action="store_true", help="")
-
-#parser.add_argument("--time_strategy", default="none", type=str, help="none, causal_loss_weighting, time_adapt_sampling")
+parser.add_argument("--use_rbas", action="store_true", help="Residual-based adaptive sampling")
+# testing and logging
+parser.add_argument("--n_test_points", default=10_000, type=int, help="Number of test points for the testing suite.")
+parser.add_argument("--logging_frequency", default=100, type=int, help="")
+parser.add_argument("--enable_testing", action="store_true", help="Compute L2/L1/rel errors during training (requires analytic solution).")
+# causal strategies
 parser.add_argument("--time_strategy", default=0, type=int, choices=[0,1,2], help="0=none, 1=time_adapt_sampling, 2=causal_loss_weighting")
-# for causal_loss_weighting
+    # for causal_loss_weighting
 parser.add_argument("--t_discr", default="0.0, 0.5, 1.5, 3.5", type=str, help="")
 parser.add_argument("--eps", default=0.1, type=float, help="")
-
-
-#
-parser.add_argument("--enable_profiler", action="store_true", help="")
-parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
-parser.add_argument("--enable_memory_tracking", action="store_true", help="Log process RAM and GPU memory at each logging interval.")
+# sdgd
+parser.add_argument("--use_sdgd", action="store_true", help="Stochastic dimension gradient-descend (for loss in high dims)")
+parser.add_argument("--sdgd_num_dims", default=None, type=int, help="Number of dimensions to use for SDGD. If None, use all dimensions.")
 # enable transfer learning / finetuning
 parser.add_argument("--starting_model", default=None, type=str, help="")
 parser.add_argument("--custom_ic_model", default=None, type=str, help="")
 
-parser.add_argument("--clear_dir", action="store_true", help="Erase contents of the output_dir before the training starts.")
-# load the pde mode with default parameters, optionally use the .json file to init the class
-#parser.add_argument("--pde_model_name", default=None, type=str, help="HeatEquation")
-#parser.add_argument("--pde_model_args", default=None, type=str, help="pde_model_args.json")
 
 
 """
@@ -94,27 +86,27 @@ parser.add_argument("--clear_dir", action="store_true", help="Erase contents of 
 """
 
 
-
 import torch
 
 import os, sys
 src_dir = os.path.join(os.path.dirname(__file__), '../src/')
 sys.path.append(src_dir)
 
-
 import architecture, utility
 import run_utils
 
 
-# Main execution
-
+# ARGS:
 args = run_utils.parse_args_with_config(
     parser, [] if "__file__" not in globals() else None
 )
-args.enable_profiler = False
+#args.enable_profiler = True
 args.enable_memory_tracking = True
 args.use_adaptive_weights = True
+args.enable_testing = True
 args.clear_dir = True
+args.use_lbfgs = True
+
 
 d = args.d  # space dims
 D = d + 1   # space + time dims
@@ -155,6 +147,9 @@ print()
 #model = torch.compile(model)
 
 model = architecture.PINN(D, layers, output_dim).to(device)
+if args.glorot_init:
+    model.apply(architecture.init_glorot_weights)
+
 #model = architecture.PINN_base(D, layers, 1).to(device)
 if args.starting_model:
     model.load_state_dict(torch.load(args.starting_model, weights_only=True))
@@ -172,10 +167,6 @@ else:
 active_losses = tuple(k.strip() for k in args.active_losses.split(",") if k.strip())
 print(f"Active losses: {active_losses}")
 
-# Preparation time
-losses = run_utils.init_losses(("total",) + active_losses)
-l2_errs = []
-
 optimizer, scheduler = run_utils.make_optim(model, args)
 loss_weighting = run_utils.make_loss_weighting(args, active_losses, device=device)
 profiler = run_utils.make_profiler(dir_name, args, device)
@@ -188,13 +179,7 @@ else:
 
 import time
 t1 = time.time()
-if args.enable_testing:
-    analytic_fn = score_sde_model.q_analytic
-    testing_suite = utility.ScorePINNTestingSuite(d, analytic_fn)
-    testing_suite.make_test_data(score_sde_model, args.n_test_points)
-    print(f"Testing suite ready ({args.n_test_points} points.")
-else:
-    testing_suite = None
+
 
 
 sampling_type = args.sampling_type
@@ -232,14 +217,30 @@ elif sampling_type == "domain_and_trajectories":
         "n_trajs": args.n_trajs,
         "nt_steps": args.nt_steps,
         "use_rbas": args.use_rbas,
-        #"f_pde": args.f_pde,
-        #"f_bc": args.f_bc,
-        #"f_ic": args.f_ic,
         "f_pde_full_domain": args.f_pde_full_domain,
         "f_pde_trajs": args.f_pde_trajs,
         "f_ic_full_domain": args.f_ic_full_domain,
         "f_ic_trajs": args.f_ic_trajs,
     }
+
+
+if args.enable_testing:
+    testing_suite = utility.TestingSuite(d, device)
+    test_sampling_type = "domain_and_trajectories"
+    sampling_settings = sampling_settings_base | {
+        "f_pde_full_domain": 1,
+        "f_pde_trajs": 0,
+        "f_ic_full_domain": 1,
+        "f_ic_trajs": 0,
+    }
+    sampling_settings["res_points"] = args.n_test_points
+    testing_suite.make_test_data("testing_data.pth", sampling_type, model, pde_model, sampling_settings, active_losses, device, analytic_sol_fn=None, terminal_condition_fn=None)
+    print(f"Testing suite ready ({args.n_test_points} points.")
+else:
+    testing_suite = None
+
+
+
 
 from trainers import PINN_Trainer
 trainer = PINN_Trainer(
@@ -271,6 +272,8 @@ else:
 print()
 
 
+
+losses = run_utils.init_losses(("total",) + active_losses)
 if args.use_lbfgs:
     trainer.optimizer = torch.optim.LBFGS(
         model.parameters(),
@@ -283,17 +286,18 @@ if args.use_lbfgs:
         line_search_fn='strong_wolfe'
     )
     trainer.scheduler = torch.optim.lr_scheduler.ExponentialLR(trainer.optimizer, gamma=0.9)
-    losses_adam, l2_errs_adam = trainer.train_lbfgs(
+    losses_adam, test_log_res_mse, test_log_rel_l2 = trainer.train_lbfgs(
         n_steps=args.n_steps,
         n_steps_decay=args.n_steps_decay,
         resampling_frequency=args.resampling_frequency,
         logging_frequency=args.logging_frequency,
         use_sdgd=args.use_sdgd,
         sdgd_num_dims=sdgd_num_dims,
-        one_batch_per_epoch = True,
+        use_causal_loss_weighting=use_causal_loss_weighting, t_discr=t_discr, eps=args.eps,
+        use_time_adapt_sampling=use_time_adapt_sampling
     )
 else:
-    losses_adam, l2_errs_adam = trainer.train_adam_minibatch(
+    losses_adam, test_log_res_mse, test_log_rel_l2 = trainer.train_adam_minibatch(
         n_steps=args.n_steps,
         n_steps_decay=args.n_steps_decay,
         resampling_frequency=args.resampling_frequency,
@@ -305,7 +309,6 @@ else:
         use_time_adapt_sampling=use_time_adapt_sampling
     )
 run_utils.merge_losses(losses, losses_adam)
-l2_errs += l2_errs_adam
 print("\nAdam training complete!")
 print(utility.get_duration_h_m_s(t1, time.time(), "Adam training"))
 
@@ -316,7 +319,7 @@ print(utility.get_duration_h_m_s(t1, time.time(), "Adam training"))
 print("\nTraining complete!")
 
 run_utils.save_run(
-    dir_name, model, losses, l2_errs, args, device,
+    dir_name, model, losses, args, device,
     head_fn=None,
     loss_weighting=loss_weighting if args.n_steps > 0 else None,
     output_dim=output_dim,
@@ -327,9 +330,15 @@ import plot_results
 file_name = f'{dir_name}/training_loss'
 visualize_training_metrics.plot_loss(losses, file_name)
 if args.enable_testing:
-    file_name = f'{dir_name}/training_l2_error'
-    plot_results.plot_l2(l2_errs, file_name, args.logging_frequency)
-
+    res_mse_data = {k: [d[k] for d in test_log_res_mse] for k in test_log_res_mse[0]}
+    rel_l2_data = {k: [d[k] for d in test_log_rel_l2] for k in test_log_rel_l2[0]}
+    file_name = f'{dir_name}/training_test'
+    #n = len(res_mse_data[list(res_mse_data.keys())[0]])
+    #x = args.logging_frequency * torch.linspace(1, n, n, dtype=torch.int)
+    visualize_training_metrics.plot_test_res_mse(res_mse_data, file_name+'_res_mse')
+    visualize_training_metrics.plot_test_rel_l2(rel_l2_data, file_name+'_rel_l2')
+    torch.save(res_mse_data, f'{file_name}_res_mse.pth')
+    torch.save(rel_l2_data, f'{file_name}_rel_l2.pth')
 
 
 # individual loss term weighting - pde,bc,ic

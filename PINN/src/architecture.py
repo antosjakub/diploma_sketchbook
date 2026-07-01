@@ -273,6 +273,12 @@ class PINN_base(nn.Module):
         return self.net(X)
     
 
+def init_glorot_weights(m):
+    if isinstance(m, nn.Linear):
+        torch.nn.init.xavier_uniform_(m.weight)
+        if m.bias is not None:
+            torch.nn.init.zeros_(m.bias)
+
 
 
 

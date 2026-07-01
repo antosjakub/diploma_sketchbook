@@ -49,12 +49,6 @@ def _make_head_fn(tag, mode, score_sde_model, T):
 
 # ---------------- plotting ----------------
 
-def plot_l2(l2_errs, file_name, testing_frequency):
-    n_logged_pnts = len(l2_errs)
-    steps = testing_frequency * torch.linspace(1, n_logged_pnts, n_logged_pnts, dtype=torch.int)
-    visualize_training_metrics.plot_l2(steps, l2_errs, file_name)
-
-
 def _plot_score_pde(dir_name, model, pde_model, score_sde_model, args, options):
     T = args.T
     model_fn_s = viz.wrapp_model(model)

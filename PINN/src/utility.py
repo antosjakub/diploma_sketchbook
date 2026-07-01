@@ -350,73 +350,108 @@ class ScorePINNTestingSuite:
         return l2_err, l1_err, rel_err
 
 
+import sampling
 class TestingSuite:
-    def __init__(self, d, keep_in_cache=True):
+    def __init__(self, d, device: torch.device):
         self.d = d
-        self.test_file_exists = True
-        self.test_file_path = ""
-        self.keep_in_cache = keep_in_cache
+        self.test_file_exists = False
+        self.test_file_path = None
+        self.device = device
+        self.keep_in_cache = True
     
     def connect_test_data(self, file_path: str):
         import os
-        if os.path.exists(file_path):
-            payload = torch.load(file_path, map_location="cpu")
-            metadata = payload["metadata"]
-            if (metadata["d"] != self.d):
-                raise ValueError(
-                    f"Dimension mismatch. Testing suite has d={self.d}, but the loaded data have d={metadata['d']}."
-                )
-            assert payload["data"]["X"].shape[1] == self.d+1
-            assert payload["data"]["u_true"].shape[1] == 1
-            assert payload["data"]["X"].shape[0] == payload["data"]["u_true"].shape[0]
-        if self.keep_in_cache: self.payload = payload
+        assert os.path.exists(file_path)
+        payload = torch.load(file_path, map_location=self.device)
+        metadata = payload["metadata"]
+        if (metadata["d"] != self.d):
+            raise ValueError(
+                f"Dimension mismatch. Testing suite has d={self.d}, but the loaded data have d={metadata['d']}."
+            )
+        data = payload["data"]
+        active_losses = tuple(metadata.get("active_losses", ()))
+
+        for term in active_losses:
+            X_key = f"X_{term}"
+            precomputed_key = f"precomputed_{term}"
+            if X_key not in data:
+                raise KeyError(f"Missing '{X_key}' in saved testing payload.")
+            if precomputed_key not in data:
+                raise KeyError(f"Missing '{precomputed_key}' in saved testing payload.")
+
+        if "pde" in active_losses:
+            assert data["X_pde"].shape[1] == self.d + 1
+        if "bc" in active_losses:
+            assert data["X_bc"].shape[1] == self.d + 1
+        if "ic" in active_losses:
+            assert data["X_ic"].shape[1] == self.d + 1
+        if metadata.get("has_analytic_pde", False):
+            assert data["analytic_pde"].shape[0] == data["X_pde"].shape[0]
+        if metadata.get("has_terminal_condition", False):
+            assert data["X_tc"].shape[1] == self.d + 1
+            assert data["analytic_tc"].shape[0] == data["X_tc"].shape[0]
+
+        self.payload = payload
         self.test_file_exists = True
         self.test_file_path = file_path
 
 
-    def make_test_data(self, pde_model, n_test_calloc_points, file_path, sampling_strategy="lhs", seed=4242):
-        # Create once, deterministic.
-        cuda_devices = [torch.cuda.current_device()] if torch.cuda.is_available() else []
-        with torch.random.fork_rng(devices=cuda_devices):
-            torch.manual_seed(seed)
-            if torch.cuda.is_available():
-                torch.cuda.manual_seed_all(seed)
+    def make_test_data(self, file_path, sampling_type, model, pde_model, sampling_settings, active_losses, device, analytic_sol_fn=None, terminal_condition_fn=None):
+        def _to_cpu(value):
+            if torch.is_tensor(value):
+                return value.detach().cpu()
+            if isinstance(value, dict):
+                return {k: _to_cpu(v) for k, v in value.items()}
+            return value
 
-            import sampling
-            X, _, _, _ = sampling.sample_collocation_points(
-                self.d,
-                n_test_calloc_points,
-                0,
-                0,
-                sampling_strategy=sampling_strategy,
-                device="cpu",
-            )
+        bundle = sampling.create_dataloaders(
+            sampling_type, model, pde_model,
+            sampling_settings, active_losses, device,
+        )
 
-        # Optional: pre-store analytic truth to avoid recomputing every test call.
-        with torch.no_grad():
-            u_true = pde_model.u_analytic(X)
+        active_losses = tuple(active_losses)
+        data = {}
+        batch_sizes = {}
+        for term in active_losses:
+            loader = bundle[term]
+            x = loader.dataset.X
+            precomputed = loader.dataset.precomputed
+            data[f"X_{term}"] = _to_cpu(x)
+            data[f"precomputed_{term}"] = _to_cpu(precomputed)
+            batch_sizes[term] = loader.batch_size
+
+        if analytic_sol_fn is not None and "pde" in active_losses:
+            X_pde = data["X_pde"]
+            with torch.no_grad():
+                data["analytic_pde"] = _to_cpu(analytic_sol_fn(X_pde))
+
+        T = sampling_settings.get("T", 1.0)
+        if terminal_condition_fn is not None and "ic" in active_losses:
+            X_tc = data["X_ic"].clone()
+            X_tc[:, -1] = T
+            data["X_tc"] = X_tc
+            with torch.no_grad():
+                data["analytic_tc"] = _to_cpu(terminal_condition_fn(X_tc[:, :-1]))
 
         payload = {
             "metadata": {
                 "d": self.d,
-                "N": n_test_calloc_points,
-                "sampling_strategy": sampling_strategy,
-                "seed": seed,
+                "active_losses": active_losses,
+                "batch_sizes": batch_sizes,
+                "sampling_type": sampling_type,
+                "sampling_settings": _to_cpu(sampling_settings),
+                "has_analytic_pde": analytic_sol_fn is not None and "pde" in active_losses,
+                "has_terminal_condition": terminal_condition_fn is not None and "ic" in active_losses,
             },
-            "data": {
-                "X": X,
-                "u_true": u_true,
-            }
+            "data": data,
         }
-        if self.keep_in_cache:
-            self.payload = payload
-        else:
-            torch.save(payload, file_path)
+        self.payload = payload
         self.test_file_exists = True
         self.test_file_path = file_path
+        torch.save(payload, file_path)
 
 
-    def test_model(self, model, test_bs=100_000, device="cpu"):
+    def test_model(self, model, pde_model, device, test_bs=10_000):
 
         import time
         a = time.time()
@@ -431,41 +466,104 @@ class TestingSuite:
                 payload = self.payload
             else:
                 payload = torch.load(self.test_file_path, map_location="cpu")
-            X = payload["data"]["X"]
-            u_true = payload["data"]["u_true"]
-        except:
-            raise "Unable to load the testing data."
+            metadata = payload["metadata"]
+            data = payload["data"]
+        except Exception as exc:
+            raise RuntimeError("Unable to load the testing data.") from exc
 
-        N = X.shape[0]
-        sum_l2 = 0.0
-        sum_l1 = 0.0
-        max_rel = 0.0
-        eps = 1e-10
+        active_losses = tuple(metadata.get("active_losses", ()))
+        metrics_res_mse = {}
+        metrics_rel_l2 = {}
         model.eval()
-        with torch.no_grad():
-            for i in range(0, N, test_bs):
-                j = min(i + test_bs, N)
-                X_chunk = X[i:j].to(device)
-                u_true_chunk = u_true[i:j].to(device)
+        eps = 1e-12
 
-                u_pred = model(X_chunk)
-                err = u_pred - u_true_chunk
+        if "pde" in active_losses:
+            X_pde = data["X_pde"]
+            precomputed_pde = data["precomputed_pde"]
+            sum_sq_pde = 0.0
+            n_pde = len(X_pde)
+            for i in range(0, n_pde, test_bs):
+                j = min(i + test_bs, n_pde)
+                X_chunk = X_pde[i:j].to(device)
+                precomputed_chunk = {k: v[i:j].to(device) for k, v in precomputed_pde.items()}
+                loss_pde = pde_model.pde_loss(X_chunk, model, precomputed_chunk)
+                sum_sq_pde += loss_pde.item() * (j - i)
+            metrics_res_mse["res_mse_pde"] = sum_sq_pde / max(n_pde, 1)
 
-                sum_l2 += torch.sum(err**2).item()
-                sum_l1 += torch.sum(err.abs()).item()
+        if "bc" in active_losses:
+            X_bc = data["X_bc"]
+            precomputed_bc = data["precomputed_bc"]
+            sum_sq_bc = 0.0
+            n_bc = len(X_bc)
+            for i in range(0, n_bc, test_bs):
+                j = min(i + test_bs, n_bc)
+                X_chunk = X_bc[i:j].to(device)
+                precomputed_chunk = {k: v[i:j].to(device) for k, v in precomputed_bc.items()}
+                loss_bc = pde_model.bc_loss(X_chunk, model, precomputed_chunk)
+                sum_sq_bc += loss_bc.item() * (j - i)
+            metrics_res_mse["res_mse_bc"] = sum_sq_bc / max(n_bc, 1)
 
-                rel_chunk = ( (err-eps) / (u_true_chunk-eps) ).abs().max().item()
-                if rel_chunk > max_rel:
-                    max_rel = rel_chunk
+        if "ic" in active_losses:
+            X_ic = data["X_ic"]
+            precomputed_ic = data["precomputed_ic"]
+            sum_sq_ic = 0.0
+            err_sq_ic = 0.0
+            target_sq_ic = 0.0
+            n_ic = len(X_ic)
+            with torch.no_grad():
+                for i in range(0, n_ic, test_bs):
+                    j = min(i + test_bs, n_ic)
+                    X_chunk = X_ic[i:j].to(device)
+                    precomputed_chunk = {k: v[i:j].to(device) for k, v in precomputed_ic.items()}
+                    loss_ic = pde_model.ic_loss(X_chunk, model, precomputed_chunk)
+                    sum_sq_ic += loss_ic.item() * (j - i)
+
+                    u_pred = model(X_chunk)
+                    u_true = precomputed_chunk["ic"]
+                    err_sq_ic += torch.sum((u_pred - u_true) ** 2).item()
+                    target_sq_ic += torch.sum(u_true ** 2).item()
+            metrics_res_mse["res_mse_ic"] = sum_sq_ic / max(n_ic, 1)
+            metrics_rel_l2["rel_l2_ic"] = (err_sq_ic / max(target_sq_ic, eps)) ** 0.5
+
+        if metadata.get("has_analytic_pde", False):
+            X_pde = data["X_pde"]
+            analytic_pde = data["analytic_pde"]
+            err_sq_pde = 0.0
+            target_sq_pde = 0.0
+            n_pde = len(X_pde)
+            with torch.no_grad():
+                for i in range(0, n_pde, test_bs):
+                    j = min(i + test_bs, n_pde)
+                    X_chunk = X_pde[i:j].to(device)
+                    target_chunk = analytic_pde[i:j].to(device)
+                    u_pred = model(X_chunk)
+                    err_sq_pde += torch.sum((u_pred - target_chunk) ** 2).item()
+                    target_sq_pde += torch.sum(target_chunk ** 2).item()
+            metrics_rel_l2["rel_l2_pde"] = (err_sq_pde / max(target_sq_pde, eps)) ** 0.5
+
+        if metadata.get("has_terminal_condition", False):
+            X_tc = data["X_tc"]
+            analytic_tc = data["analytic_tc"]
+            err_sq_tc = 0.0
+            target_sq_tc = 0.0
+            n_tc = len(X_tc)
+            with torch.no_grad():
+                for i in range(0, n_tc, test_bs):
+                    j = min(i + test_bs, n_tc)
+                    X_chunk = X_tc[i:j].to(device)
+                    target_chunk = analytic_tc[i:j].to(device)
+                    u_pred = model(X_chunk)
+                    err_sq_tc += torch.sum((u_pred - target_chunk) ** 2).item()
+                    target_sq_tc += torch.sum(target_chunk ** 2).item()
+            metrics_rel_l2["rel_l2_tc"] = (err_sq_tc / max(target_sq_tc, eps)) ** 0.5
+
         model.train()
 
-        l2_err = (sum_l2 / N)**(1/2)
-        l1_err = sum_l1 / N
-        rel_err = max_rel
+        #metrics_res_mse["res_mse_total"] = sum(metrics_res_mse[k] for k in metrics_res_mse)
 
         b = time.time()
-        print(f"Testing took: {b-a}s")
-        return l2_err, l1_err, rel_err
+        #print(f"Testing took: {b-a}s")
+        return metrics_res_mse, metrics_rel_l2
 
 
 def generate_SPD(d, eps=1e-10, device=None, dtype=torch.float32):

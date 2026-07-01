@@ -172,7 +172,8 @@ class PINN_Trainer:
             self.T_max = self.sampling_settings["T"]
 
         losses_hist_dict = {"total": [], **{k: [] for k in self.active_losses}}
-        l2_errs = []
+        test_res_mse = []
+        test_rel_l2 = []
 
         if self.profiler: self.profiler.make()
 
@@ -226,13 +227,20 @@ class PINN_Trainer:
                     parts.append(f"{k}: {last_losses_dict[k]:.6f}")
                 parts.append(f"lr: {self.optimizer.param_groups[0]['lr']:.6f}")
                 log = ", ".join(parts)
-                if self.testing_suite is not None:
-                    l2_err, l1_err, rel_err = self.testing_suite.test_model(self.model, device=self.device)
-                    l2_errs.append(l2_err)
-                    log += f", L2: {l2_err:.6f}, L1: {l1_err:.6f}, rel_max: {rel_err:.6f}"
-                if memory_sample is not None:
-                    log += f"\n - {self.memory_tracker.format_sample(memory_sample)}"
                 print(log)
+                if self.testing_suite is not None:
+                    test_dict_res_mse, test_dict_rel_l2 = self.testing_suite.test_model(self.model, self.pde_model, device=self.device, test_bs=self.sampling_settings["bs"])
+                    test_log_mse_loss = " - Testing: res MSE | " + \
+                        ", ".join([f"{k}: {v:.6f}" for k,v in test_dict_res_mse.items()])
+                    test_res_mse.append(test_dict_res_mse)
+                    print(test_log_mse_loss)
+                    test_log_rel_l2 = " - Testing: rel L2  | " + \
+                        ", ".join([f"{k}: {v:.6f}" for k,v in test_dict_rel_l2.items()])
+                    test_rel_l2.append(test_dict_rel_l2)
+                    print(test_log_rel_l2)
+                if memory_sample is not None:
+                    mem_log = f" - {self.memory_tracker.format_sample(memory_sample)}"
+                    print(mem_log)
                 if use_causal_loss_weighting:
                     print(len(self.causal_weights_hist_pde), self.causal_weights_hist_pde[-1])
                     print(len(self.causal_losses_hist_pde), self.causal_losses_hist_pde[-1])
@@ -243,30 +251,41 @@ class PINN_Trainer:
             #    l2_name = f'{self.dir_name}/training_l2_error'
             #    torch.save(self.model.state_dict(), f'{self.dir_name}/model_.pth')
             #    torch.save({k: torch.tensor(v) for k, v in losses.items()}, f'{loss_name}_.pth')
-            #    torch.save(torch.tensor(l2_errs), f'{l2_name}_.pth')
+            #    torch.save(torch.tensor(test_log), f'{l2_name}_.pth')
             #    print("\nResults saved.")
 
 
-        return losses_hist_dict, l2_errs
+        return losses_hist_dict, test_res_mse, test_rel_l2
 
 
-    def train_lbfgs(self, n_steps, n_steps_decay, resampling_frequency=2000, testing_frequency=100, use_sdgd=False, sdgd_num_dims=None, one_batch_per_epoch=False):
-        """Train the model using Adam optimizer.
-
-        If one_batch_per_epoch=True, each `si` performs a single gradient step
-        (one batch from each active loader). Otherwise iterates over all batches
-        of the bundle per `si`.
-        """
+    def train_lbfgs(self,
+        n_steps, n_steps_decay, resampling_frequency=2000, logging_frequency=100,
+        use_sdgd=False, sdgd_num_dims=None,
+        use_causal_loss_weighting=False, t_discr=None, eps=1.0,
+        use_time_adapt_sampling=False
+    ):
+        """Train the model using L-BFGS with one minibatch per step."""
         print(f"\n{'='*60}")
         print(f"Starting L-BFGS fine-tuning ({n_steps} steps)")
         print(f"{'='*60}\n")
 
+        if use_causal_loss_weighting:
+            assert type(t_discr) == torch.Tensor, "t_discr not provided"
+            self.causal_weights_hist_pde = []
+            self.causal_losses_hist_pde = []
+            if 'bc' in self.active_losses:
+                self.causal_weights_hist_bc = []
+                self.causal_losses_hist_bc = []
+        if use_time_adapt_sampling:
+            self.time_adapt_sampl_hist = []
+            self.T_max = self.sampling_settings["T"]
 
         if self.profiler: self.profiler.make()
 
-        step_counter = [0]  # mutable counter accessible inside closure
         self.last_losses = None
         self.losses = {"total": [], **{k: [] for k in self.active_losses}}
+        test_res_mse = []
+        test_rel_l2 = []
         self.i = 0
 
         def build_closure(batches_by_name):
@@ -279,7 +298,10 @@ class PINN_Trainer:
                 self.optimizer.zero_grad()
                 with record_function("loss"):
                     per_term = [
-                        self._loss_term(k, batches_by_name, use_sdgd, sdgd_num_dims)
+                        self._loss_term(
+                            k, batches_by_name, use_sdgd, sdgd_num_dims,
+                            use_causal_loss_weighting, t_discr, eps
+                        )
                         for k in self.active_losses
                     ]
                 loss_value = self.loss_weighting.weight_loss(per_term)
@@ -287,36 +309,37 @@ class PINN_Trainer:
                 self.i += 1
                 with record_function("backward"):
                     loss_value.backward()
-                if self.grad_clip_norm is not None:
-                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip_norm)
                 self.last_losses = {k: per_term[i].item() for i, k in enumerate(self.active_losses)}
+                self.last_total_loss = loss_value.item()
 
-                self.losses["total"].append(loss_value.item())
-                for k in self.active_losses:
-                    self.losses[k].append(self.last_losses[k])
                 return loss_value
             return closure
 
-        self.active_losses = [k for k in self.self.active_losses if k in self.active_losses]
-        self._build_bundle()
-        batches_by_name = self._next_batches(self.active_losses)
+        self._build_bundle(0, n_steps, resampling_frequency, use_time_adapt_sampling)
+        batches_by_name = self._next_batches()
         closure_step = build_closure(batches_by_name)
 
         for si in range(n_steps):
+            memory_sample = None
+            if self.memory_tracker is not None:
+                memory_sample = self.memory_tracker.sample(si + 1)
 
             if self.profiler: self.profiler.start(si)
 
             if (si + 1) % resampling_frequency == 0:
                 print("New training data arrived!")
                 with record_function("resample"):
-                    self._build_bundle()
-                    batches_by_name = self._next_batches(self.active_losses)
+                    self._build_bundle(si, n_steps, resampling_frequency, use_time_adapt_sampling)
+                    batches_by_name = self._next_batches()
                     closure_step = build_closure(batches_by_name)
 
             self.i = 0
             self.s = si
             loss = self.optimizer.step(closure_step)
-            step_counter[0] += 1
+            for k in self.active_losses:
+                self.losses[k].append(self.last_losses[k])
+            self.losses["total"].append(self.last_total_loss)
+            #self.losses["total"].append(loss.item())
 
             if (si + 1) % n_steps_decay == 0:
                 self.scheduler.step()
@@ -324,22 +347,44 @@ class PINN_Trainer:
             if type(self.loss_weighting).__name__ == 'AdaptiveWeights':
                 if (si + 1) % 50 == 0:
                     self.optimizer.zero_grad()
-                    per_term_w = [self._loss_term(k, batches_by_name) for k in self.active_losses]
+                    per_term_w = [
+                        self._loss_term(
+                            k, batches_by_name, use_sdgd, sdgd_num_dims,
+                            use_causal_loss_weighting, t_discr, eps
+                        )
+                        for k in self.active_losses
+                    ]
                     self.loss_weighting.update(per_term_w, self.model)
 
             if self.profiler: self.profiler.exit(si)
 
-            if (si + 1) % testing_frequency == 0:
-                parts = [f"Step {si+1}/{n_steps}", f"Loss: {loss.item():.6f}", f"Loss_tot: {self.losses['total'][-1]:.6f}"]
+            if (si + 1) % logging_frequency == 0:
+                parts = [f"Step {si+1}/{n_steps}", f"Loss_ret: {loss.item():.6f}", f"Loss_tot: {self.losses['total'][-1]:.6f}"]
                 for k in self.active_losses:
                     parts.append(f"{k}: {self.last_losses[k]:.6f}")
                 parts.append(f"lr: {self.optimizer.param_groups[0]['lr']:.6f}")
                 log = ", ".join(parts)
                 print(log)
-                print("len(self.losses['total']) = ", len(self.losses['total']))
+                if self.testing_suite is not None:
+                    test_dict_res_mse, test_dict_rel_l2 = self.testing_suite.test_model(
+                        self.model, self.pde_model, device=self.device, test_bs=self.sampling_settings["bs"]
+                    )
+                    test_log_mse_loss = " - Testing: res MSE | " + \
+                        ", ".join([f"{k}: {v:.6f}" for k, v in test_dict_res_mse.items()])
+                    test_res_mse.append(test_dict_res_mse)
+                    print(test_log_mse_loss)
+                    test_log_rel_l2 = " - Testing: rel L2  | " + \
+                        ", ".join([f"{k}: {v:.6f}" for k, v in test_dict_rel_l2.items()])
+                    test_rel_l2.append(test_dict_rel_l2)
+                    print(test_log_rel_l2)
+                if memory_sample is not None:
+                    mem_log = f" - {self.memory_tracker.format_sample(memory_sample)}"
+                    print(mem_log)
+                if use_causal_loss_weighting:
+                    print(len(self.causal_weights_hist_pde), self.causal_weights_hist_pde[-1])
+                    print(len(self.causal_losses_hist_pde), self.causal_losses_hist_pde[-1])
 
-
-        return self.losses, []
+        return self.losses, test_res_mse, test_rel_l2
 
 
 
