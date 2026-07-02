@@ -1,6 +1,6 @@
 import torch
 from torch.profiler import record_function
-import sampling, loss, architecture, utility
+import sampling, loss, utility
 
 
 
@@ -152,7 +152,10 @@ class PINN_Trainer:
         one_batch_per_epoch=False,
         use_sdgd=False, sdgd_num_dims=None,
         use_causal_loss_weighting=False, t_discr=None, eps=1.0,
-        use_time_adapt_sampling=False
+        use_time_adapt_sampling=False,
+        prevent_resampling=False,
+        gradnorm_update_freq=50,
+        term_loss_val=None,
     ):
         """Train the model using Adam optimizer.
 
@@ -186,12 +189,19 @@ class PINN_Trainer:
 
             if self.profiler: self.profiler.start(si)
 
-            if (si + 1) % resampling_frequency == 0:
+            if (not prevent_resampling) and ( (si + 1) % resampling_frequency == 0 ):
+            #if (si + 1) % resampling_frequency == 0:
                 print("New training data arrived!")
                 with record_function("resample"):
                     self._build_bundle(si, n_steps, resampling_frequency, use_time_adapt_sampling)
 
-            if one_batch_per_epoch:
+            if one_batch_per_epoch: 
+                ## create a new iterator and get the entire dataset
+                #batch_term_objs = {
+                #    k: next(iter(self.bundle[k]))
+                #    for k in self.active_losses
+                #}
+                # iterate to the next batch
                 batch_term_objs = self._next_batches()
                 loss_value, last_losses_dict = self.train_adam_step(
                     batch_term_objs, use_sdgd, sdgd_num_dims,
@@ -213,11 +223,14 @@ class PINN_Trainer:
                 self.scheduler.step()
 
             if type(self.loss_weighting).__name__ == 'AdaptiveWeights':
-                with record_function("update_weights"):
-                    if (si + 1) % 50 == 0:
-                        self.optimizer.zero_grad()
-                        per_term_w = [self._loss_term(k, batch_term_objs) for k in self.active_losses]
-                        self.loss_weighting.update(per_term_w, self.model)
+                if (si + 1) % gradnorm_update_freq == 0:
+                    self.optimizer.zero_grad()
+                    per_term_w = [
+                        self._loss_term(k, batch_term_objs, use_sdgd, sdgd_num_dims, use_causal_loss_weighting, t_discr, eps)
+                        for k in self.active_losses
+                    ]
+
+                    self.loss_weighting.update(per_term_w, self.model)
 
             if self.profiler: self.profiler.exit(si)
 
@@ -253,20 +266,25 @@ class PINN_Trainer:
             #    torch.save({k: torch.tensor(v) for k, v in losses.items()}, f'{loss_name}_.pth')
             #    torch.save(torch.tensor(test_log), f'{l2_name}_.pth')
             #    print("\nResults saved.")
-
+            if (term_loss_val is not None) and loss < term_loss_val:
+                return self.losses, test_res_mse, test_rel_l2
 
         return losses_hist_dict, test_res_mse, test_rel_l2
 
 
     def train_lbfgs(self,
         n_steps, n_steps_decay, resampling_frequency=2000, logging_frequency=100,
+        one_batch_per_epoch=False,
         use_sdgd=False, sdgd_num_dims=None,
         use_causal_loss_weighting=False, t_discr=None, eps=1.0,
-        use_time_adapt_sampling=False
+        use_time_adapt_sampling=False,
+        prevent_resampling=False,
+        gradnorm_update_freq=50,
+        term_loss_val=None,
     ):
         """Train the model using L-BFGS with one minibatch per step."""
         print(f"\n{'='*60}")
-        print(f"Starting L-BFGS fine-tuning ({n_steps} steps)")
+        print(f"Starting L-BFGS (n_steps={n_steps})")
         print(f"{'='*60}\n")
 
         if use_causal_loss_weighting:
@@ -282,13 +300,14 @@ class PINN_Trainer:
 
         if self.profiler: self.profiler.make()
 
-        self.last_losses = None
         self.losses = {"total": [], **{k: [] for k in self.active_losses}}
         test_res_mse = []
         test_rel_l2 = []
+
+        self.last_losses = None
         self.i = 0
 
-        def build_closure(batches_by_name):
+        def build_closure(batch_term_objs):
             def closure():
                 # optimizer.zero_grad()
                 # calc loss
@@ -299,7 +318,7 @@ class PINN_Trainer:
                 with record_function("loss"):
                     per_term = [
                         self._loss_term(
-                            k, batches_by_name, use_sdgd, sdgd_num_dims,
+                            k, batch_term_objs, use_sdgd, sdgd_num_dims,
                             use_causal_loss_weighting, t_discr, eps
                         )
                         for k in self.active_losses
@@ -316,8 +335,6 @@ class PINN_Trainer:
             return closure
 
         self._build_bundle(0, n_steps, resampling_frequency, use_time_adapt_sampling)
-        batches_by_name = self._next_batches()
-        closure_step = build_closure(batches_by_name)
 
         for si in range(n_steps):
             memory_sample = None
@@ -326,32 +343,39 @@ class PINN_Trainer:
 
             if self.profiler: self.profiler.start(si)
 
-            if (si + 1) % resampling_frequency == 0:
+            if (not prevent_resampling) and ( (si + 1) % resampling_frequency == 0 ):
                 print("New training data arrived!")
                 with record_function("resample"):
                     self._build_bundle(si, n_steps, resampling_frequency, use_time_adapt_sampling)
-                    batches_by_name = self._next_batches()
-                    closure_step = build_closure(batches_by_name)
 
-            self.i = 0
-            self.s = si
-            loss = self.optimizer.step(closure_step)
+            # prepare the batch
+            if one_batch_per_epoch: 
+                batch_term_objs = self._next_batches()
+                closure_step_fn = build_closure(batch_term_objs)
+                self.i = 0
+                self.s = si
+                loss = self.optimizer.step(closure_step_fn)
+            else:
+                loaders = [self.bundle[k] for k in self.active_losses]
+                for batches in zip(*loaders):
+                    batch_term_objs = dict(zip(self.active_losses, batches))
+                    closure_step_fn = build_closure(batch_term_objs)
+                    self.i = 0
+                    self.s = si
+                    loss = self.optimizer.step(closure_step_fn)
+            self.losses["total"].append(self.last_total_loss)
             for k in self.active_losses:
                 self.losses[k].append(self.last_losses[k])
-            self.losses["total"].append(self.last_total_loss)
-            #self.losses["total"].append(loss.item())
+
 
             if (si + 1) % n_steps_decay == 0:
                 self.scheduler.step()
 
             if type(self.loss_weighting).__name__ == 'AdaptiveWeights':
-                if (si + 1) % 50 == 0:
+                if (si + 1) % gradnorm_update_freq == 0:
                     self.optimizer.zero_grad()
                     per_term_w = [
-                        self._loss_term(
-                            k, batches_by_name, use_sdgd, sdgd_num_dims,
-                            use_causal_loss_weighting, t_discr, eps
-                        )
+                        self._loss_term(k, batch_term_objs, use_sdgd, sdgd_num_dims, use_causal_loss_weighting, t_discr, eps)
                         for k in self.active_losses
                     ]
                     self.loss_weighting.update(per_term_w, self.model)
@@ -383,6 +407,9 @@ class PINN_Trainer:
                 if use_causal_loss_weighting:
                     print(len(self.causal_weights_hist_pde), self.causal_weights_hist_pde[-1])
                     print(len(self.causal_losses_hist_pde), self.causal_losses_hist_pde[-1])
+
+            if (term_loss_val is not None) and loss < term_loss_val:
+                return self.losses, test_res_mse, test_rel_l2
 
         return self.losses, test_res_mse, test_rel_l2
 

@@ -29,27 +29,34 @@ import main_runner
 # ARGS:
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument("--mode", default="class_pde", type=str, help="score_pde, ll_ode, q_pde, class_pde")
 main_runner.add_common_args(parser)
 args = run_utils.parse_args_with_config(
     parser, [] if "__file__" not in globals() else None
 )
-args.d = 2
+# FIXED (heat eq specific)
+args.mode = "class_pde"
 args.L_min = 0
 args.L_max = 1
+args.T = 4.5
 args.f_pde_trajs = 0
 args.f_pde_full_domain = 1
 args.f_ic_trajs = 0
 args.f_ic_full_domain = 1
 
-args.layers="64,64,64,64"
-args.bs=100
-args.n_steps=4_000
+args.d = 2
+args.layers="64,64,64"
+# bs and sampling
+args.bs=1000
+args.n_res_points=1000
+args.prevent_resampling=True
+args.one_batch_per_epoch=True
+# other
+args.n_steps=4000
 args.n_steps_decay=args.n_steps/10
 args.active_losses="pde,bc,ic"
 
-#args.use_lbfgs = True
-args.use_adaptive_weights = True
+args.use_lbfgs = True
+args.use_gradnorm = True
 
 #args.enable_profiler = True
 #args.enable_memory_tracking = True
@@ -108,15 +115,6 @@ sampling_settings_base = {
     "n_res_points": args.n_res_points,
     "bs": args.bs,
 }
-# divide the res points --- 1 : 1/8 : 1/16 (pde, ic, bc)
-sampling_settings_base["f_bc"] = 1 if 'bc' in active_losses else 0
-sampling_settings_base["f_ic"] = 1 if 'ic' in active_losses else 0
-if len(active_losses) == 2:
-    sampling_settings_base["f_pde"] = 9
-elif len(active_losses) == 3:
-    sampling_settings_base["f_pde"] = 8
-else:
-    raise Exception
 print(sampling_settings_base)
 
 if sampling_type == "trajectories":

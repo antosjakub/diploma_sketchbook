@@ -7,9 +7,11 @@ def add_common_args(parser):
     parser.add_argument("--description", default="", type=str, help="Smthg to help identify it in grid search.")
     parser.add_argument("--seed", default=42, type=int, help="Random seed.")
     parser.add_argument("--grad_clip_norm", default=None, type=float, help="Max-norm gradient clipping for the train step. None disables it.")
+    parser.add_argument("--mode", default="class_pde", type=str, help="score_pde, ll_ode, q_pde, class_pde")
     # don't touch this
     parser.add_argument("--gamma", default=0.9, type=float, help="Decay by 0.9 every 2000 steps.")
     parser.add_argument("--lr", default=1e-3, type=float, help="")
+    parser.add_argument("--term_loss_val", default=None, type=float, help="")
     # dir
     parser.add_argument("--output_dir", default="run_latest_vanilla_I", type=str, help="")
     parser.add_argument("--clear_dir", action="store_true", help="Erase contents of the output_dir before the training starts.")
@@ -31,6 +33,7 @@ def add_common_args(parser):
     parser.add_argument("--layers", default="64,64,64,64", type=str, help="")
     #parser.add_argument("--layers", default="128,128,128,128", type=str, help="")
     parser.add_argument("--bs", default=100, type=int, help="")
+    parser.add_argument("--one_batch_per_epoch", action="store_true", help="")
     parser.add_argument("--n_steps", default=4999, type=int, help="")
     #parser.add_argument("--n_steps", default=499, type=int, help="")
     parser.add_argument("--n_steps_decay", default=1_000, type=int, help="Decay by 0.9 every 2000 steps.")
@@ -39,13 +42,15 @@ def add_common_args(parser):
     parser.add_argument("--lambda_bc", default=10.0, type=float, help="")
     parser.add_argument("--lambda_ic", default=10.0, type=float, help="")
     parser.add_argument("--lambda_norm", default=0.1, type=float, help="Weight of the integral p dx = 1 normalization loss.")
-    parser.add_argument("--use_adaptive_weights", action="store_true", help="grad adaptive loss term weighting.")
+    parser.add_argument("--use_gradnorm", action="store_true", help="grad adaptive loss term weighting.")
+    parser.add_argument("--gradnorm_update_freq", default=50, help="how many steps until we update the weights")
     parser.add_argument("--active_losses", default="pde,ic", type=str, help="Comma-separated subset of {pde,bc,ic,norm}. 'pde' is required.")
     # sampling
     parser.add_argument("--n_res_points", default=10_000, type=int, help="")
     parser.add_argument("--n_trajs", default=1_000, type=int, help="")
     parser.add_argument("--nt_steps", default=100, type=int, help="")
     parser.add_argument("--resampling_frequency", default=10_000, type=int, help="")
+    parser.add_argument("--prevent_resampling", action="store_true", help="")
     parser.add_argument("--sampling_type", default="domain_and_trajectories", type=str, help="trajectories, domain")
     parser.add_argument("--f_pde_full_domain", default=1, type=int, help="")
     parser.add_argument("--f_pde_trajs", default=1, type=int, help="")
@@ -195,8 +200,12 @@ def runner(args, pde_model, sampling_settings, sampling_type, testing_suite, hea
             logging_frequency=args.logging_frequency,
             use_sdgd=args.use_sdgd,
             sdgd_num_dims=sdgd_num_dims,
+            one_batch_per_epoch=args.one_batch_per_epoch,
             use_causal_loss_weighting=use_causal_loss_weighting, t_discr=t_discr, eps=args.eps,
-            use_time_adapt_sampling=use_time_adapt_sampling
+            use_time_adapt_sampling=use_time_adapt_sampling,
+            prevent_resampling=args.prevent_resampling,
+            gradnorm_update_freq=args.gradnorm_update_freq,
+            term_loss_val=args.term_loss_val,
         )
     else:
         losses_adam, test_log_res_mse, test_log_rel_l2 = trainer.train_adam_minibatch(
@@ -206,9 +215,12 @@ def runner(args, pde_model, sampling_settings, sampling_type, testing_suite, hea
             logging_frequency=args.logging_frequency,
             use_sdgd=args.use_sdgd,
             sdgd_num_dims=sdgd_num_dims,
-            one_batch_per_epoch = True,
+            one_batch_per_epoch=args.one_batch_per_epoch,
             use_causal_loss_weighting=use_causal_loss_weighting, t_discr=t_discr, eps=args.eps,
-            use_time_adapt_sampling=use_time_adapt_sampling
+            use_time_adapt_sampling=use_time_adapt_sampling,
+            prevent_resampling=args.prevent_resampling,
+            gradnorm_update_freq=args.gradnorm_update_freq,
+            term_loss_val=args.term_loss_val,
         )
     run_utils.merge_losses(losses, losses_adam)
     print("\nAdam training complete!")
@@ -243,12 +255,12 @@ def runner(args, pde_model, sampling_settings, sampling_type, testing_suite, hea
 
 
     # individual loss term weighting - pde,bc,ic
-    if args.use_adaptive_weights:
+    if args.use_gradnorm:
         weights_hist_tensor = torch.stack(loss_weighting.weights_history, dim=1)
         weights_hist = {}
         for i, loss_name in enumerate(active_losses):
             weights_hist[loss_name] = weights_hist_tensor[i]
-        file_name = f'{dir_name}/training_grad_norm'
+        file_name = f'{dir_name}/training_gradnorm'
         torch.save(weights_hist, f'{file_name}.pth')
         visualize_training_metrics.plot_GradNorm_weights(weights_hist, file_name)
 

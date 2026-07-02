@@ -83,7 +83,7 @@ def make_optim(model, args):
 def make_loss_weighting(args, active_losses, device=None):
     """Build Adaptive/Constant weighting with one weight per active loss term."""
     weights = torch.tensor([getattr(args, f"lambda_{k}") for k in active_losses], device=device)
-    if args.use_adaptive_weights:
+    if args.use_gradnorm:
         return loss.AdaptiveWeights(weights=weights)
     return loss.ConstantWeights(weights=weights)
 

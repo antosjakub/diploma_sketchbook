@@ -666,12 +666,19 @@ def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settin
     nt_steps = settings.get("nt_steps", 1_000)
     d = pde_model.d
 
-    (bs_pde, bs_bc, bs_ic, _), (n_interior, n_boundary, n_initial, _) = split_res_points(n_res_points, bs,
-        settings.get("f_pde", 8) if "pde" in active_losses else 0,
-        settings.get("f_bc", 1) if "bc" in active_losses else 0,
-        settings.get("f_ic", 1) if "ic" in active_losses else 0,
-        f_norm=0
-    )
+    #(bs_pde, bs_bc, bs_ic, _), (n_interior, n_boundary, n_initial, _) = split_res_points(n_res_points, bs,
+    #    settings.get("f_pde", 8) if "pde" in active_losses else 0,
+    #    settings.get("f_bc", 1) if "bc" in active_losses else 0,
+    #    settings.get("f_ic", 1) if "ic" in active_losses else 0,
+    #    f_norm=0
+    #)
+    n_cycles = n_res_points // bs
+    bs_pde = bs
+    bs_bc = bs // 8
+    bs_ic = bs // 8
+    n_interior = bs_pde * n_cycles
+    n_boundary =  bs_bc * n_cycles
+    n_initial  =  bs_ic * n_cycles
 
     X_ic = None
     if "ic" in active_losses:
@@ -683,7 +690,7 @@ def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settin
             hi = spatial_domain[:, 1]
         if f_ic_trajs > 0:
             n_ic_full_domain = f_ic_full_domain * n_initial // (f_ic_full_domain + f_ic_trajs)
-            n_ic_trajs =             f_ic_trajs * n_initial // (f_ic_full_domain + f_ic_trajs)
+            n_ic_trajs = n_initial - n_ic_full_domain
             x0_ic_trajs = pde_model.sample_x0(n_ic_trajs)
             X_ic_trajs = contruct_trajs_ic(x0_ic_trajs, n_ic_trajs)
             X_ic_full_domain = sample_ic(n_ic_full_domain, d, sampling_strategy=strategy, device=device)
@@ -775,11 +782,22 @@ def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settin
     if "bc" in active_losses and normals_bc is not None:
         precomputed["bc"]["normals"] = normals_bc
 
+    # check it the sizes are allright
+    assert len(X_pde) == n_interior
+    if 'bc' in active_losses:
+        assert len(X_bc) == n_boundary
+    if 'ic' in active_losses:
+        assert len(X_ic) == n_initial
     X_terms = {"pde": X_pde, "bc": X_bc, "ic": X_ic, "norm": None}
     bs_terms = {"pde": bs_pde, "bc": bs_bc, "ic": bs_ic, "norm": None}
     bundle = {}
     for k in active_losses:
-        bundle[k] = DataLoader(CollocationDataset(X_terms[k], precomputed[k]), batch_size=bs_terms[k], shuffle=True)
+        bundle[k] = DataLoader(
+            CollocationDataset(X_terms[k], precomputed[k]),
+            batch_size=bs_terms[k], shuffle=True,
+            #pin_memory=True if device.type=='cuda' else False
+            #num_workers=
+        )
     return bundle
 
 
