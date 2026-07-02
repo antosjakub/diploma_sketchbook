@@ -677,20 +677,26 @@ def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settin
     if "ic" in active_losses:
         f_ic_full_domain = settings.get("f_ic_full_domain", 1)
         f_ic_trajs = settings.get("f_ic_trajs", 1)
-        n_ic_full_domain = f_ic_full_domain * n_initial // (f_ic_full_domain + f_ic_trajs)
-        n_ic_trajs =             f_ic_trajs * n_initial // (f_ic_full_domain + f_ic_trajs)
-        x0_ic_trajs = pde_model.sample_x0(n_ic_trajs)
-        X_ic_trajs = contruct_trajs_ic(x0_ic_trajs, n_ic_trajs)
         strategy = settings.get("sampling_strategy", "lhs")
-        X_ic_full_domain = sample_ic(n_ic_full_domain, d, sampling_strategy=strategy, device=device)
         if spatial_domain is not None:
             lo = spatial_domain[:, 0]
             hi = spatial_domain[:, 1]
-            X_ic_full_domain = scale_samples__spatial(X_ic_full_domain, lo, hi)
-        X_ic = torch.cat([
-            X_ic_trajs,
-            X_ic_full_domain
-        ], dim=0)
+        if f_ic_trajs > 0:
+            n_ic_full_domain = f_ic_full_domain * n_initial // (f_ic_full_domain + f_ic_trajs)
+            n_ic_trajs =             f_ic_trajs * n_initial // (f_ic_full_domain + f_ic_trajs)
+            x0_ic_trajs = pde_model.sample_x0(n_ic_trajs)
+            X_ic_trajs = contruct_trajs_ic(x0_ic_trajs, n_ic_trajs)
+            X_ic_full_domain = sample_ic(n_ic_full_domain, d, sampling_strategy=strategy, device=device)
+            if spatial_domain is not None:
+                X_ic_full_domain = scale_samples__spatial(X_ic_full_domain, lo, hi)
+            X_ic = torch.cat([
+                X_ic_trajs,
+                X_ic_full_domain
+            ], dim=0)
+        else:
+            X_ic = sample_ic(n_initial, d, sampling_strategy=strategy, device=device)
+            if spatial_domain is not None:
+                X_ic = scale_samples__spatial(X_ic, lo, hi)
 
         #for i in range(d):
         #    print(i, "traj", X_ic_trajs[:,i].min(), X_ic_trajs[:,i].max())
