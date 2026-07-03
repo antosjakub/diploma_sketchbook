@@ -1,0 +1,47 @@
+
+\chapter{Heat Equation}
+
+{
+\color{red}
+\begin{itemize}
+\item class
+\end{itemize}
+
+}
+
+\section{Formulation}
+
+\begin{align}
+\partial_t u - \alpha \Delta u &= 0 \\
+u(x) &= u_D(x) \\
+u(x,t) &= 0
+\end{align}
+where
+$$
+u(x) =
+\prod_{i=1}^d \sin(\pi x_i)
++
+0.67
+\sum_{i=1}^d \sin(2\pi x_i) \left(\prod_{k=1,k\neq i}^d \sin(\pi x_k)\right)
+$$
+
+
+the corresponding analytical solution in then
+
+$$
+u(t,x) =
+e^{-\gamma t}
+\prod_{i=1}^d \sin(\pi x_i)
++
+0.67
+e^{-\delta t}
+\sum_{i=1}^d \sin(2\pi x_i) \left(\prod_{k=1,k\neq i}^d \sin(\pi x_k)\right)
+$$
+where
+\begin{itemize}
+\item $\gamma = \alpha d \pi^2$
+\item $\delta = \alpha (d+3) \pi^2$
+\end{itemize}
+
+
+Chosen so that it is slighlty more interesting then just a product of sines.
