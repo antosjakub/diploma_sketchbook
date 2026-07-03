@@ -1,5 +1,26 @@
 
 
+@article{pinns_original,
+  title = {Physics-informed neural networks: A deep learning framework for solving forward and inverse problems involving nonlinear partial differential equations},
+  journal = {Journal of Computational Physics},
+  volume = {378},
+  pages = {686-707},
+  year = {2019},
+  doi = {https://doi.org/10.1016/j.jcp.2018.10.045},
+  url = {https://www.sciencedirect.com/science/article/abs/pii/S0021999118307125},
+  author = {Maziar Raissi and Paris Perdikaris and George Em Karniadakis},
+  abstract = {We introduce physics-informed neural networks, neural networks that are trained to solve supervised learning tasks while
+  respecting any given laws of physics described by general nonlinear partial differential equations. In this work, we present our
+  developments in the context of solving two main classes of problems: data-driven solution and data-driven discovery of partial differential
+  equations. Depending on the nature and arrangement of the available data, we devise two distinct types of algorithms, namely continuous time
+  and discrete time models. The first type of models forms a new family of data-efficient spatio-temporal function approximators, while the
+  latter type allows the use of arbitrarily accurate implicit Runge-Kutta time stepping schemes with unlimited number of stages. The
+  effectiveness of the proposed framework is demonstrated through a collection of classical problems in fluids, quantum mechanics, reaction-
+  diffusion systems, and the propagation of nonlinear shallow-water waves.}
+}
+
+
+
 @ARTICLE{uni_approx,
   title = {Multilayer feedforward networks are universal approximators},
   journal = {Neural Networks},
@@ -171,4 +192,139 @@
   volume={abs/1412.6980},
   year={2014},
   url={https://arxiv.org/abs/1412.6980}
+}
+
+@book{goodfellow,
+    title={Deep Learning},
+    author={Ian Goodfellow and Yoshua Bengio and Aaron Courville},
+    publisher={MIT Press},
+    url={http://www.deeplearningbook.org},
+    year={2016}
+}
+
+@misc{ad_fd,
+  title = {Automatic Differentiation is Essential in Training Neural Networks for Solving
+  Differential Equations},
+  author = {Chuqi Chen and Yahong Yang and Yang Xiang and Wenrui Hao},
+  year = {2024},
+  eprint = {2405.14099},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG},
+  doi = {https://doi.org/10.48550/arXiv.2405.14099},
+  url = {https://arxiv.org/abs/2405.14099},
+  abstract = {Neural network-based approaches have recently shown significant promise in
+  solving partial differential equations (PDEs) in science and engineering, especially in
+  scenarios featuring complex domains or incorporation of empirical data. One advantage of the
+  neural network methods for PDEs lies in its automatic differentiation (AD), which
+  necessitates only the sample points themselves, unlike traditional finite difference (FD)
+  approximations that require nearby local points to compute derivatives. In this paper, we
+  quantitatively demonstrate the advantage of AD in training neural networks. The concept of
+  truncated entropy is introduced to characterize the training property. Specifically, through
+  comprehensive experimental and theoretical analyses conducted on random feature models and
+  two-layer neural networks, we discover that the defined truncated entropy serves as a
+  reliable metric for quantifying the residual loss of random feature models and the training
+  speed of neural networks for both AD and FD methods. Our experimental and theoretical
+  analyses demonstrate that, from a training perspective, AD outperforms FD in solving PDEs.}
+  }
+
+@misc{comprehensive_analysis,
+  title={A comprehensive analysis of PINNs: Variants, Applications, and Challenges},
+  author={Afila Ajithkumar Sophiya and Akarsh K Nair and Sepehr Maleki and Senthil K.
+  Krishnababu},
+  year={2025},
+  eprint={2505.22761},
+  archivePrefix={arXiv},
+  primaryClass={cs.CE},
+  doi={https://doi.org/10.48550/arXiv.2505.22761},
+  url={https://arxiv.org/abs/2505.22761},
+}
+
+
+
+@misc{lagaris,
+  title={Artificial Neural Networks for Solving Ordinary and Partial Differential Equations},
+  author={I. E. Lagaris and A. Likas and D. I. Fotiadis},
+  year={1997},
+  eprint={physics/9705023},
+  archivePrefix={arXiv},
+  primaryClass={physics.comp-ph},
+  doi={https://doi.org/10.48550/arXiv.physics/9705023},
+  url={https://arxiv.org/abs/physics/9705023},
+}
+
+
+@misc{hal_hands_on_pinns,
+  title = {A hands-on introduction to Physics-Informed Neural Networks for solving partial differential equations with benchmark tests taken from astrophysics and plasma physics},
+  author = {Hubert Baty},
+  year = {2024},
+  eprint = {2403.00599},
+  archivePrefix = {arXiv},
+  url = {https://arxiv.org/abs/2403.00599},
+}
+
+
+@article{comprehensive_review_th,
+  title = {Physics-informed neural networks for differential equation solutions: A comprehensive review},
+  journal = {Neurocomputing},
+  volume = {680},
+  pages = {133317},
+  year = {2026},
+  issn = {0925-2312},
+  doi = {https://doi.org/10.1016/j.neucom.2026.133317},
+  url = {https://www.sciencedirect.com/science/article/pii/S0925231226007149},
+  author = {Subarna Khanra and Vijay Kumar Kukreja and Indu Bala},
+  keywords = {Physics-informed neural networks, Differential equations, Deep learning, Computational physics, Automatic differentiation, Inverse problems},
+  abstract = {Physics-Informed Neural Networks (PINNs) embed governing differential equations into training, enabling solutions of ODEs and PDEs. This review consolidates theoretical foundations (expressive capacity, automatic differentiation) and core methods (loss design, constraint enforcement, sampling, optimization), while surveying applications from baseline PINNs to advanced variants such as multi-physics coupling, domain decomposition, frequency-enhanced representations, and operator-learning hybrids. Comparative synthesis links architectural and training choices to equation type, data conditions, and computational budgets. A unified benchmarking framework is proposed with standard PDE tasks, accuracy metrics, collocation budgets, and transparent reporting for fair comparison with classical solvers. Evidence positions PINNs as complementary to traditional methods-effective for inverse problems, data assimilation, irregular domains, and parametric inference-while challenges remain in scalability, spectral bias, constraint enforcement, and reproducibility. The review offers a coherent synthesis with actionable guidance for scientific and engineering applications.}
+}
+
+
+
+@misc{loss_landscape,
+  title = {Challenges in Training PINNs: A Loss Landscape Perspective},
+  author = {Pratik Rathore and Weimu Lei and Zachary Frangella and Lu Lu and Madeleine Udell},
+  year = {2024},
+  eprint = {2402.01868},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG},
+  url = {https://arxiv.org/abs/2402.01868}
+}
+
+@misc{deepxde,
+  title = {DeepXDE: A deep learning library for solving differential equations},
+  author = {Lu Lu and Xuhui Meng and Zhiping Mao and George E. Karniadakis},
+  year = {2019},
+  eprint = {1907.04502},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG},
+  url = {https://arxiv.org/abs/1907.04502},
+}
+
+
+% gradnorm
+% https://arxiv.org/pdf/1711.02257
+
+% interesting but no:
+% A Robust Multi-Batch L-BFGS Method for Machine Learning
+% https://arxiv.org/pdf/1707.08552
+
+
+@misc{lbfgs_uw,
+  title = {Lecture 23: Limited-Memory BFGS (L-BFGS)},
+  author = {Yudong Chen},
+  year = {2023},
+  note = {UW-Madison CS/ISyE/Math/Stat 726, Spring 2023},
+  url = {https://pages.cs.wisc.edu/~yudongchen/cs726_sp23/Lecture_23_L-BFGS.pdf}
+}
+
+@book{lbfgs_num_opt,
+  title = {Numerical Optimization},
+  author = {Jorge Nocedal and Stephen J. Wright},
+  year = {2006},
+  edition = {2},
+  publisher = {Springer New York},
+  address = {New York, NY},
+  series = {Springer Series in Operations Research and Financial Engineering},
+  isbn = {978-0-387-40065-5},
+  doi = {https://doi.org/10.1007/978-0-387-40065-5},
+  url = {https://link.springer.com/book/10.1007/978-0-387-40065-5}
 }

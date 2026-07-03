@@ -37,25 +37,27 @@ args = run_utils.parse_args_with_config(
 args.mode = "class_pde"
 args.L_min = 0
 args.L_max = 1
-args.T = 4.5
+#args.T = 4.5
+args.T = 5.0
 args.f_pde_trajs = 0
 args.f_pde_full_domain = 1
 args.f_ic_trajs = 0
 args.f_ic_full_domain = 1
 
 args.d = 2
-args.layers="64,64,64"
+args.layers="64,64,64,64"
 # bs and sampling
 args.bs=1000
 args.n_res_points=1000
 args.prevent_resampling=True
 args.one_batch_per_epoch=True
 # other
-args.n_steps=4000
+#args.n_steps=10_000
+args.n_steps=199
 args.n_steps_decay=args.n_steps/10
 args.active_losses="pde,bc,ic"
 
-args.use_lbfgs = True
+args.use_lbfgs = False
 args.use_gradnorm = True
 
 #args.enable_profiler = True

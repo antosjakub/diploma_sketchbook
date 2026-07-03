@@ -55,18 +55,43 @@ class HeatEquation(PDEModel):
         pde_params["k"] = torch.tensor(pde_params["k"])
         self.__init__(self.d, **pde_params)
 
-    def u_spatial(self, x):
-        return torch.prod(torch.sin(self.k*x), dim=1)
-    def u_analytic(self, X):
+    #def u_spatial(self, x):
+    #    return torch.prod(torch.sin(self.k*x), dim=1)
+    def u_analytic(self, X, t0=False):
         # X.shape = (batch size, spatial+time dims)
         # u = sin(k1 x1) ... sin(kn xn) * e^(-alpha*(k1^2+...+kn^2) t)
-        return (
-            self.u_spatial(X[:,:-1]) * torch.exp(- self.alpha * self.k_2 * X[:,-1])
-        ).unsqueeze(dim=1)
-    def u_bc(self, x):
-        return self.u_analytic(x)
+        #return (
+        #    self.u_spatial(X[:,:-1]) * torch.exp(- self.alpha * self.k_2 * X[:,-1])
+        #).unsqueeze(dim=1)
+        if t0 == True:
+            t = torch.zeros_like(X[:,-1:])
+            x = torch.pi*X
+        else:
+            t = X[:,-1:]
+            x = torch.pi*X[:,:-1]
+
+        gamma = self.alpha * self.d * torch.pi**2
+        out = torch.exp(-gamma*t) * torch.prod(torch.sin(x), dim=1, keepdim=True)
+        a = 2.0
+        b = 0.67
+        delta = self.alpha * (self.d-1+a**2) * torch.pi**2
+        out2 = torch.zeros_like(out)
+        for i in range(self.d):
+            o = torch.sin(x)
+            o[:,i:(i+1)] = torch.sin(a*x[:,i:(i+1)])
+            out2 += torch.prod(o, dim=1, keepdim=True)
+        out2 *= b*torch.exp(-delta*t)
+        return out + out2
+
+        out = c*torch.exp(-0.01*t) * torch.sin(x[:,0:1])*torch.sin(x[:,1:2])
+        out += b*torch.exp(-t) * torch.sin(x[:,0:1])*torch.sin(a*x[:,1:2])
+        out += b*torch.exp(-t) * torch.sin(a*x[:,0:1])*torch.sin(x[:,1:2])
+        return out
+
+    def u_bc(self, X):
+        return self.u_analytic(X)
     def u_ic(self, x):
-        return self.u_spatial(x).unsqueeze(dim=1)
+        return self.u_analytic(x, t0=True)
 
     def precompute(self, X_pde, X_bc, X_ic):
         return {

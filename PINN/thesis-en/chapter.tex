@@ -51,7 +51,7 @@ sparse grids combination technique,
 
 
 
-\chapter{Introduction}
+\chapter{Introduction - notes}
 
 PDEs for modelling physical phenomena
 
@@ -77,15 +77,6 @@ performance of PINNs, mostly by
 fPINNS, XPINNS, varPINNS, ...
 
 
-Most physical and engineering problems can be described by partial differential equations (PDEs),
-which are typically solved using numerical methods such as the finite difference method and the finite element method.
-However, conventional numerical discretization approaches face significant challenges in terms of computational efficiency
-and convergence speed when dealing with complex nonlinear PDEs, such as high-
-dimensional nonlinear PDEs, stiff PDEs, PDEs with complex boundary conditions or irregular geometries,
-and multi-scale PDEs. Recently, physics-informed neural networks (PINNs) have emerged as a transforma-
-tive methodology for solving complex PDEs by integrating physical laws intrinsically into deep learning architectures.
-While PINNs effectively overcome mesh dependency and dimensionality constraints inherent in traditional numerical methods,
-they still encounter persistent challenges related to training convergence and generalization robustness
 \cite{systematic_review}
 
 In the past few years, solving PDEs using machine and deep learning methods has emerged as a new and rapidly growing field of scientific machine learning.
@@ -93,7 +84,7 @@ Leveraging the universal approximation theorem \cite{uni_approx} and high expres
 
 first by Lagaris et. at. \cite{lagaris}
 
-Karniadakis in 2019 changes the game \cite{comprehensive}
+Karniadakis in 2019 changes the game \cite{comprehensive_analysis}
 
 climate modelling etc.
 
@@ -101,7 +92,6 @@ climate modelling etc.
 data + physs loss
 solve inverse problems - value of a fucntion or a coefficient from the data
 
-The 2019 publication by Karniadakis et al. was the seminal work that brought about the 
 In combine machine learning with partial differential equation is a unique and simple way that was intuitive to both the machine learning and pde solving communities.
 https://www.sciencedirect.com/science/article/abs/pii/S0021999118307125
 
@@ -144,7 +134,7 @@ simple heat eq
 more challenging smoluchowski
 initial conditions uhlenbeck processes.
 
-\chapter{Introduction 0}
+\chapter{Introduction}
 
 %% PDEs and diffusion pdes
 Partial differential equations are one of the core tools in mathematical physics,
@@ -156,144 +146,114 @@ probability density, or chemical particles in a medium.
 Specific examples include the heat equation, the diffusion equation, and the Fokker-Planck equation.
 
 %% standard mesh FEM etc
-The standard approaches for solving such equaitons numerically
-discretinze the domain before . FD, FEM, FVM. Those method are a de facto standard
-for low-dimensional problems, and here good convergence estimates.
-However, they suffer from the curse of dimensionality,
-as scaling them up to higher dimensions exponentially rises the set of discretization points.
-Thus quickly approaching the memery limitation of existing hardware.
+Standard approaches for solving such equations numerically
+involve grid-based methods such as Finite difference,
+Finite element, and Finite volume methods.
+Due to their transparent construction
+and theoretical convergence estimates,
+those methods are a de facto standard.
+However, their applicability is in practice limited to relatively
+low-dimensional problems,
+as scaling them up to higher dimensions 
+leads to an exponentially rise
+in the number of discretization points.
+Thus quickly approaching the memory limitation of existing hardware.
+%lead to the so called the curse of dimensionality,
+%However, they suffer from the curse of dimensionality,
 
 %% SG
 Several approaches have been developed to combat this challenge.
-One of which are sparse grids and notably, the sparse grid combination technique.
+One of which are so called sparse grids and notably,
+the sparse grid combination technique.
 Sparse grids combination technique circumvents the curse of dimensionality
-by constructing a combinations of lower-dimensional grids,
-thus avoiding the full tensor-product construction.
-Under suitable smoothness assumptions on the solution (smoothening effect of parab?), they provide
-a compromise between approximation accuracy and computational cost, making
-them attractive for moderately high-dimensional problems.
-Sparse grids retain a strong connection to classical, and the formulation of the combiantion technique
-allows reusing exisitng solvers, can run in parallel.
+by constructing a combinations of lower-dimensional anisotropic grids,
+thus avoiding the full tensor-product construction of the standard approach.
+Under suitable smoothness assumptions on the solution, they provide
+a optimal compromise between approximation accuracy and computational cost,
+making them attractive for moderately high-dimensional problems.
+Sparse grids retain a strong connection to classical methods,
+and the formulation of the combiantion technique
+allows directly reusing existing solvers.
+In addition, the special construction of the combination technique
+allows it to be run in parallel.
 
 %% Scientific machine learnaing
 From the other directiion, scientific machine learning active research field.
-THe universal approximation theorem [3] guarantees that, under mild assump-
-tions on the activation function, a sufficiently wide feed-forward network can
-approximate any continuous function on a compact domain to arbitrary accuracy.
-As such neural networks are capable of representing complicated functions.
-flexinble
-now not only empirical, but also theoretical developments
+The universal approximation theorem \cite{uni_approx} guarantees that,
+under mild assumptions on the network architecture,
+a sufficiently wide feed-forward network can
+approximate any continuous function on a compact domain to arbitrary precision.
+As such, neural networks
+have beel applied on problems ranging from climate modelling, biological system, to fusion simulations.
+\cite{hal_hands_on_pinns}
+%Apart from their empirical success, recent work has
+%given rise to many theoretical developments.
 
 %% PINNS history
 Early neural-network approaches to differential
-equations were first proposed by Lagaris et al. [4] in 1999.
+equations were first proposed by Lagaris et al. \cite{lagaris} in 1999.
 However, it was not until 2019, when
-the work of Raissi, Perdikaris, and Karniadakis [5] introtion fo physics-informed neural networks
-that caused large interest in teh field.
+the introduction of physics-informed neural networks
+by of Raissi, Perdikaris, and Karniadakis \cite{pinns_original}
+caused a revolution in the field.
 
 %% PINNS basic
-One of the main advantages of PINNs is their simplicity and integraion into the
-existing neural network formulation.
-When compared to standard solveer, PINNs are mesh-free formulation. Instead
-of constructing a full computational grid, the PDE residual is evaluated at selected
-collocation points. This gives PINNs a natural appeal for high-dimensional
-problems, where traditional mesh-based methods suffer from rapidly increasing
-computational cost.s
+One of the main advantages of PINNs is their simplicity and ease of 
+integration into the existing neural network toolkit.
+In comparison to the standard solvers mentioned above
+PINNs are a mesh-free method.
+Instead of constructing a full computational grid,
+the points can be sampled randomly on the fly.
+This gives PINNs a natural appeal for high-dimensional
+problems, where traditional mesh-based methods suffer from exponentially
+increasing memory requirements.
 
 %% modern PINNS
-Nevertheless, PINNs also have important limitations. Their performance
-depends on the choice of network architecture, sampling strategy, optimization
-method, and weighting of the different loss terms.
-Although many new model arch variants and extensions have been proposed, including
-variants such as fPINNs, XPINNs, and variational PINNs, 
-the reliable and efficient use of PINNs in higher-dimensional
-settings remains an active area of research
+Nevertheless, PINNs also have important limitations.
+As is the case with standard neural networks,
+their performance % mention runtime
+significanlly depends on the choice of network architecture,
+and hyperparameters.
+Although many new model architercutal variants and extensions have been proposed,
+including architectures such as fPINNs, XPINNs, Score PINN, and variational PINNs, 
+just to name a few,
+a reliable and efficient use of PINNs in higher-dimensional
+settings still remains an active area of research.
+
+%very large dims possible with
+%- 100s 1000s but sol at a point:
+%
+%for very high dims
+%- multilevel picard method
+%- deep backward storchastic eq?
+%- deep galerkin
+%on the machine learning side
+%
+%and feynman-kac monte carlo formulation
+
 
 %% This thesis goal:
-This thesis investigates the use of machine learning methods for solving
-diffusion-type partial differential equations in moderate-higher dimensional setting.
+This thesis investigates the use of physical-informed nural netowrks for solving
+diffusion-type partial differential equations in moderate high-dimensional setting.
 These problems are especially relevant
-because probability density functions often live in high-dimensional state spaces.
+because a large subclass of problems, especially those involving 
+probability density functions, often live in high-dimensional state spaces.
 
 %% This thesis struct:
-The first chapters introduce the
+The first chapters descibe the
 mathematical background of diffusion equations, stochastic differential equations,
 and Fokker-Planck equations.
-Sparse grids and sparse grid combination technique
+We follow with introducing the
+sparse grid combination technique.
 After that, feed-forward neural networks and physics-
-7informed neural networks are presented
+informed neural networks are presented.
+
 The numerical part of the thesis considers selected diffusion-type problems
-including the heat equation, the Smoluchowski equation, to Ornstein-Uhlenbeck processes.
+including the heat equation, the Smoluchowski equation, and Ornstein-Uhlenbeck processes.
 These results are used to evaluate the
-accuracy, scalability, and limitations of the considered methods.
-The results are analyzed with respect to accuracy, computational cost,
-and scalability in higher dimensions.
-
-
-\chapter{Introduction III}
-
-The numerical solution of partial differential equations in high-dimensional spaces is one of the central challenges in modern scientific computing. Partial differential equations are used to model a wide range of physical and engineering phenomena, including heat transfer, diffusion, fluid flow, wave propagation, and stochastic dynamics. Among these models, diffusion equations are of particular importance because they describe the spreading of quantities in time and space. Closely related equations, such as the Fokker--Planck equation, also describe the evolution of probability densities associated with stochastic differential equations.
-
-In low dimensions, diffusion equations can often be solved accurately using classical numerical methods. Finite difference methods and finite element methods approximate the solution by discretizing the computational domain and replacing the continuous problem by a finite-dimensional system. These methods are mathematically well understood and have been successfully applied in many areas of science and engineering. However, their direct extension to higher dimensions is severely limited by the curse of dimensionality. If a uniform grid with $n$ points in each coordinate direction is used in a $d$-dimensional domain, the total number of grid points is $n^d$. Even for moderate values of $n$ and $d$, this number becomes prohibitively large.
-
-This dimensional scaling is not only a technical inconvenience, but a fundamental obstacle for many applications. High-dimensional diffusion and Fokker--Planck equations arise naturally when modelling systems with many degrees of freedom. Examples include molecular systems, interacting particle models, stochastic control, uncertainty quantification, and financial mathematics. In such problems, the unknown solution may represent a probability density over a high-dimensional state space. Solving the corresponding PDE on a full grid is usually impossible, and alternative approximation strategies are required.
-
-Several approaches have been developed to address this difficulty. On the classical numerical side, sparse grids provide one way to reduce the cost of high-dimensional approximation. Instead of using all points of a full tensor-product grid, sparse grid methods select or combine lower-dimensional grid structures in a way that preserves much of the approximation power while using significantly fewer degrees of freedom. The sparse grid combination technique is especially attractive because it constructs an approximation from a linear combination of solutions on several anisotropic grids. For sufficiently smooth problems, sparse grids can reduce the computational complexity compared with full-grid methods and are therefore well suited for moderately high-dimensional PDEs.
-
-At the same time, machine learning has become increasingly important in scientific computing. Neural networks are capable of representing complicated functions and have been used successfully in many high-dimensional approximation tasks. This has motivated the development of neural-network-based methods for solving PDEs. Early work by Lagaris et al. \cite{lagaris} showed that neural networks could be used to approximate solutions of differential equations. More recently, physics-informed neural networks (PINNs) have attracted significant attention, especially following the work of Raissi, Perdikaris, and Karniadakis \cite{comprehensive}. PINNs approximate the unknown solution by a neural network and train it by minimizing a loss function that includes the residual of the PDE as well as boundary and initial condition errors.
-
-The key idea behind PINNs is to combine data-driven approximation with physical constraints. The governing equation is not treated as external information, but is built directly into the optimization problem. This makes PINNs flexible and relatively easy to apply to different PDEs. They can be used for forward problems, where the equation and parameters are known, as well as inverse problems, where unknown coefficients or functions are inferred from data. Since the method does not require a fixed mesh, it is particularly appealing for problems where mesh generation is difficult or where the dimension is too large for standard discretization.
-
-Nevertheless, PINNs also have important limitations. Their performance depends on the choice of network architecture, sampling strategy, optimization method, and weighting of the different loss terms. In practice, PINNs may have difficulties with convergence, generalization, boundary accuracy, stiffness, and multiscale behaviour. Although many improved variants have been proposed, including domain-decomposition methods, variational PINNs, fractional PINNs, and extended PINNs \cite{experts_guide}, the efficient and reliable solution of higher-dimensional PDEs remains an open research problem \cite{systematic_review}.
-
-This thesis focuses on solving diffusion equations using machine learning methods in higher dimensions. The aim is not only to apply physics-informed neural networks to diffusion-type problems, but also to understand their behaviour in comparison with structured numerical approaches such as sparse grids. The thesis is concerned with semi-high-dimensional problems, where full-grid discretization is already expensive, but where systematic numerical experiments are still possible.
-
-The diffusion equation is used as a starting point because it is mathematically fundamental and allows clear evaluation of numerical behaviour. More challenging equations, such as the Smoluchowski equation and Fokker--Planck equations related to Ornstein--Uhlenbeck processes, are then considered to study problems with stronger probabilistic motivation. These models provide a natural setting for investigating how neural networks and sparse grid techniques behave as the dimension increases.
-
-The structure of the thesis is as follows. The first chapters introduce the mathematical background of diffusion equations, stochastic differential equations, and Fokker--Planck equations. The curse of dimensionality is then discussed, with emphasis on why standard discretization methods become impractical in higher dimensions. The thesis next introduces sparse grids and the sparse grid combination technique. After that, feed-forward neural networks and physics-informed neural networks are presented. The final chapters contain numerical experiments for selected diffusion-type problems, followed by a discussion of the accuracy, computational efficiency, and scalability of the methods considered.
-
-
-
-\chapter{Introduction II}
-
-Many physical and engineering processes are governed by partial differential equations (PDEs). These equations describe how quantities evolve in space and time and are used to model phenomena such as heat conduction, diffusion, fluid motion, wave propagation, and transport processes. Diffusion equations form a particularly important class of PDEs, since they describe the spreading or smoothing of a quantity over time. They also appear in probability theory, where the Fokker--Planck equation describes the time evolution of probability densities associated with stochastic differential equations.
-
-For decades, PDEs have been solved primarily by classical numerical methods, including finite difference methods, finite element methods, and finite volume methods. These methods approximate the continuous problem by discretizing the computational domain and solving a finite-dimensional algebraic system. In low spatial dimensions, they are highly successful and form the basis of many scientific and engineering simulations. However, their applicability becomes limited when the dimension of the problem increases. A full tensor-product discretization requires a number of grid points that grows exponentially with the dimension, leading to the well-known curse of dimensionality. This makes many high-dimensional PDEs computationally infeasible using standard discretization techniques.
-
-The curse of dimensionality is especially relevant for diffusion-type equations in probabilistic settings. For example, Fokker--Planck equations often describe probability densities over the state space of a stochastic system. If the underlying system has many degrees of freedom, the associated PDE becomes high-dimensional. Such equations occur in statistical physics, molecular dynamics, finance, uncertainty quantification, and other areas. Although Monte Carlo and stochastic methods can sometimes avoid solving the full density equation directly, there remains strong interest in deterministic and machine-learning-based methods that can approximate high-dimensional PDE solutions more efficiently.
-
-Scientific machine learning has recently become an active research field at the intersection of numerical analysis, machine learning, and scientific computing. Neural networks offer a flexible way of approximating functions in high-dimensional spaces, and their success in data-driven modelling has motivated their use for solving differential equations. Early neural-network approaches to differential equations were proposed by Lagaris et al. \cite{lagaris}, while the modern development of physics-informed neural networks (PINNs) was strongly influenced by the work of Raissi, Perdikaris, and Karniadakis \cite{comprehensive}. PINNs solve PDEs by representing the unknown solution with a neural network and training it to satisfy the governing equation, boundary conditions, and initial conditions through a physics-informed loss function.
-
-One of the main advantages of PINNs is their mesh-free formulation. Instead of constructing a full computational grid, the PDE residual is evaluated at selected collocation points. This gives PINNs a natural appeal for high-dimensional problems, where traditional mesh-based methods suffer from rapidly increasing computational cost. PINNs can also incorporate observational data, which makes them suitable not only for forward problems but also for inverse problems, such as estimating unknown parameters, coefficients, or source terms from measurements.
-
-However, despite their empirical success, PINNs are not a complete solution to the challenges of high-dimensional PDEs. Their training can be unstable, slow, or sensitive to hyperparameter choices. The balance between the PDE residual, boundary conditions, initial conditions, and possible data terms can strongly affect the final approximation. Furthermore, PINNs may struggle with stiff systems, multiscale behaviour, sharp gradients, complicated geometries, or high-dimensional domains \cite{systematic_review}. Many recent studies therefore focus on improving PINN performance through modified architectures, adaptive sampling strategies, domain decomposition, variational formulations, or fractional and extended PINN variants \cite{experts_guide}.
-
-This thesis studies the solution of diffusion equations using machine learning methods in higher dimensions. The main objective is to investigate how physics-informed neural networks behave when applied to diffusion-type PDEs beyond the simplest low-dimensional cases. The thesis focuses on semi-high-dimensional settings, where the dimension is sufficiently large to expose the limitations of classical full-grid methods, but still manageable enough to allow controlled numerical experiments and comparisons.
-
-A second important component of this thesis is the sparse grid combination technique. Sparse grids provide a classical numerical approach designed to reduce the cost of high-dimensional approximation. Instead of using a full tensor-product grid, sparse grid methods combine solutions computed on anisotropic lower-resolution grids. Under appropriate smoothness assumptions, this can significantly reduce the number of degrees of freedom while maintaining good approximation accuracy. This makes sparse grids a useful reference point between classical discretization methods and neural-network-based methods.
-
-The thesis combines these perspectives to study diffusion-type PDEs from both numerical and machine-learning viewpoints. It begins with the mathematical background of diffusion equations, stochastic differential equations, and Fokker--Planck equations. It then discusses the curse of dimensionality and explains why direct discretization becomes problematic in higher dimensions. After that, sparse grids, feed-forward neural networks, and physics-informed neural networks are introduced. The numerical part of the thesis considers model problems such as the heat equation, the Smoluchowski equation, and examples related to Ornstein--Uhlenbeck processes. These experiments are used to evaluate the accuracy, scalability, and limitations of the considered methods.
-
-
-
-\chapter{Introduction I}
-
-Partial differential equations (PDEs) are among the most important mathematical tools for modelling physical, biological, and engineering systems. They arise naturally in the description of transport processes, fluid flow, heat transfer, quantum mechanics, population dynamics, and many other phenomena. Among them, diffusion-type equations play a particularly central role, as they describe the evolution of quantities that spread over time, such as temperature, concentration, probability density, or chemical particles in a medium. Important examples include the heat equation, the diffusion equation, and the Fokker--Planck equation, which appears in the probabilistic description of stochastic dynamical systems.
-
-Classical numerical methods for solving PDEs include the finite difference method, the finite element method, and finite volume methods. These approaches rely on discretizing the spatial and temporal domain and approximating the solution on a computational mesh. For low-dimensional problems, such methods are well established and highly effective. However, their computational cost increases rapidly as the dimension of the problem grows. This phenomenon, commonly known as the curse of dimensionality, makes the direct application of standard grid-based numerical methods infeasible for many high-dimensional PDEs. In particular, equations such as high-dimensional diffusion equations or Fokker--Planck equations require a number of discretization points that grows exponentially with dimension when full tensor-product grids are used.
-
-In recent years, machine learning methods have emerged as a promising alternative for solving PDEs in scientific computing. Neural networks are flexible function approximators, and their expressive power makes them suitable candidates for representing high-dimensional solution functions. Building on the universal approximation theorem \cite{uni_approx}, early work by Lagaris et al. \cite{lagaris} proposed neural-network-based approaches for solving differential equations. Later, physics-informed neural networks (PINNs) became one of the most influential frameworks in this area, especially after the work of Raissi, Perdikaris, and Karniadakis \cite{comprehensive}. PINNs incorporate the governing physical laws directly into the loss function by penalizing the residual of the differential equation together with boundary and initial conditions. This allows the method to solve PDEs without requiring a traditional mesh and makes it applicable both to forward and inverse problems.
-
-Despite their flexibility, PINNs still face several important challenges. Their performance can strongly depend on the neural network architecture, the choice of collocation points, the relative weighting of loss terms, and the optimization procedure. Training can become difficult for stiff equations, multiscale problems, complex boundary conditions, or higher-dimensional domains. Although many extensions have been proposed, including variants such as fPINNs, XPINNs, and variational PINNs \cite{experts_guide}, the reliable and efficient use of PINNs in higher-dimensional settings remains an active area of research \cite{systematic_review}.
-
-This thesis investigates the use of machine learning methods for solving diffusion-type equations in higher dimensions. The main focus is on semi-high-dimensional problems, where the dimension is large enough for classical full-grid discretizations to become expensive, but still within a range where structured numerical comparisons are possible. The thesis considers diffusion equations and related Fokker--Planck-type models, which naturally arise in probabilistic settings and stochastic differential equations. These problems are especially relevant because probability density functions often live in high-dimensional state spaces.
-
-In addition to neural-network-based methods, this thesis also considers sparse grids and the sparse grid combination technique. Sparse grids can be understood as carefully selected combinations of lower-dimensional grids that avoid the full tensor-product construction. Under suitable smoothness assumptions, they provide a compromise between approximation accuracy and computational cost, making them attractive for moderately high-dimensional PDEs. Unlike fully mesh-free neural network approaches, sparse grids retain a strong connection to classical numerical discretization while reducing the dimensional scaling of the problem.
-
-The goal of this thesis is therefore to compare and study approaches for solving diffusion equations in higher dimensions, with particular attention to the interaction between classical numerical methods, sparse grid techniques, and physics-informed neural networks. The work explores how these methods behave as the dimension increases, what difficulties arise when scaling standard approaches, and how machine learning can be used to approximate solutions of diffusion-type PDEs.
-
-The thesis is structured as follows. First, the necessary mathematical background on diffusion equations, Fokker--Planck equations, and stochastic differential equations is introduced. Next, the curse of dimensionality and the difficulties of naively scaling classical discretization methods to higher dimensions are discussed. The following chapters introduce sparse grids, feed-forward neural networks, and the PINN framework. Numerical experiments are then presented, starting with simple heat equation examples and continuing to more challenging models such as the Smoluchowski equation and problems related to Ornstein--Uhlenbeck processes. Finally, the results are analyzed with respect to accuracy, computational cost, and scalability in higher dimensions.
-
+accuracy, computational cost, scalability,
+and limitations of the considered methods
+in higher dimensional setting.
 
 
 
@@ -311,24 +271,23 @@ The thesis is structured as follows. First, the necessary mathematical backgroun
 %}
 
 
+
+%Since their inception in .... numerous different competing architercure emerged
+%each design to a particular problem
+%more complex
+%- recursive
+%- transformer
+%focues on the simple original one
+%The universal approximation theorem \cite{uni_approx} guarantees that, under mild assumptions on the activation function, a sufficiently wide feed-forward network can approximate any continuous function on a compact domain to arbitrary accuracy.
 Fundamentaly, neural networks are parametric function approximators.
-
-Since their inception in .... numerous different competing architercure emerged
-each design to a particular problem
-
-more complex
-- recursive
-- transformer
-
-focues on the simple original one
-
-The universal approximation theorem \cite{uni_approx} guarantees that, under mild assumptions on the activation function, a sufficiently wide feed-forward network can approximate any continuous function on a compact domain to arbitrary accuracy.
 Their power lies in their simplicity and the flexibility with which the architecture can be tailored to the specific problem at hand.
 The downside of such flexibility is that it introduces a large number of architectural and hyperparametric choices, and identifying a good combination is often not trivial.
 
 \subsection{Architecture}
 
-A feed-forward neural network, sometimes also called a Multil-Layer Perceptron, is a composition of affine transformations connected by nonlinearities called \emph{activation functions}, denoted as $\sigma$ (e.g.\ $\tanh$, ReLU,...).
+A feed-forward neural network, sometimes also called a Multil-Layer Perceptron,
+is a composition of linear transformations connected by nonlinearities called \emph{activation functions},
+denoted as $\sigma$.
 
 A single hidden layer transforms its input $x \in \mathbb{R}^{d_{l-1}}$ as
 $$
@@ -337,7 +296,7 @@ h^{(l)}(x) = \sigma\!\bigl(W^{(l)} x + b^{(l)}\bigr),
 $$
 where $W^{(l)}$ and $b^{(l)}$ are the \emph{weights} and \emph{biases} of the $l$-th layer.
 
-Stacking $L$ such layers and applying a final activation $a$ gives
+Stacking $L$ such layers and applying a final activation $a$ gives rise to a neural network
 $$
 \mathcal{N}_\theta : \mathbb{R}^{d_{\mathrm{in}}} \to \mathbb{R}^{d_{\mathrm{out}}}
 \qquad
@@ -345,18 +304,21 @@ $$
 $$
 where $\theta = \{W^{(l)}, b^{(l)}\}_{l=1}^{L+1}$ is the set of all trainable parameters.
 
-The nonlinearity $\sigma$ is essential: without it, the above given composition of hidden layes would collapse into a single linear affine map and the network's expressive power would be that of linear regression.
+The nonlinearities $\sigma$ are essential: without them, the above given composition of hidden layes would collapse into a single linear transformation,
+and the network's modelling capacity would be that of linear regression.
 
-The number of hidden layers $L$ (\emph{depth}) and the layer sizes $d_l$ (\emph{width}) together control the capacity, commonly noted as expressive power, of the model.
+The number of hidden layers $L$ (\emph{depth}) and the layer sizes $d_l$ (\emph{width}) together control the capacity,
+commonly reffered to as the expressive power, of the network.
 
 
 
 
 \subsection{Training}
 
-Training a NN amounts to solving an optimization problem in the parameter space of $\theta$.
+Training a neural network requires solving an optimization problem in the parameter space of $\theta$.
 
-Given training data $\{(x_i, y_i)\}_{i=1}^N$ and a loss functional $\ell(\theta)$ measuring the difference between network predictions $\mathcal{N}_\theta(x_i)$ and targets $y_i$ (most commonly using the mean squared error as the metric), one seeks to find
+Given training data $\{(x_i, y_i)\}_{i=1}^N$ and a loss functional $\ell(\theta)$ measuring the difference between network predictions $\mathcal{N}_\theta(x_i)$
+and targets $y_i$ (most commonly using the mean squared error as the metric), one seeks to find
 $$
 \theta^{\star} = \arg\min_{\theta}\, \ell(\theta)
 $$
@@ -369,11 +331,11 @@ with learning rate $\eta > 0$. In practice, more complex variants such as Adam \
 
 A core part of the the training pipeline that enables efficient compuation of the gradient w.r.t the network parameters $\theta$ is \emph{automatic differentiation} (AD).
 Since the ouput of $\mathcal{N}_\theta$ is computed from a finite sequence of elementary operations whose derivatives are known analytically, ($\frac{d}{dx}(x\cdot w) = w, \frac{d}{dx}\tanh{x} = sech^2 x$, etc.),
-we can simply apply the chain rule to obtain $\nabla_\theta \ell$ exactly (up to floating-point round-off).
+we can simply apply the chain rule to obtain $\nabla_\theta \ell$ exactly (up to machine precision).
 
 % note: forward and backpropagation
 
-As we will see in the following section, this very same mechanism is exploited by PINNs to differentiate the network with respect to its spatial and temporal inputs, thus computing the individual terms in the given partial differential equation.
+%As we will see in the following section, this very same mechanism is exploited by PINNs to differentiate the network with respect to its spatial and temporal inputs, thus computing the individual terms in the given partial differential equation.
 
 The full training algorihm for feed-forward neural networks can thus summarized as so:
 
@@ -396,7 +358,7 @@ The full training algorihm for feed-forward neural networks can thus summarized 
 \end{algorithm}
 
 This algorihm is called a \emph{full-batch gradient descent}, since it processes the entire training set simultaneously as a one single batch in a single step.
-However, in cases where the dataset is too big to precess all at once, we split it into mutliple batches and proceed iteratively until we go thus process the entire dataset.
+However, in cases where the dataset is too big to precess all at once, we split it into mutliple batches and proceed iteratively until we thus process the entire dataset:
 \cite{goodfellow}
 
 
@@ -424,65 +386,12 @@ However, in cases where the dataset is too big to precess all at once, we split 
 In the algorihm above, the subset $\mathcal B$ of the training data is called a \emph{batch}, and $B$ is called a \emph{batch size}.
 
 The deciding factor between using a single large batch or set of smaller ones is not just the size of the dataset.
-For exmaple, small batch sizes are more noisy and can thus offer a regulizing effect for the network - enabling it to escape local miniam. On the other hand, large batch sizes give a more accurrate estimate of the gradient.
-The choice also depends on the hardware, espetially when using GPUs - as they are quite limited by VRAM, and their architecture makes them prefer a power of 2 batchsize. 
+For exmaple, small batch sizes are more noisy and can thus offer a regulizing effect for the network
+- enabling it to more efficiently escape local miniam.
+On the other hand, large batch sizes give a more accurrate estimate of the gradient.
+The choice also depends on the hardware, espetially when using GPUs - as they are quite limited by VRAM,
+and their architecture makes them prefer a batch sizes of the power of 2.
 \cite{goodfellow}
-
-
-
-\chapter{PINNs I}
-
-Physics-informed neural networks (PINNs) are a class of neural-network-based methods for solving problems governed by differential equations. They combine the approximation capabilities of feed-forward neural networks with prior knowledge about the physical or mathematical structure of the system under consideration. This prior knowledge is usually given in the form of a differential equation, together with suitable initial and boundary conditions.
-
-The central idea of PINNs is to represent the unknown solution of a differential equation by a neural network. Instead of training the network only on labelled input-output data, the network is trained to satisfy the governing equation itself. This is achieved by constructing a loss function that penalizes the residual of the differential equation, as well as deviations from the prescribed initial and boundary conditions. In this way, the physical model becomes part of the training objective.
-
-Before the development of PINNs, neural networks were already used in scientific computing mainly as flexible approximators of available data. In such settings, the network learns a mapping from input data to output data, but it does not necessarily respect the physical laws that generated the data. PINNs extend this idea by incorporating a priori domain knowledge directly into the learning process. As a result, the network is not only fitted to data, but is also constrained by the underlying mathematical model.
-
-In the context of PDEs, the neural network takes the independent variables, such as space and time, as inputs and returns an approximation of the solution. For example, for a time-dependent problem in a spatial domain $\Omega \subset \mathbb{R}^d$, one may define a neural network
-\[
-    u_\theta : \Omega \times [0,T] \to \mathbb{R},
-\]
-where $\theta$ denotes the trainable parameters of the network. The goal is to choose $\theta$ such that $u_\theta$ approximates the true solution $u$ of the PDE.
-
-A general PDE problem can be written in the form
-\[
-    \mathcal{N}[u](x,t) = 0, \qquad (x,t) \in \Omega \times (0,T],
-\]
-together with boundary and initial conditions
-\[
-    \mathcal{B}[u](x,t) = 0, \qquad (x,t) \in \partial \Omega \times (0,T],
-\]
-and
-\[
-    u(x,0) = u_0(x), \qquad x \in \Omega.
-\]
-Here, $\mathcal{N}$ denotes the differential operator defining the PDE, and $\mathcal{B}$ denotes the boundary operator. In the PINN framework, the exact solution $u$ is replaced by the neural network approximation $u_\theta$. The PDE residual is then given by
-\[
-    r_\theta(x,t) = \mathcal{N}[u_\theta](x,t).
-\]
-
-The derivatives appearing in the residual are computed using automatic differentiation. This is one of the main advantages of PINNs, since it allows the differential equation to be evaluated directly from the neural network representation without constructing finite difference stencils or finite element basis functions. The resulting residual can be evaluated at a set of collocation points sampled from the computational domain.
-
-The loss function typically consists of several terms. A common form is
-\[
-    \mathcal{L}(\theta)
-    =
-    \lambda_r \mathcal{L}_r(\theta)
-    +
-    \lambda_b \mathcal{L}_b(\theta)
-    +
-    \lambda_0 \mathcal{L}_0(\theta),
-\]
-where $\mathcal{L}_r$ is the residual loss corresponding to the PDE, $\mathcal{L}_b$ is the boundary loss, and $\mathcal{L}_0$ is the initial condition loss. The constants $\lambda_r$, $\lambda_b$, and $\lambda_0$ are weights that determine the relative importance of the different terms. If measurement data are available, an additional data loss term can also be included.
-
-An important feature of PINNs is that they can be trained even when no labelled solution data are available. In that case, the method relies entirely on the governing equation and the prescribed initial and boundary conditions. This makes PINNs attractive for solving forward PDE problems, where the aim is to approximate the solution of a known equation. At the same time, PINNs can also be applied to inverse problems, where unknown parameters, coefficients, or source terms are inferred from partial observations.
-
-From a computational point of view, PINNs fit naturally into the existing machine learning pipeline. The solution is represented by a standard feed-forward neural network, the residual is computed using automatic differentiation, and the parameters are optimized using gradient-based methods. This makes PINNs relatively flexible and easy to implement in modern deep learning frameworks.
-
-However, PINNs also have important limitations. The optimization problem is often non-convex and can be difficult to solve. The accuracy of the method depends on the architecture of the network, the distribution of collocation points, the choice of optimizer, and the balance between the different loss terms. In higher-dimensional problems, training can become expensive and unstable, and the method may require careful tuning. For this reason, understanding the practical behaviour of PINNs is essential before applying them to more challenging diffusion-type equations.
-
-The following sections describe the specific PINN architecture used in this thesis, the construction of the loss function, the sampling of collocation points, and the implementation details relevant to the numerical experiments.
-
 
 
 
@@ -502,7 +411,7 @@ In this context, the network learns a mapping from input data to output data,
 but it does not necessarily respect the physical laws unterlying the phenomena.
 
 The novel idea introduced by PINNs was to extend the loss function by an extra term incorporating the knowledge about the phycics.
-As a result, the resulting network becomes less prone to overfitting, and is much more constrained by the physics.
+As a result, the resulting network becomes less prone to overfitting, and the resulting predictions are much more in accordance with the governing physical law(s).
 
 On the other hand, such a formulation allow us to train the network even when no labelel measurement data are available.
 In that case, the loss relies entirely on the governing equation and the prescribed initial and boundary conditions.
@@ -510,31 +419,29 @@ This feature makes them useful as differential equation solvers.
 
 The main attractiveness of PINNs is that they fit naturally into the existing
 machine learning pipeline. The solution is represented by a standard feed-forward
-neural network, the residual is computed using automatic differentiation, and
+neural network, the loss is computed using automatic differentiation, and
 the parameters are optimized using gradient-descent methods.
 This makes PINNs relatively flexible and easy to implement in the existing deep learning frameworks.
 
 However, PINNs also have important limitations.
-The loss landscape in generally non-convex and the resulting optimization problem can be difficult to solve.
 The accuracy of the method is very sensitive to the choice of hyperparameters, such as
 on the architecture of the network,
 the choice of optimizer,
-the balance between the different loss terms,
-and 
-the distribution of training points.
-This problem is even more pronounced in PINNs as we shall see later on.
-In more complex settings, such as our higher-dimensional problems,
+the distribution of training points,
+and the balance between the different loss terms.
+In addition, the loss landscape in generally non-convex and the resulting optimization problem can thus be very difficult to solve.
+%This problem is even more pronounced in PINNs as we shall see later on.
+In more complex settings
 training can become expensive and unstable, and
-the method may require careful tuning.
+the method may require additional tuning.
 For this reason, understanding the
-practical behaviour of PINNs is essential before applying them to more challenging
-diffusion-type equations.
+construction and tools underlying PINNs is essential before applying them
+to the more challenging, in our case
+high-dimensional, setting.
 
 The following sections describe the specific PINN architecture used in this
 thesis, the construction of the loss function, the sampling of collocation points,
-and the implementation details relevant to the numerical experiments.
-
-
+and the implementation details relevant to the subsequent numerical experiments.
 
 
 %We base our PINN architecture on a few crutial publications and based took the inspiration of our implemntation from some existing established codebases.
@@ -608,19 +515,21 @@ where $\theta$ denotes the trainable parameters of the network.
 Since the input consists of the spatial variable $x \in \mathbb{R}^d$ together with time $t \in \mathbb{R}$, the input dimension of the network is
 $d_{\mathrm{in}} = d + 1$, and for a scalar PDE, the output dimension is $d_{\mathrm{out}} = 1$.
 
-In the case where PDE existence theory guarantees a smooth solution,
-we prefer a smooth activation function for the hidden layers,
-generally a hyperbolic tangent, followed by a identity activation for the final output layer.
-However, even in the case of initial / boundary data from $C(\Omega)$ whose first derivatives are discontinuous,
-the hyperbolic tangent is the dominant choice in the literature.
+%In the case where PDE existence theory guarantees a smooth solution,
+%we prefer a smooth activation function for the hidden layers,
+%generally a hyperbolic tangent, followed by a identity activation for the final output layer.
+%However, even in the case of initial / boundary data from $C(\Omega)$ whose first derivatives are discontinuous,
+%the hyperbolic tangent is the dominant choice in the literature.
 % This is because the differential operator
-Moreover, diffusion equaitons tend to smooth out any of discontinuous initial / boundary data.
-Henceforth, we will only consider architectures with $\tanh$ activations.
-%The choice of activation function is particularly important in PINNs. Since
-%the network represents a solution of a differential equation, it is often necessary
-%for the network output to be differentiable with respect to its inputs. For this
-%reason, smooth activation functions are commonly preferred. A standard choice is
-%the hyperbolic tangent activation function,
+%Moreover, diffusion equaitons tend to smooth out any of discontinuous initial / boundary data.
+%Henceforth, we will only consider architectures with $\tanh$ activations.
+
+The choice of activation functions is particularly important in PINNs.
+Since the network represents a solution of a differential equation,
+it is often necessary for the network output to be differentiable with respect to its inputs.
+For this reason, smooth activations function,
+more commonly a hyperbolic tangent, followed by a identity activation for the final output layer
+are generally preferred.
 
 \begin{figure}
     \centering
@@ -634,7 +543,7 @@ Henceforth, we will only consider architectures with $\tanh$ activations.
 \section{Residuum and Loss}
 As previously mentioned,
 the central feature separating physics-informed neural networks from other neural network based strategies for modelling differential equations
-is the specific construction of the loss.
+is the specific construction of the loss function.
 
 Returning to the system 5.1 above, we now define a PDE, BC, and IC \emph{residua} at a space time coordinate $(x,t)$ as
 \begin{align*}
@@ -643,7 +552,7 @@ Returning to the system 5.1 above, we now define a PDE, BC, and IC \emph{residua
 \mathcal R_{ic}(u;x) &= u(x,0) - u_{ic}(x)
 \end{align*}
 
-Next, in our formulation of PINNs, the training data does not contain the target values $u_i$ for the inputs $(x_i,t_i)$,
+Next, in our formulation of PINNs, the training data do not contain the target values $u_i$ for the inputs $(x_i,t_i)$,
 as we don't have access to the solution $u$.
 Instead, the training data only contain a set of points spanning the domain.
 We call such a set of points a \emph{callocation set}, or just \emph{callocaiton points}.
@@ -680,88 +589,282 @@ $$
 $$
 
 
+\section{Training}
+
+%{\color{red}
+%- sample once and fix dataset
+%- sample new dataset every step
+%1 epoch = 1 full batch pass thought the dataset
+%1 epoch = 1 minibatch pass thought the dataset
+%}
+
+The training regime is analogous to that of feed-forward neural network:
+
+%Let us save the training data $\{(x_i,t_i)\}_{i=1}^{N_{pde}}$ as a tensor $\mathbf X_{pde}$ of size $(N_r,d+1)$
+
+\begin{algorithm}[H]
+\caption{Full-Batch Gradient Descent}
+\begin{algorithmic}[1]
+    \Require 
+    \begin{itemize} 
+    \item $u_\theta:\mathbb{R}^{d+1}\to\mathbb{R}$
+    \item callocation sets $X_{pde}, X_{bc}, X_{ic}$
+    \item weights $\lambda_{pde}, \lambda_{bc}, \lambda_{ic}$
+    \end{itemize} 
+    \State \textbf{Initialize} network parameters $\theta$
+    \For{epoch $= 1, \dots, E$}
+        \State Randomly shuffle the callocation points
+        \State \textbf{Forward pass:}
+        \begin{itemize} 
+            \item $u_{pde,i} = u_\theta(x_i,t_i),\quad \forall(x_i,t_i)\in X_{pde}$
+            \item $u_{bc,i} = u_\theta(x_i,t_i),\quad \forall(x_i,t_i)\in X_{bc}$
+            \item $u_{ic,i} = u_\theta(x_i,0),\quad \forall x_i\in X_{ic}$
+        \end{itemize} 
+        \State \textbf{Compute the spatial and temporal derivatives via AD:}
+        \State \textbf{Calculate the loss:}
+        \begin{itemize} 
+        \item $\ell_{pde}(\theta) = \dfrac{1}{N_{pde}}\displaystyle\sum_{i=1}^{N_{pde}} \big(\mathcal R_{pde}(u_{pde,i};x_i,t_i)\big)^2$
+        \item $\ell_{bc}(\theta) = \dfrac{1}{N_{bc}}\displaystyle\sum_{i=1}^{N_{bc}} \big(\mathcal R_{bc}(u_{bc,i};x_i,t_i)\big)^2$
+        \item $\ell_{ic}(\theta) = \dfrac{1}{N_{ic}}\displaystyle\sum_{i=1}^{N_{ic}} \big(\mathcal R_{ic}(u_{bc,i};x_i,0)\big)^2$
+        \item $\ell = \lambda_{pde}\ell_{pde} + \lambda_{bc}\ell_{bc} + \lambda_{ic}\ell_{ic}$
+        \end{itemize} 
+        \State \textbf{Backward pass:} compute $\nabla_\theta \ell$ via backpropagation
+        \State \textbf{Update:} $\theta \leftarrow \theta - \eta\,\nabla_\theta \ell$
+    \EndFor
+    \State \Return $\theta$
+\end{algorithmic}
+\end{algorithm}
+
+The mini-batch version is also analogous to the feed-forward case.
+
+However, in addition to the above presented approaches,
+PINNs
+to ensure better covering, instead of fixing the 
+we repeatedly resample the callocation points at the start off each epoch.
+
+
 \section{Automatic differentiation (AD)}
 {\color{red}
+\begin{itemize}
+\item number of operations, number of tensors to store
+\item as many graphs as there are derivatives?
+\item graph (grad) in a graph (2nd grad) in a graph (backprop to \theta)??
+\item how do they stack?
+\item - foward and reverse torch jac vec and vec jac products
 
-second der
+\item Diagrams:
+\item - decompose the network into elem units
+\item - forward vs reverse mode grad comp
+\item - graph for each der order? graph for first order der, graph for second order der
 
-
+\item Cost:
+\item - linear with batch size
+\item - forward pass same cost as one way auto diff
+\item - $2d$ for laplace, $d^2$ for hess
+\end{itemize}
 }
 
+%So far, we haven't specified how the individual spatial and temporal derivatives
+%making up the PDE residuum are to be computed. Let us adress this now.
 
-So far, we haven't specified how the individual spatial and temporal derivatives
-making up the PDE residuum are to be computed. Let us adress this now.
+So far, we have described the neural network $u_\theta$ as a parametrized approximation of the unknown solution to the differential equation.
+However, in order to construct the PDE residual, we need to compute the derivatives of this networks with respect to its inputs.
+For a time-dependent PDE, those generally include
+\[
+    \partial_t u_\theta(t,x),
+    \qquad
+    \nabla_x u_\theta(t,x),
+    \qquad
+    \Delta_x u_\theta(t,x),
+    \qquad
+    \operatorname{Hess}_x u_\theta
+    \qquad
+    \operatorname{div}_x(A\,\nabla u_\theta)
+\]
 
-% We briefly touched on it when discussing feed forward neural networks.
-As mentioned in chapter 4, during the training of neural networks,
-we employ automatic differentiation to obtain the gradient of the loss function
-with respect to the model weights.
+As mentioned in chapter X discussing feed-forward neural networks,
+we employ automatic differentiaion during the training
+to obtain the gradient of the loss function
+with respect to the model weights and biases.
 
-In PINNs we reuse this strategy to calculate the gradient of the network w.r.t its input $(t,x)$,
-$\nabla_{(t,x)} u_\theta(t,x)$, thus obtaining $\nabla_t u = \partial_t u$ and $\nabla_x u$.
-We can repeat this procedure to obtain higher order derivatives.
+In PINNs we can reuse this strategy to calculate the gradient of the network w.r.t its input $(t,x)$,
+thus obtaining the derivatives $\partial_t u$ and $\nabla_x u$.
+We can repeat this procedure to obtain higher order derivatives, like $\Delta_x u$.
 
 Since its central nature in the of PINNs, lets us devote more time to understanding
 what exactly is going on under the hood, as this knowledge will prove to be
-crutial for scaling PINNs to high dimensional domains.
+crutial when scaling PINNs to high dimensional domains.
+% memory estimates?
 
 \subsection{Fundamentals}
-Neural networks are composed of a elementary mathematical operations and activation functions.
-The majority of the network is a compositoin of transformations units of the type
+Neural networks are composed of elementary %differentialble operations.
+%These include matrix multiplication, addition, multiplication, and the application of activation functions.
+mathematical operations and activation functions.
+A typical layer of a feed-forward neural network has the form
 $$
 h = \sigma(x^T W + b)
 $$
-where $W\in\mathbb R^{M\times N},b\in\mathbb R^N$ are parameters of the network and $x\in\mathbb R^M$ is some input
+where $W\in\mathbb R^{M\times N},b\in\mathbb R^N$ are parameters of the network layers, $x\in\mathbb R^M$ is the input to that layer, 
+and $\sigma$ is an activation function (applied componentwise).
 
-Lets now consider a case where all variables are scalars:
+Lets now consider a case where all meantioned variables are scalars
 $$
 h = \sigma(x w + b)
 $$
-We can interpret this calculation as a directed acyclic graph (DAG), see fig 1.
 
-To calculate a gradient of the output of neural network with respect to some variable, lets say $x$
-we just apply the chain rule multiple times:
+
+The computation above can be decomposed into the elementary operations
 $$
-\frac{d h}{d x} = 
-\frac{d h}{d z} 
-\frac{d z}{d y} 
-\frac{d y}{d x} 
-$$
-$$
-\frac{\partial z}{\partial y} = 
+y = xw,
+\qquad
+z = y + b,
+\qquad
+h = \sigma(z).
 $$
 
+We can interpret this calculation as a \emph{directed acyclic graph} (DAG),
+also called a \emph{computational graph} (see fig TBA). 
+The input variables $x$, $w$, and $b$ are the input nodes of the graph,
+while $h$ is the final ouput node.
+The intermediate quantities $y$ and $z$ are stored as additional nodes.
 
-- decomposes into elementary operations
-- uses chain rule
-- exact up to machine precision
+The derivative of $h$ w.r.t. $x$ is obtained by recursively applying the chain rule along the graph
+$$
+\frac{dh}{dx}
+=
+\frac{dh}{dz}
+\frac{dz}{dy}
+\frac{dy}{dx}.
+$$
+Now, since
+$$
+\frac{dh}{dz} = \sigma'(z),
+\qquad
+\frac{dz}{dy} = 1,
+\qquad
+\frac{dy}{dx} = w,
+$$
+we obtain
+$$
+\frac{dh}{dx}
+=
+\sigma'(z) w
+$$
+as expected.
+
+Automatic differentiation performs this calculation
+by first building the computational graph and storing the intervediate node values
+during the forward evaluation
+and applying the chain rule to compute the requested derivative.
+
+%It is important to distinguish automatic differentiation from numerical differentiation. In finite difference approximations, derivatives are estimated by perturbing the input, for example
+%\[
+%    \frac{du}{dx}(x)
+%    \approx
+%    \frac{u(x+\varepsilon)-u(x)}{\varepsilon}.
+%\]
+%Such approximations introduce a discretization error and depend on the choice of the step size $\varepsilon$. Automatic differentiation, on the other hand, differentiates the exact sequence of elementary operations used to compute the function. Therefore, the resulting derivatives are exact up to floating-point round-off error.
+
+\subsection{TBA: Higher order derivatives}
+
+Back to the graph picure.
+Higher order = track operations in chain rule = new graph
+
+However, in the context of PINNs, we also require a second-order derivatives.
+And here is where the memory cost can become problematic.
+
+In this case,
+a forward-over-reverse-mode differentiation is often advantageous.
+In this case, we first compute the gradient using forward-mode and then 
+get the full hessian using reverse AD.
+
+However, materializing the full hessian is 
+$O(d^2)$
+
+Hessian-vector-product?
+
+In the case of laplacian, the memory only scales linearly as $O(d)$.
+
+one needs the diagonal entries of the Hessian matrix with respect to the spatial variables.
+Computing these terms usually requires repeated differentiation of the first-order derivatives.
+Therefore, the cost of evaluating second-order operators grows with the dimension $d$.
+
+
+\subsection{Forward and Reverse Mode}
+
+There are two main modes of automatic differentiation: forward-mode and reverse-mode.
+Both are based on the chain rule, but they propagate the derivatives in different directions through the computational graph.
+
+Suppose we are differentiating a function $f:\mathbb R^n \to \mathbb R^m$,
+mapping $n$ inputs to $m$ ouputs.
+% cite: https://ocw.mit.edu/courses/18-s096-matrix-calculus-for-machine-learning-and-beyond-january-iap-2023/mit18_s096iap23_lec08.pdf
+
+Forward-mode automatic differentiation propagates derivatives from the inputs to the outputs, where as
+reverse-mode AD operated from output back to the inputs.
+
+The cost of each mode reflects this as well,
+as the forward-mode AD scales proportianally to $n$ (n-dimensional input),
+whereas
+the reverse-mode AD scales proportianally to $m$ (m-dimensional output)
+
+For cases where the number of inputs is much greater than the number of outputs, it is generally
+advantagous to use reverse-mode AD. This is the case for majority of cases, hence
+reverse-mode AD (backpropagation), is the de-facto standard.
+
+However, the situation is not so simple, as the two modes differ significanlty in
+the complexity of their implementaion:
+
+\begin{itemize}
+\item Forward-mode differentiation proceeds in the same order as the computation of the function itself,
+from inputs to outputs. This makes forward-mode AD easier to implement and more efficient.
+
+\item Reverse-mode differentiation proceeds in the opposite direction to ordinary computation.
+As we evaluate the function from inputs to outputs,
+we store the intermediate steps of the computation.
+Then, you run the computation in reverse via chain rule.
+This makes its implemention more complicated, and adds notable storage overhead.
+\end{itemize}
+
+In practice, one should prefer to use forward-mode differentiaion until $n$ becomes sufficiently large.
+For $m=1$, in some cases forward-mode AD stays more efficient all the way until until $n\sim 100$.
+Both methods are mathematically equaivalent and
+share a similar compuration cost, thus the deciding factor is mainly problem specific.
+
+Physics-informed neural networks feature a $d+1$ dimensional
+input and $1$-dimensional output, so prefered mode of automatic-differentiation is not clear a-priori.
+
+To this effect, we later (chapter X) perform a few experiments to decide on the prefered mode of differentiaion.
+
+%In this mode, one computes products of the form
+%\[
+%    Jv,
+%\]
+%where $J$ is the Jacobian matrix of the function and $v$ is a vector. These are called Jacobian-vector products.
+%In this mode, one computes products of the form
+%\[
+%    v^T J,
+%\]
+%called vector-Jacobian products. Standard backpropagation used in neural network training is an example of reverse-mode automatic differentiation.
 
 
 
-DAG - directed acyclic graph
+\subsection{Computational and memory cost of AD}
 
-Let us explore this further - as it will show be to for PINNS.
-Building a computational graph during the forward pass as operations are performed
-Tracking relationships between values through their operations
-Computing gradients during the backward pass by applying the chain rule recursively
-
-
-\subsubsection{Automatic differentiation in PINNs}
-
-wrt to input - only need eval at point - not at neighborhood
-
-graph in a graph in a graph??
-
-how do they stack?
-
-memory needs?
+{\color{red}
+linear scaling with $B$
+backward pass
+    - needs to store intermediate activations from the forward pass
+    - approx same cost as forward
+higher ders
+    - the comp graph of the derivative computation itself has to be differentiable
+    - need to retain the graph for the 1st derivative
+}
 
 
-Diagrams:
-- decompose the network into elem units
-- forward vs reverse mode grad comp
 
-\subsubsection{Implementation}
+
+
+\subsubsection{TBA: Implementation}
 leaves and root
 Function object
     - knows how to compute forward and also its der in backprop step
@@ -783,11 +886,9 @@ i.e. the value of computed gradients is added to the
 grad property of all leaf nodes of computational graph
 
 
-\subsubsection{Automatic differentiation vs. Finite differences}
+\subsubsection{TBA: Automatic differentiation vs. Finite differences}
 
-\cite{fd_ad}
-FD for no hessian operators - laplace, grad, etc ??
-- only 2 extra points - laplace stencil and central der
+\cite{ad_fd}
 
 Training error the main issue for DF
 
@@ -813,215 +914,766 @@ the error rises linaerly
 - need to increase n of steps
 
 
+\section{Optimizers}
+PINNs specific in that, apart from the standard gradient-based optimzers, such as Adam,
+also frequently utilize a second order optimizer, specifically the Limited-memory BFGS (L-BFGS).
+
+\subsection{TBA: Adam}
+- super basics info
+- Q what loss lanscape is it fit for?
+
+first-order gradient-based optimization of
+stochastic objective functions
+
+\cite{king_adam}
+%https://docs.pytorch.org/docs/2.12/generated/torch.optim.Adam.html
 
 
+%\subsection{L-BFGS}
 
-\section{Training}
+% cost
+% n of iters?
+% most expensive op?
+% most expensive op?
 
-{\color{red}
+%\subsubsection{Wiki - BFGS}
+%iterative method
+%
+%BFGS determines the descent direction by preconditioning the gradient with curvature information.
+%It does so by gradually improving an approximation to the Hessian matrix of the loss function,
+%obtained only from gradient evaluations (or approximate gradient evaluations) via a generalized secant method.[2]
+%
+%alg:
+%solve for p_k given B_k and grad f
+%perform line search in dir p_k to find optima a_k
+%- inexact using Wolfe
+%x_k+1 = x_k + a_k p_k
+%update B_k using grad f and and s_k
+%
+%B_0 - initial gues for hess matrix
+%H_0 - initial gues for inv hess matrix
+%also can to do algo for H
+%
+%realies on curvatere $s^T_k\,y_k$ being striclty positive
+%
+%L-BFGS, which is a limited-memory version of BFGS that is particularly suited to problems with very large numbers of variable
 
-- sample once, epoch = 1 pass thought the dataset
 
-- sample new data every step
+\subsection{Limited-memory BFGS (L-BFGS)}
+Limited-memory BFGS method is
+iterative quasi-Newton method for solving unconstrained minimalization problems
+under tight memory constrains.
+
+It is a second order method whose cost grow only linearly
+with the dimension of the parameter space $n$ -
+unlike the original BFGS, or Newton's methods, 
+which grow as $n^2$ and $n^3$ respectively.
+
+As such, it is well equipped for problmes with large number of variables.
+%preconditioning the gradient with curvature infomation 
+%L-BFGS is a computer memory aware variant of the quisi Newton BFGS mothed
+
+\cite{lbfgs_uw}
+
+\subsubsection{
+Broyden-Fletcher-Goldfarb-Shanno algorithm (BFGS)
 }
 
+Consider the unconstrained minimization problem
+$$
+\min_{x\in R^n} f(x)
+$$
+where $f:\mathbb R^n\to \mathbb R$ is differentiable function.
 
-The training regime is analogous to that of feed-forward neural network:
+In Newton's method, we iterate the initial guess, $x_0$, as
+$$
+x_{k+1} = x_k - \left[\nabla^2f(x_k)\right]^{-1}\nabla f(x_k).
+$$
+
+In BFGS, instead of computing the true hessian $\nabla^2 f(x_k)$,
+the method builds an appriximate hessian $B_k$.
+
+The search direction $p_k$ is then given as a soluton to the Newton equation,
+now with the approximated hessian
+$$
+B_k p_k = - \nabla f(x_k)\,.
+$$
+
+A line search in the direction of $p_k$ is then performed to 
+find the next point $x_{k+1}$, by minimizing
+$f(x_k+\alpha\,p_k)$ over $\alpha>0$.
+
+We then define
+$$
+s_k = x_{k+1}-x_k\,, \qquad
+y_k = \nabla f(x_{k+1}) - \nabla f(x_k)
+$$
+and impose the quasi-Newton condition on the update of $B_k$
+$$
+B_{k+1}s_k = y_k \,,
+$$
+which is a secant equation
+expressing the observed change in gradient along the step direction.
+Note, that for $B_{k+1}$ to be positive definite, the condition
+$$
+s_k^T B_{k+1} s_k =
+s_k^T y_k > 0
+$$
+should be satisfied.
+If the functin is non strinly convex, this condition can in some cases be 
+enforced explicitely by the inexact linesearch with wolfre conditions,
+which provide an efficient way to computing an approximate step size $\alpha$
+rather than en exact one.
+%we generally perform a inexact line search according to wolfre conditions -
+
+To maintain symmetry and positive difinitness of $B_k$.
+The hessian update rule is cosntructed as
+$$
+B_{k+1}
+= B_k
++ \frac{y_k y_k^T}{y_k^T s_k}
+- \frac{B_k s_k s_k^T B_k}{s_k^T B_k s_k}.
+$$
+%As long as the initial matrix is positive definite it is possible to show that all the follow matrices will be as well.
+
+%Note the slighlty counter intuitive notaion
+%by $H_k$ we mean the inverse hessian.
+%by $B_k$ we mean the hessian
+%or equivalently, an approximation $H_k = B_k^{-1}$ of the inverse hessian.
+The first step of the presented algorithm amounts to solving 
+$$
+B_k p_k = - \nabla f(x_k)\,.
+$$
+We can however, avoid this computation by
+approximating the inverse Hessian instead of the hessian itself.
+The corresponding form for the appriximate inverse-hessian $H_{k+1}$ is then
+$$
+H_{k+1}
+= H_k + \frac{
+(s_k^T y_k + y_k^T H_k y_k)(s_k s_k^T)
+}{(s_k^T y_k)^2}
+- \frac{
+H_k y_k s_k^T + s_k y_k^T H_k
+}{s_k^T y_k}
+$$
 
 
-%Let us save the training data $\{(x_i,t_i)\}_{i=1}^{N_{pde}}$ as a tensor $\mathbf X_{pde}$ of size $(N_r,d+1)$
+We can summarize the method as so:
 
 \begin{algorithm}[H]
-\caption{Full-Batch Gradient Descent}
+\caption{BFGS}
 \begin{algorithmic}[1]
-    \Require 
-    \begin{itemize} 
-    \item $u_\theta:\mathbb{R}^{d+1}\to\mathbb{R}$
-    \item callocation sets $X_{pde}, X_{bc}, X_{ic}$
-    \item weights $\lambda_{pde}, \lambda_{bc}, \lambda_{ic}$
-    \end{itemize} 
-    \State \textbf{Initialize} network parameters $\theta$
-    \For{epoch $= 1, \dots, E$}
-        \State Randomly shuffle the callocation points
-        \State \textbf{Forward pass:}
-        \begin{itemize} 
-            \item $u_{pde,i} = u_\theta(x_i,t_i),\quad \forall(x_i,t_i)\in X_{pde}$
-            \item $u_{bc,i} = u_\theta(x_i,t_i),\quad \forall(x_i,t_i)\in X_{bc}$
-            \item $u_{ic,i} = u_\theta(x_i,0),\quad \forall x_i\in X_{ic}$
-        \end{itemize} 
-        \State \textbf{Calculate residua and loss:}
-        \begin{itemize} 
-        \item $\ell_{pde}(\theta) = \dfrac{1}{N_{pde}}\displaystyle\sum_{i=1}^{N_{pde}} \big(\mathcal R_{pde}(u_{pde,i};x_i,t_i)\big)^2$
-        \item $\ell_{bc}(\theta) = \dfrac{1}{N_{bc}}\displaystyle\sum_{i=1}^{N_{bc}} \big(\mathcal R_{bc}(u_{bc,i};x_i,t_i)\big)^2$
-        \item $\ell_{ic}(\theta) = \dfrac{1}{N_{ic}}\displaystyle\sum_{i=1}^{N_{ic}} \big(\mathcal R_{ic}(u_{bc,i};x_i,0)\big)^2$
-        \item $\ell = \lambda_{pde}\ell_{pde} + \lambda_{bc}\ell_{bc} + \lambda_{ic}\ell_{ic}$
-        \end{itemize} 
-        \State \textbf{Backward pass:} compute $\nabla_\theta \ell$ via backpropagation
-        \State \textbf{Update:} $\theta \leftarrow \theta - \eta\,\nabla_\theta \ell$
-    \EndFor
-    \State \Return $\theta$
+    \State Obtain the search direction from $p_k=-H_k\nabla f(x_k)$
+    \State Perform 1-dimensional line search
+$$
+\alpha_k = \operatorname{argmin}_\alpha f(x_k+\alpha p_k)\,,
+$$
+or inexact line search with Wolfe conditions to obrain $\alpha_k$.
+    \State Update
+$$
+x_{k+1} = x_{k} + \alpha_k p_k
+$$
+    \State Set
+$$
+s_k = \alpha_k p_k
+$$
+$$
+y_k = \nabla f(x_{k+1}) - \nabla f(x_k)
+$$
+    \State Update the inverse hessian approximation
+$$
+H_{k+1}
+= H_k + \frac{
+(s_k^T y_k + y_k^T H_k y_k)(s_k s_k^T)
+}{(s_k^T y_k)^2}
+- \frac{
+H_k y_k s_k^T + s_k y_k^T H_k
+}{s_k^T y_k}
+$$
 \end{algorithmic}
 \end{algorithm}
 
-\begin{algorithm}[H]
-\caption{Full-batch gradient descent}
-\begin{algorithmic}[1]
-    \Require Neural network $u_\theta: \mathbb{R}^{d+1}\to\mathbb{R}$, weights $\lambda_{pde}, \lambda_{ic}, \lambda_{bc}$
-    \State \textbf{Initialize} network parameters $\theta$
-    \For{epoch $= 1, \dots, E$}
-        \State \textbf{Sample the 3 domains}
-        \State \textbf{Forward pass}
-                %$\hat{u}^i_{pde} = u_\theta(x_i^d)$
-                %$\hat{u}_i = \mathcal{N}_\theta(x_i^d)$
-        \State \textbf{Compute loss for each redisual:}
-               \State $\ell_{pde} = \mathbb{E}\left[(\partial_t\,u_{\theta} - \alpha\,\Delta\,u_{\theta} - f)^2\right]_{\sim\:\mathcal{U}((0,T)\times\Omega)}$
-               \State $\ell_{ic} = \mathbb{E}\left[(u_{\theta} - u_{ic})^2\right]_{\sim\:\mathcal{U}(\Omega)}$
-               \State $\ell_{bc} = \mathbb{E}\left[(u_{\theta} - u_{bc})^2\right]_{\sim\:\mathcal{U}((0,T)\times\partial\Omega)}$
-               %\State $\ell_{pde} = \mathbb{E}\left[(\partial_t\,\hat{u}_{pde} - \alpha\,\Delta\,\hat{u}_{pde} - f)^2\right]_{\sim\:\mathcal{U}((0,T)\times\Omega)}$
-               %\State $\ell_{ic} = \mathbb{E}\left[(\hat{u}_{ic} - u_{ic})^2\right]_{\sim\:\mathcal{U}(\Omega)}$
-               %\State $\ell_{bc} = \mathbb{E}\left[(\hat{u}_{bc} - u_{bc})^2\right]_{\sim\:\mathcal{U}((0,T)\times\partial\Omega)}$
-
-               %$\mathcal{R}^{pde} = \partial_t\,\mathcal{N}_\theta(X) - \alpha\,\Delta\,\mathcal{N}_\theta(X) - f$ \\
-        %\State $\mathcal{R}_{pde} = \partial_t\,\hat{u}_{pde} - \alpha\,\Delta\,\hat{u}_{pde} - f(X)$
-        %\State $\mathcal{R}_{bc} = \hat{u}_{pde} - u_{bc}(X)$
-        %\State $\mathcal{R}_{ic} = \hat{u}_{ic} - u_{ic}(X)$
-        %       $\mathcal{R} = \mathcal{N}\!\left[\mathcal{N}_\theta\right](x_j^c)$
-        %\State \textbf{PDE loss:}
-        %       $\ell_{\text{data}} = \dfrac{1}{N_d}\displaystyle\sum_i \bigl(\hat{u}_i - u_i^d\bigr)^2$
-        %\State \textbf{BC loss:}
-        %       $\ell_{\text{data}} = \dfrac{1}{N_d}\displaystyle\sum_i \bigl(\hat{u}_i - u_i^d\bigr)^2$
-        %\State \textbf{IC loss:}
-        %       $\ell_{\text{phys}} = \dfrac{1}{N_c}\displaystyle\sum_j r_j^2$
-        \State \textbf{Total loss:}
-               $\ell = \lambda_{pde}\ell_{pde} + \lambda_{ic}\,\ell_{ic} + \lambda_{bc}\,\ell_{bc}$
-        \State \textbf{Backward pass \& update:}
-               $\theta \leftarrow \theta - \eta\,\nabla_\theta \ell$
-    \EndFor
-    \State \Return $\theta$
-\end{algorithmic}
-\end{algorithm}
-
-
-\begin{algorithm}[H]
-\caption{Mini-batch gradient descent}
-\begin{algorithmic}[1]
-    \Require Neural network $u_\theta: \mathbb{R}^{d+1}\to\mathbb{R}$, sampled data $\mathbf{X}_{pde}, \mathbf{X}_{ic}, \mathbf{X}_{bc}$
-    \State \textbf{Initialize} network parameters $\theta$
-    \For{epoch $= 1, \dots, E$}
-        \State Shuffle training data
-        \For{each mini-batch $\mathcal{B} \subset \{1,\dots,N\}$, $|\mathcal{B}|=B$}
-            \State \textbf{Forward pass:} compute $\hat{y}_i = \mathcal{N}_\theta(x_i)$ for $i\in\mathcal{B}$
-            \State \textbf{Compute loss:}
-            $\ell(\theta) = \dfrac{1}{B}\displaystyle\sum_{i\in\mathcal{B}}
-                \bigl(\hat{y}_i - y_i\bigr)^2$
-            \State \textbf{Backward pass:} compute $\nabla_\theta \ell$ via backpropagation
-            \State \textbf{Update:} $\theta \leftarrow \theta - \eta\,\nabla_\theta \ell$
-        \EndFor
-        \State Every $k$ epochs, regenerate training data
-    \EndFor
-    \State \Return $\theta$
-\end{algorithmic}
-\end{algorithm}
+\cite{lbfgs_num_opt}
 
 
 
-\section{example archs}
+\subsubsection{L-BFGS}
 
-original pinn implemntation
-ex. burgers, Schroedinger, allen-cahn
-- fixed set of pnts
-100s - 1000s
-lbfgs
-sampled before hand using LHS
-- small networks
-9 layers, 20 neurons
-5 layers 100 neurons
-4 layers 200 neurons
+In practice, the matrices $H_k$ constructed by BFGS are often dense,
+(even in situaitons where the true hessian is itself sparse).
+Storing this dense matrix requires $O(n^2)$ memory, which can be out of reach
+for some problems.
 
-SDGD
-adam
-4 layer, 128
-100k epochs
-liner LR decay to 0
-optional:
-    - parallelilze batches over multiple gpus
-        - res    
-        - loss
-        - grad update
-    - average grad updates
-bs - pg 17
+Limited-memory BFGS provides an memory efficient alternative.
+The key observation is that the iteration of the solution only requires evaluation of
+the matrix-vector product $H_k \nabla f(x_k)$,
+not the full matrix $H_k$.
 
-score pinns
-adam
-hard ic and bc, if non-smooth - no hard contrains, use 20 for bc ic
-- sample every step
-4x512, 4x128
-100k steps
-decay by 0.9 every 10k steps
-each epoch, sample 10k res points from sde
-
-
-AD vs FP
-4layer with 50 = 1,50,50,50,1
-100 res, fixed, ful batch
-Adam
-
-
-
-
-\section{Most important}
-
-General challlanges
-
-- pose a multi-objective optimization problem - weighting the losses
-- issue with high freq
-- computation cost of high-ord ders
-- limited convergence theory and unified training strategies
-https://www.mathworks.com/discovery/physics-informed-neural-networks.html
-
-
-crutial in high dim:
-
-
-- problem formulation
-
-- sampling strategies
-
-- computing gradients - AD
-
-- parallelization ?
-
-
-%\section{Grid search}
+%H_k implicitely using vects S_i, y_i from last few iters
 %
-%sampling
-%
-%loss weighting
+%H_k+1 = V_k H_k ... + sdfsdf = do ercurively
+%all depends on 
+%H_0 and then v v^T
+%never need to contruct H explicietly
+%only need ot store vectors making up the expression y_k, s_k - based on x_k and gradf f(x_k)
 
+Recall the update step for the inverse hessian
+$$
+H_{k+1}
+= H_k
++ \frac{
+(s_k^T y_k + y_k^T H_k y_k)(s_k s_k^T)
+}{
+(s_k^T y_k)^2
+}
+- \frac{
+H_k y_k s_k^T
++
+s_k y_k^T H_k
+}{
+s_k^T y_k
+}
+$$
+We can equivalently rewrite expression as
+%$$
+%H_{k+1} = (I-\rho_k s_k y_k^T)H_k(I-\rho_k y_k s_k^T)
+%+ \rho_k s_k s_k^T,
+%\qquad
+%\rho_k = \frac{1}{y_k^T s_k}.
+%$$
+$$
+H_{k+1} =
+V_{k}^T
+H_{k}
+V_{k}
++
+\rho_{k}s_{k}s_{k}^T
+$$
+where
+$$
+V_k = I - \rho_k y_k s_k^T\,,\quad
+\rho_k = \frac{1}{s_k^T y_k}
+$$
+
+By recursively apply this relation for $H_k$ $m$ times,
+we obtain an expression consisitng only of
+matrices of type $v w^T$,
+and an initial matrix $H_{k-m}$,
+which we set as some sparse or diagonal matrix $H^0$.
+Notice also, that apart from the initial matrix $H^0$,
+this recursively decomposed expression consists only of $m$ pairs of
+vectors $y_k, s_k$.
+
+Next, note that the outer-product matrices allow ut to rewrite
+a matrix-vector multiplication
+as a vector-vector multiplication
+$$
+(u v^T) w = (v^T w) u
+$$
+
+Together, we can thus replace the dense matrix-vector multiplication
+$$
+p_k = -H_k \nabla f(x_k)
+$$
+from step 1, and the inverse hessian update at step 5
+in the BFGS algorithm.
+
+Instead, due to the recursice decoposition of $H_k$ given above, at iteration $k$, L-BFGS computes
+$$
+p_k = -H_k \nabla f(x_k)
+$$
+using only vector-vector multiplications and one sparse-matrix-vector multiplication.
+Algorihtmically, this computation is
+implemented as a the two-loop recursion, 
+requiring on the order of $O(mn)$ vector-vector multiplications
+
+Together, L-BFGS replaces
+the $O(n^2)$ storage of BFGS and a dense matrix-vector multiplication
+by storing only $m$ pairs of $n$-dimensional vectors, and $O(mn)$
+vector-vector multiplications.
+
+When $m \ll n$, and especially when $m$ is treated as a small constant
+(recommended values range from 10 to 100),
+the memory requirement becomes $O(mn)$ - 
+linear in the number of variables.
+
+\cite{lbfgs_uw}
+
+%\subsubsection{UWM: L-BFGS}
+%
+%H_k B_k can be dense
+%
+%O(d^2) memory - dense matrices
+%O(d^2) comp per iter
+%
+%idea:
+%
+%H_k implicitely using vects S_i, y_i from last few iters
+%
+%H_k+1 = V_k H_k ... + sdfsdf = do ercurively
+%all depends on 
+%H_0 and then v v^T
+%never need to contruct H explicietly
+%only need ot store vectors making up the expression y_k, s_k - based on x_k and gradf f(x_k)
+%
+%results:
+%mem and comp to O(d)
+
+
+\subsection{Adam vs L-BFGS}
+% line search steps ~ 10
+% 
+
+pinns: adam good initial explorer
+lbfgs: good final one in convex landscape
+\cite{loss_landscape}
+
+
+
+\section{TBE: Network size and training hyperparameters}
+
+{\color{red}
+system dependent - linear, nonlinear, stiff, ode, pde, timedependent, 
+- netowrk size
+- sampling
+- bs
+- optimizer
+}
+
+The choice of neural network architecture and training hyperparameters plays a
+crutial role in the performance of physics-informed neural networks.
+However, there is not definitive theory linking the differential equation at hand
+to an optimal network architecture.
+
+Various different strategies.
+Here, we present an overview of a few publicaitons and the utilized neural nework and hyperparameter choices.
+overview of commonly utilized 
+
+
+%1d / 2d smaller
+%original pinn implemntation
+%ex. burgers, Schroedinger, allen-cahn
+%- fixed set of pnts
+%100s - 1000s
+%lbfgs
+%sampled before hand using LHS
+%- small networks
+%9 layers, 20 neurons
+%5 layers 100 neurons
+%4 layers 200 neurons
+The original PINN implementation convered 2d spatial and spetial temporal problems,
+including the Burger's, Schroedinger, and Allen-Cahn equaition.
+In all those cases, quite minimal neutal netowork very utilized, 
+ranging from a 9-layer network with 20 neurons per hiddne layer
+to larger network of 4-5 layers and 100-200 neurons per layer.
+The collation poitns we sampled once before training, utilizing
+latin hypercube sampling, on the order of hundreds to thousands.
+The optimizaiton was then performed by utilizing the L-BFGS algorithm,
+either as a standalone solver or as a second stage optimzer
+after an initial stage of first-order Adam regime.
+\cite{pinns_original}
+
+%convection, reaction, wave
+%width 50,100,200,400
+%3 hidd layers
+%10k res pnts
+%glorot init
+%1k,10k,30k iterations
+%lbfgs for 10k
+%- lr 1.0
+%- mem size 100
+%- wolfre line
+In other setting, Rathore,
+employed neural networks with 3 hidden layers and
+with widhts of 50,100,200,400 to solve 
+convection, reaction, wave equaition equaitons in 2 dimensional setting.
+It addition, they report utilizing set fixed set of
+10,000 collation points and trained up to 30,000 epochs.
+Their theoretical and expetimental study suggests that and Adam regime followed
+by a L-BFGS finetunning period is most beneficial.
+This is due to the fact that L-BFGS is ...
+\cite{loss_landscape}
+
+%Allen-cahn, navier stokes, advection
+%4x256, 5x256
+%decay steps (ds)
+%train steps (ts)
+%ds 5k, ts 300k
+%ds 2k, ts 200k
+%ds 2k, ts 100k
+%ds 2k, ts 150k
+%bs 8192
+%bs 4096
+%resample every step
+Meta study
+Similarly, Wang et al report utilizing a 4x256 netwrork on 
+Allen-cahn, navier stokes, advection equations.
+Their study different
+\cite{experts_guide}
+
+reccommedns
+\cite{comprehensive_review_th}
+
+
+exponentially decaying learning rate is 
+10s to 100s of thousand of epochs.
+
+
+%SDGD
+%adam
+%4 layer, 128
+%100k epochs
+%liner LR decay to 0
+%optional:
+%    - parallelilze batches over multiple gpus
+%        - res    
+%        - loss
+%        - grad update
+%    - average grad updates
+%bs - pg 17
+
+%score pinns
+%adam
+%hard ic and bc, if non-smooth - no hard contrains, use 20 for bc ic
+%- sample every step
+%4x512, 4x128
+%100k steps
+%decay by 0.9 every 10k steps
+%each epoch, sample 10k res points from sde
+%
+%AD vs FP
+%4layer with 50 = 1,50,50,50,1
+%100 res, fixed, ful batch
+%Adam
+
+Overall, the training setup used in this thesis is guided by the following
+considerations.
+
+The litarature
+save to assume
+
+First, smaller networks and fixed collocation sets are appropriate
+for classical one- and two-dimensional PINN benchmarks, as in the original PINN
+paper.
+Second, more complex, oscialltory, stiff systems problems benefit from wider
+networks, larger residual batches, and repeated resampling of collocation points.
+Third, Adam with learning-rate decay provides a practical baseline for long training
+runs, while L-BFGS can be useful as a secondary optimizer for smaller or full-batch
+experiments.
+These choices provide a compromise between approximation power,
+optimization stability, and computational feasibility.
+
+
+Base network for 2d:
+\begin{itemize}
+\item hiddned layer neurons 100
+\item 4 layers
+\item fix calloc - 1k,10k pde pnts?
+\item full-batch, or mini batch 128
+\item 10,000 epochs
+\item exp lr decay every 1000 epochs?
+\item hard constr. BC if possible
+\item fixed pde bc ic loss weights
+\end{itemize}
+
+
+%\section{Most important}
+%
+%General challlanges
+%- pose a multi-objective optimization problem - weighting the losses
+%- issue with high freq
+%- computation cost of high-ord ders
+%- limited convergence theory and unified training strategies
+%https://www.mathworks.com/discovery/physics-informed-neural-networks.html
+%
+%crutial in high dim:
+%- problem formulation
+%- sampling strategies
+%- computing gradients - AD
+%- parallelization ?
+
+%\section{TD: NTK}
+%\cite{experts guide}
+%    - high freq signals first -> use RFF
+%    - monitor evals as indicator of conv.
+%    - NTK loss weighting scheme
+%
+%Sifan Wang, Xinling Yu, and Paris Perdikaris. When and why PINNs fail to train: A neural tangent kernel
+%perspective. Journal of Computational Physics, 449:110768, 2022.
+
+
+\section{Multi loss term strategies}
+
+As mentioned in the previous section, one of the major challenges in training PINNs is difficult non-convex loss landscape.
+%optimization problem brough about
+This problem arrises due to the multi-term loss function.
+A standart approach involves setting fixed weighs to each of the loss terms to scale them to comparanle order.
+However, manually determining those values is prone to errors.
+This motivates the introduction of a alternative approachs into the training pipeline.
+
+\subsection{Hard constrains}
+architectuary enforce IC and BC - nn then need to learn only the pde
+% https://arxiv.org/html/2404.16189v3#:~:text=as%20the%20IC%20data%20is,We%20consider%20the%20following%20transformation
+Alternatively, we 
+
+\subsection{Grad Norm}
+%https://pmc.ncbi.nlm.nih.gov/articles/PMC12858974/#:~:text=The%20loss%20function%20in%20PINNs,adaptive%20loss
+% pg 7,8 - ntk
+\cite{experts_guide}
+I a case where the previous approach is problematic,
+we have to result to a different strategy.
+adaptive
+on current training dynamics
+One such strategy is employed by GradNorm.
+
+The idea is based on the observaiton that in order for the optimization
+to tread the terms equally,
+gradients of the individual loss terms to be on the same order
+$$
+\lambda_{pde}
+||\nabla_\theta\ell_{pde}||
+\sim
+\lambda_{bc}
+||\nabla_\theta\ell_{bc}||
+\sim
+\lambda_{ic}
+||\nabla_\theta\ell_{ic}||
+$$
+where $||\cdot||$ denotes the standard euclidean norm:
+$$
+||(v_1,\dots,v_n)|| = \sqrt{\sum_{i=1}^n v_i^2}
+$$
+
+This is achieved by the following stategy:
+First, we calculate
+$$
+\hat\lambda_{r} = 
+\frac{
+||\nabla_\theta\ell_{pde}||
++||\nabla_\theta\ell_{bc}||
++||\nabla_\theta\ell_{ic}||
+}{
+||\nabla_\theta\ell_{r}||
+}
+$$
+update the weights $\lambda_{pde}, \lambda_{ic}, \lambda_{bc}$ by using moving average
+$$
+\lambda_r^{(new)} =
+\alpha \lambda_r^{(prev)}
++ (1-\alpha) \hat\lambda_r
+$$
+
+adaptive weights: 100 updates during training
+
+
+
+\section{Causal training}
+
+In the original PINN architecture, time is handled just as another input dimension without any special treatment.
+But since its incepetions it became apparant that this threatement is not adequete in some cases
+When training PINNs on time-dependent PDEs, the optimizer minimizes the residual over all time steps simultaneously.
+This can lead to causality violation: the network attempts to learn later-time dynamics before earlier-time behavior correctly learned.
+trainsient problems. sensitivity to ic
+\cite{causal_pinns}
+
+Thus a few competing strategies have emerged as a viable alternatives to the original formulation.
+
+\subsection{Time marching}
+One simple approach is to divide the time interval into multiple segments
+and train a separete neural network for each one.
+The networks have to be trained in series,
+as the terminal state of the $k$-th network is taken as the
+initial condition for the $(k+1)$-th network.
+\cite{time_adaptive_pinns}
+
+\subsection{Time-adaptive sampling}
+Alternatively, we might simply address the problem on the sampling side,
+by training the network on a temporal domain that progressively increases during training.
+Concretely, we train the network on the time interval
+$[0,\tau]$, where $\tau$ depends on the current training state simply as
+$\tau\sim \frac{e}{E}\,T$, where $E$ is the total number of epochs and $e$ is the index of the current epoch.
+\cite{time_adaptive_pinns}
+
+
+\subsection{Causal weighting}
+% Wang et al., "Respecting Causality is All You Need" / experts guide
+% also note that large batches are good for hard problems - enhanced convergence and accuracy
+% - but gpus not enough memory
+% - split large batch into smaller subbatches, parallelize loss compute across gpus
+% - compute grad desc. on all
+% - average model param update
+
+A completely different perspective was offered by Wang et al.
+They propose to adress this issue by modifyiing the loss funtion itself:
+by partitioning the time domain $[0,T]$ into $M$ ordered segments
+$[t_{m-1}, t_m),\:m=1,\dots,M\,,\:
+0 = t_0 < t_1 < \cdots < t_M = T,
+$ and computig the PDE and BC losses as
+
+$$
+\ell_{r} = \frac{1}{M}\sum_{m=1}^{M} w_m\, \ell_{r}^{(m)}
+$$
+
+where
+$\ell_{r}^{(m)}$
+is the loss computed from the points falling in the $m$-th time segment $[t_{m-1}, t_m)$, 
+and the causal weight $w_m$ for segment $m$ is an exponential weight that depends on the cumulative residual of all preceding segments:
+$$
+w_m = \exp\!\Biggl(-\varepsilon \sum_{k=1}^{m-1} \ell_{r}^{(k)}\Biggr)
+\,,\quad m=2,\dots,M
+$$
+$$
+w_m = 1
+\,,\quad m=1
+$$
+Here, $\varepsilon > 0$ is a causality parameter controlling the strictness of the temporal ordering.
+When $\varepsilon = 0$, all segments are weighted equally (standard training).
+As $\varepsilon \to \infty$, the training concentrates entirely on the earliest segment whose residual has not yet converged.
+
+%All $w_m$ intiialize by 1
+
+Note that the weights $w_m$ are detached from the computational graph, that is, the backward pass sees them only as scalars with no computation graph behind them.
+
+
+\section{Other}
+activations - tanh / silu (smooth)
+$$
+silu(x) = x \cdot \sigma(x)
+$$
+NNs learn low freq sol first
+
+
+\subsection{TBA: Random Fourier features}
+As reported by , neural networks are biased for learning low frequency signals first
+before proceeding to learn high freq ones.
+\cite{experts_guide}
+
+In 2019, Rahaman et al.
+consider uniform distributio of training data
+learn low freq smooth patterns before high freq ones
+learn low freq first even when high freq have large amplitudes
+low freq stable when perturbing netwrork params
+consider nns with relu activations trained via gradient descent
+use fourier analysis
+call this phenomena spectral bias
+\cite{spectral_bias_relu}
+
+More interesting for our case:
+extends to non-uniform data - in the context of pinns - one region sampled more than other
+use NTK (Neural Tanget Kernel) theory
+- looks at $K(x_i,x_j)=
+<\frac{\partial NN_\theta(x_i)}{\partial \theta},
+<\frac{\partial NN_\theta(x_j)}{\partial \theta}>$
+consider training for harmonic target function with freq $\kappa$
+speed of training convergence at a points $x$ is proportial to
+$O(\frac{\kappa^d}{p(x)})$ where $p(x)$ is a local data density
+$d$ - input dimension of the NN
+\cite{freq_bias_NTK}
+
+solution coming from computer vision
+$$
+\gamma(x) =
+\begin{pmatrix}
+    \cos(2\pi B x)\\
+    \sin(2\pi B x)
+\end{pmatrix}
+$$
+$B\in\mathbb R^{m\times d}$ sampled from Gaussian distribution $\mathcal N(0,\sigma^2)$
+spatial / tempotal
+\cite{fourfeat}
+
+
+\section{Loss landscape}
+TD:
+Summarize the most important influencers of the loss landacape
+
+short - give just a table or smthg
+
+\subsection{BS theory}
+The deciding factor between using a single large batch or set of smaller ones is not just the size of the dataset.
+For exmaple, small batch sizes are more noisy and can thus offer a regulizing effect for the network - enabling it to escape local miniam. On the other hand, large batch sizes give a more accurrate estimate of the gradient.
+The choice also depends on the hardware, espetially when using GPUs - as they are quite limited by VRAM, and their architecture makes them prefer a power of 2 batchsize. 
+\cite{goodfellow}
+\subsection{AD vs FD}
+\subsection{Adam vs LBFGS}
+\subsection{loss terms - weights}
+
+
+%\subsubsection{Random Weight Factorization}
+%% arXiv:2308.08468, Sec 4.3
+%
+%Standard PINN training often suffers from slow convergence due to the loss landscape geometry.
+%Random Weight Factorization (RWF) \cite{rwf_modified_mlp} reparametrizes each weight matrix by factoring it into a diagonal scale matrix and a weight factor:
+%$$
+%W^{(l)} = \operatorname{diag}\!\bigl(\exp(s^{(l)})\bigr)\, V^{(l)}, \qquad l = 1,\dots,L{+}1,
+%$$
+%where $s^{(l)} \in \mathbb{R}^{d_l}$ is a trainable scale vector and $V^{(l)} \in \mathbb{R}^{d_l \times d_{l-1}}$ is the corresponding weight factor.
+%The exponential parametrization ensures that the per-neuron scales remain strictly positive and can span a wide range of magnitudes.
+%
+%The initialization proceeds as follows:
+%\begin{enumerate}
+%    \item Initialize a weight matrix $W^{(l)}$ via Glorot (Xavier) initialization.
+%    \item Sample the scale vector $s^{(l)} \sim \mathcal{N}(\mu,\, \sigma^2 I)$, with recommended defaults $\mu = 1.0$, $\sigma = 0.1$.
+%    \item Set $V^{(l)} = \operatorname{diag}\!\bigl(\exp(-s^{(l)})\bigr)\, W^{(l)}$, so that the effective weight $\operatorname{diag}(\exp(s^{(l)}))\, V^{(l)} = W^{(l)}$ matches the original Glorot initialization.
+%\end{enumerate}
+%The trainable parameters per layer are $\{s^{(l)},\, V^{(l)},\, b^{(l)}\}$.
+%During the forward pass, the output of each layer is computed efficiently as
+%$$
+%y = \bigl(x\, {V^{(l)}}^\top\bigr) \odot \exp(s^{(l)}) + b^{(l)},
+%$$
+%without materializing the full weight matrix $W^{(l)}$.
+%The factorization introduces additional degrees of freedom in the loss landscape, which helps the optimizer escape saddle points and accelerates convergence, particularly for multi-scale PDE solutions.
+%
+%
+%\subsubsection{Modified MLP}
+%% arXiv:2308.08468, Sec 6.4 (Wang et al.)
+%
+%A known limitation of standard MLPs in the PINN setting is that input information is progressively diluted through successive layers, making it difficult for deeper layers to retain sensitivity to the original coordinates.
+%The Modified MLP \cite{rwf_modified_mlp} addresses this by introducing two encoder sub-networks whose outputs are injected into every hidden layer via element-wise gating.
+%
+%Given input $x \in \mathbb{R}^{d_{\mathrm{in}}}$, two encodings are computed:
+%$$
+%U = \sigma(W_1\, x + b_1), \qquad V = \sigma(W_2\, x + b_2),
+%$$
+%where $W_1, W_2 \in \mathbb{R}^{h \times d_{\mathrm{in}}}$, $b_1, b_2 \in \mathbb{R}^h$, and $\sigma$ is the activation function (e.g.\ $\tanh$).
+%
+%The hidden layers are then defined recursively. Starting from $g^{(0)} = x$, for $l = 1, \dots, L$:
+%\begin{align}
+%    f^{(l)} &= W^{(l)}\, g^{(l-1)} + b^{(l)}, \\
+%    g^{(l)} &= \sigma\!\bigl(f^{(l)}\bigr) \odot U \;+\; \bigl(1 - \sigma\!\bigl(f^{(l)}\bigr)\bigr) \odot V,
+%\end{align}
+%where $\odot$ denotes element-wise multiplication.
+%The final output is a standard linear projection:
+%$$
+%u_\theta(x) = W^{(L+1)}\, g^{(L)} + b^{(L+1)}.
+%$$
+%
+%The gating mechanism $\sigma(f^{(l)}) \odot U + (1 - \sigma(f^{(l)})) \odot V$ acts as a learned interpolation between the two input encodings at each layer, ensuring that the network retains direct access to input-derived features at every depth.
+%Both techniques can be combined: RWF can be applied to all weight matrices in the Modified MLP, including the encoder matrices $W_1$ and $W_2$.
+%
+%
+%XPINN - mulitple pinns - overlapping domains
+%
+%PDE separable? -> sum of product of 1d networks
 
 
 \section{The curse of dimensionality}
 
+All the challanges of PINNs, but more pronounced.
 
+from section above:
+- memory req of AD scale with dim as $O(d)$ for laplacian, and $O(d^2)$ for hessian
+    - need stategies to handle this
+    - sdgd, hte?
+- sampling issue, we fix dataset beforehand huge dataset to campute the important domains
+    - can still do here?
+    - efficient strategies?
+- loss landscape
+weights the losses
 
-\subsection{sampling}
-In higher dimensions, we cannot simply fix the collocation points upfront as we need many points to get a sufficient covering of the domain.
-
-
-
-Need to throughly sample, but
-sampling in d-dimens demands $N_colloc\sim vol(\Omega)$.
--> need to store points - memory
-
-Laplace computation - memory increases:
-- linearly as $O(d)$, for $A = \alpha$, since $\alpha\Delta u = \alpha\sum_i^d frac{\partial^2 u}{\partial x_{i}}$
-- qudratically $O(d^2)$ for $A = A(x)$ since $div(A(x)\nabla) = \sum_{ij}^d a_{ij}(x)\frac{\partial^2 u}{\partial x_{ij}}$
-actually:
-The memory scales quadratically as d increases due to
-- the growing network size at the first input layer of $u_\theta$, and
-- the increasing number of second-order derivatives
-
-The catch is that the network must be expressive enough (enough params) to represent the solution, and the optimization landscape can be very rough.
+complex problem - large networks size
+The network must be expressive enough (enough params) to represent the solution,
+but then the optimization landscape can be very rough.
 
 \subsection{Adressing CoD}
 a) sampling - sample adaptively, random walks - Feynman-Kac
@@ -1029,7 +1681,15 @@ b) approx the laplace SDGD, Hutchinson
 c) adapting weighting schemes for residual weights $\lambda$
 d) other
 
+
+
 \subsection{Domain sampling strategies}
+
+Need to throughly sample, but
+sampling in d-dimens demands $N_colloc\sim vol(\Omega)$.
+-> need to store points - memory
+
+In higher dimensions, we cannot simply fix the collocation points upfront as we need many points to get a sufficient covering of the domain.
 
 \subsubsection{Latin hypercube sampling}
 In high dimensions, uniform sampling becomes problematic as it can leave large parts of the domain unsampled, potentially missing key regions \cite{latin}.
@@ -1196,22 +1856,22 @@ the other $i\notin I$ are treated as scalars
 %3. Update $\theta \leftarrow \theta - \eta \nabla_\theta \ell_I$
 
 
-\subsubsection{Hutchinson trace estimation (HTE)}
-% https://arxiv.org/html/2312.14499v2#S3
-Consider a symetric positive semidefinite matrix $A\in\mathbb{R}^{n\times n}$.
-The trace of $A$ can be approximated as an expectation
-$$
-tr(A) = \mathbb{E}_{v\sim\rho}[v^T A v]
-$$
-where $v$ is a random vector satisfying $\mathbb{E}_{v\sim\rho}[vv^T] = I$.
-The distribution $\rho$ can be chosen as normal.
-However, Hutchinson's original paper, and now the standard choice, is a Rademacher distribution, where the entries of a vector $v$ are chosen as $\pm 1$ with probability $\frac{1}{2}$.
-
-The Rademacher distribution is the prefered choice as it gives an optimal variance of this estimator.
-It also requires a relatively few samples, on the order of 10s, 100s, to converge to within a relative error of 0.1, 0.01 respectively.
-
-In the context of PINNs, we can take $A = \text{Hess}(u) := \frac{\partial^2 u}{\partial x_i \partial x_j}$,
-and by approximating $tr(A)$, we get an approximation for $\Delta u$.
+%\subsubsection{Hutchinson trace estimation (HTE)}
+%% https://arxiv.org/html/2312.14499v2#S3
+%Consider a symetric positive semidefinite matrix $A\in\mathbb{R}^{n\times n}$.
+%The trace of $A$ can be approximated as an expectation
+%$$
+%tr(A) = \mathbb{E}_{v\sim\rho}[v^T A v]
+%$$
+%where $v$ is a random vector satisfying $\mathbb{E}_{v\sim\rho}[vv^T] = I$.
+%The distribution $\rho$ can be chosen as normal.
+%However, Hutchinson's original paper, and now the standard choice, is a Rademacher distribution, where the entries of a vector $v$ are chosen as $\pm 1$ with probability $\frac{1}{2}$.
+%
+%The Rademacher distribution is the prefered choice as it gives an optimal variance of this estimator.
+%It also requires a relatively few samples, on the order of 10s, 100s, to converge to within a relative error of 0.1, 0.01 respectively.
+%
+%In the context of PINNs, we can take $A = \text{Hess}(u) := \frac{\partial^2 u}{\partial x_i \partial x_j}$,
+%and by approximating $tr(A)$, we get an approximation for $\Delta u$.
 
 
 % variance
@@ -1229,302 +1889,107 @@ and by approximating $tr(A)$, we get an approximation for $\Delta u$.
 % Var(v^T A\,v) = 2||A||_F^2 - 2\sum_i A_{ii}^2
 % $$
 
-\subsection{Loss weighting}
-
-Grad Norm
-- compute grad of norms of loss
-%https://pmc.ncbi.nlm.nih.gov/articles/PMC12858974/#:~:text=The%20loss%20function%20in%20PINNs,adaptive%20loss
-
-SoftAdapt
-% https://arxiv.org/pdf/2009.04544v5
-% https://github.com/levimcclenny/SA-PINNs
-- learnable attention params
-
-\section{Causal training}
-
-In the original PINN architecture, time is handled just as another input dimension without any special treatment.
-But since its incepetions it became apparant that this threatement is not adequete in some cases
-When training PINNs on time-dependent PDEs, the optimizer minimizes the residual over all time steps simultaneously.
-This can lead to causality violation: the network attempts to fit later-time dynamics before earlier-time states are correctly learned, producing globally low residual but physically meaningless solutions.
-%\cite{causal_pinns}
-
-Thus a few competing strategies have emerged as a viable alternatives to the original formulation.
-
-\subsection{Time marching}
-One simple approach is to divide the interval into multiple segments and train a PINN for each one.
-%\cite{time_adaptive_pinns}
-The networks have to be trained in series, as the intial considiton for the $k$-th network is taken as the terminal state of the $k-1$-th network.
-
-\subsection{Time-adaptive sampling}
-Here, we train the neural network on a ever increasing temporal domain.
-sample in interval $[0,\tau t], \tau\sim \frac{step}{n_steps}T$
-
-%\cite{time_adaptive_pinns}
 
 
-\subsection{Causal weighting}
-% Wang et al., "Respecting Causality is All You Need" / experts guide
-% also note that large batches are good for hard problems - enhanced convergence and accuracy
-% - but gpus not enough memory
-% - split large batch into smaller subbatches, parallelize loss compute across gpus
-% - compute grad desc. on all
-% - average model param update
+%\subsection{software}
+%- jax prob better
+%- torch has good arch - also AD - jacrev,... - jax like
 
-Causal weighting addresses this by partitioning the time domain $[0,T]$ into $M$ ordered segments
-$[t_{m-1}, t_m),\:m=1,\dots,M\,,\:
-0 = t_0 < t_1 < \cdots < t_M = T,
-$ and computig the pde loss as
+\section{Memory experiments}
+\begin{itemize}
+\item memory footprint of AD
+\item    - grad u
+\item    - laplace u
+\item    - div(A grad u)
+\item    - hessian u
+\item    - try sdgd
+\item observe:
+\item    - peak memory
+\item    - timeseries memory
+\item    - time
+\item torch.profiler, chromas
+\item float32 / float64
+\end{itemize}
 
+\section{Numerical experiments notes}
+
+\subsection{training and accuracy metrics}
+relative l2 error:
 $$
-\ell_{pde} = \frac{1}{M}\sum_{m=1}^{M} w_m\, \ell_{pde}^{(m)}
+\frac{
+\sum_{i=1}^n(\hat y_i - y_i)^2
+}{
+\sum_{i=1}^n(y_i)^2
+}
 $$
+where $\hat y_i$ are the predictions and $y_i$ is the ground truth value.
 
-where
-$\ell_{pde}^{(m)}$
-is the loss computed from the points falling in the $m$-th time segment $[t_{m-1}, t_m)$, 
-and the causal weight $w_m$ for segment $m$ is an exponential weight that depends on the cumulative residual of all preceding segments:
-$$
-w_m = \exp\!\Biggl(-\varepsilon \sum_{k=1}^{m-1} \ell_{pde}^{(k)}\Biggr)
-\,,\quad m=2,\dots,M
-$$
-$$
-w_m = 1
-\,,\quad m=1
-$$
-Here, $\varepsilon > 0$ is a causality parameter controlling the strictness of the temporal ordering.
-When $\varepsilon = 0$, all segments are weighted equally (standard training).
-As $\varepsilon \to \infty$, the training concentrates entirely on the earliest segment whose residual has not yet converged.
+\begin{itemize}
+\item run 5 times with diff random seeds
+\item sample a large set of points and each loggin step, do:
+\item - compute the residual MSE - effective a loss on this set
+\item - compute the rel2 err for IC
+\item early stopping
+\item - when some loss val reached
+\end{itemize}
 
 
-All $w_m$ intiialize by 1
+% \subsection{Grid search}
+% importance of weights of losses
+%     - hard constrains
+%     - fixed losses
+%     - adaptive loss weighting via GradNorm
+% 
+% nn num params, nn params distrib width / layers
+% 
+% 1)
+% smaller dim:
+% one fixed dataset = one large batch
+% one fixed dataset, divide into batches
+% - latin / sde
+% 
+% 2)
+% higher dims:
+% resample each epoch (new data each epoch) to cover the domain better:
+% full latin / sde
+% 
+% 2)
+% middle ground strat?
+% every epoch, train on pretty much the same data, only:
+% remove a piece of data, add a piece of data
+% half / half ?
+% % pretty much:
+% %\cite{rar}
+% %2500 latin + 50 RAR \cite{deepxde}, pg 14
+% %full random + adapt ?
+% 
+% % after the winning strategy is obtained, try adaptive as well:
+% full rar-d adapt res - try var diff k,c
+% full rar-g adapt res
+% 
+% 
+% lbfgs when mem possible
+% and adam stagnates
+% 
+% hard constr
+% fixed weights, how sensitive?
+% adaptive weights
+% 
+% (pde, bc, ic relative collac sizes)
+% 
+% (tanh vs silu - if not nice IC)
+% (RFF - for periodic)
+% 
+% 
+% \subsection{Results}
+% use Heat eq. does loss follow rel l2?
 
-Note that the weights $w_m$ are detached from the computational graph, that is, the backward pass sees them only as scalars with no computation graph behind them.
-
-
-
-\subsection{Problem specific technique - Capturing physics}
-add additional residuals capturing the physics
-- symmetries, energy conserv, ...
-
-use problem symmetries
-- separability
-- prob? do in log space
-- en conservation?
-
-transfer learning - traing on easier problem, then more to the harder one
-
-researchers (Liu and Gerstoft, 2023) have ensured that the model strictly
-adheres to specific physical laws by introducing additional physical
-constraints, such as conservation laws, temporal invariance, and spatial
-smoothing into the loss function. This approach significantly enhances
-the accuracy and stability of the model. For instance, Zhang (Zhang
-et al., 2023a) incorporated invariance conditions derived from Lie
-symmetry into the loss function, improving t
-
-exp(NN) -> u > 0 (prob)
-
-
-
-
-\subsection{Other}
-
-\subsubsection{Hard constrains}
-architectuary enforce IC and BC - nn then need to learn only the pde
-% https://arxiv.org/html/2404.16189v3#:~:text=as%20the%20IC%20data%20is,We%20consider%20the%20following%20transformation
-
-weight intialization (Glorot)
-
-normalize input: [-1,1] or [0,1]
-
-
-activations - tanh / silu (smooth)
-$$
-silu(x) = x \cdot \sigma(x)
-$$
-
-NNs learn low freq sol first
-
-
-\subsubsection{Random Fourier features}
-
-As reported by , neural networks are biased for learning low frequency signals first
-before proceeding to learn high freq ones.
-\cite{experts_guide}
-
-In 2019, Rahaman et al.
-consider uniform distributio of training data
-learn low freq smooth patterns before high freq ones
-learn low freq first even when high freq have large amplitudes
-low freq stable when perturbing netwrork params
-consider nns with relu activations trained via gradient descent
-use fourier analysis
-call this phenomena spectral bias
-\cite{spectral_bias_relu}
-
-More interesting for our case:
-extends to non-uniform data - in the context of pinns - one region sampled more than other
-use NTK (Neural Tanget Kernel) theory
-- looks at $K(x_i,x_j)=
-<\frac{\partial NN_\theta(x_i)}{\partial \theta},
-<\frac{\partial NN_\theta(x_j)}{\partial \theta}>$
-consider training for harmonic target function with freq $\kappa$
-speed of training convergence at a points $x$ is proportial to
-$O(\frac{\kappa^d}{p(x)})$ where $p(x)$ is a local data density
-$d$ - input dimension of the NN
-\cite{freq_bias_NTK}
-
-solution coming from computer vision
-$$
-\gamma(x) =
-\begin{pmatrix}
-    \cos(2\pi B x)\\
-    \sin(2\pi B x)
-\end{pmatrix}
-$$
-$B\in\mathbb R^{m\times d}$ sampled from Gaussian distribution $\mathcal N(0,\sigma^2)$
-spatial / tempotal
-\cite{fourfeat}
-
-
-%\subsubsection{Random Weight Factorization}
-%% arXiv:2308.08468, Sec 4.3
-%
-%Standard PINN training often suffers from slow convergence due to the loss landscape geometry.
-%Random Weight Factorization (RWF) \cite{rwf_modified_mlp} reparametrizes each weight matrix by factoring it into a diagonal scale matrix and a weight factor:
-%$$
-%W^{(l)} = \operatorname{diag}\!\bigl(\exp(s^{(l)})\bigr)\, V^{(l)}, \qquad l = 1,\dots,L{+}1,
-%$$
-%where $s^{(l)} \in \mathbb{R}^{d_l}$ is a trainable scale vector and $V^{(l)} \in \mathbb{R}^{d_l \times d_{l-1}}$ is the corresponding weight factor.
-%The exponential parametrization ensures that the per-neuron scales remain strictly positive and can span a wide range of magnitudes.
-%
-%The initialization proceeds as follows:
-%\begin{enumerate}
-%    \item Initialize a weight matrix $W^{(l)}$ via Glorot (Xavier) initialization.
-%    \item Sample the scale vector $s^{(l)} \sim \mathcal{N}(\mu,\, \sigma^2 I)$, with recommended defaults $\mu = 1.0$, $\sigma = 0.1$.
-%    \item Set $V^{(l)} = \operatorname{diag}\!\bigl(\exp(-s^{(l)})\bigr)\, W^{(l)}$, so that the effective weight $\operatorname{diag}(\exp(s^{(l)}))\, V^{(l)} = W^{(l)}$ matches the original Glorot initialization.
-%\end{enumerate}
-%The trainable parameters per layer are $\{s^{(l)},\, V^{(l)},\, b^{(l)}\}$.
-%During the forward pass, the output of each layer is computed efficiently as
-%$$
-%y = \bigl(x\, {V^{(l)}}^\top\bigr) \odot \exp(s^{(l)}) + b^{(l)},
-%$$
-%without materializing the full weight matrix $W^{(l)}$.
-%The factorization introduces additional degrees of freedom in the loss landscape, which helps the optimizer escape saddle points and accelerates convergence, particularly for multi-scale PDE solutions.
-%
-%
-%\subsubsection{Modified MLP}
-%% arXiv:2308.08468, Sec 6.4 (Wang et al.)
-%
-%A known limitation of standard MLPs in the PINN setting is that input information is progressively diluted through successive layers, making it difficult for deeper layers to retain sensitivity to the original coordinates.
-%The Modified MLP \cite{rwf_modified_mlp} addresses this by introducing two encoder sub-networks whose outputs are injected into every hidden layer via element-wise gating.
-%
-%Given input $x \in \mathbb{R}^{d_{\mathrm{in}}}$, two encodings are computed:
-%$$
-%U = \sigma(W_1\, x + b_1), \qquad V = \sigma(W_2\, x + b_2),
-%$$
-%where $W_1, W_2 \in \mathbb{R}^{h \times d_{\mathrm{in}}}$, $b_1, b_2 \in \mathbb{R}^h$, and $\sigma$ is the activation function (e.g.\ $\tanh$).
-%
-%The hidden layers are then defined recursively. Starting from $g^{(0)} = x$, for $l = 1, \dots, L$:
-%\begin{align}
-%    f^{(l)} &= W^{(l)}\, g^{(l-1)} + b^{(l)}, \\
-%    g^{(l)} &= \sigma\!\bigl(f^{(l)}\bigr) \odot U \;+\; \bigl(1 - \sigma\!\bigl(f^{(l)}\bigr)\bigr) \odot V,
-%\end{align}
-%where $\odot$ denotes element-wise multiplication.
-%The final output is a standard linear projection:
-%$$
-%u_\theta(x) = W^{(L+1)}\, g^{(L)} + b^{(L+1)}.
-%$$
-%
-%The gating mechanism $\sigma(f^{(l)}) \odot U + (1 - \sigma(f^{(l)})) \odot V$ acts as a learned interpolation between the two input encodings at each layer, ensuring that the network retains direct access to input-derived features at every depth.
-%Both techniques can be combined: RWF can be applied to all weight matrices in the Modified MLP, including the encoder matrices $W_1$ and $W_2$.
-%
-%
-%XPINN - mulitple pinns - overlapping domains
-%
-%PDE separable? -> sum of product of 1d networks
-
-\subsection{L-BFGS}
-limited memory
-quasi newton
-
-\subsection{my genious ideas TD}
-- have 3 networks - each focused on different frequency signals
-
-- extreme machine learning
-(periodically give a LLM during the training a snapshot of the loss, the l2, l1 errs and give it some params to tweak)
-
-
-
-\section{Optimization}
-
-
-\subsection{GPU-CPU orchestration / term-by-term}
-- torch.profiler and chrome
-
-\subsection{GPU memory requirements of the loss computation}
-- benchmarks:
-    - normal
-    - HTE
-    - sdgd
-- observe:
-    - peak memory
-    - timeseries memory
-    - time
-
-sample X
-
-pde terms computation
-- forward: u(X)
-- grad of u
-- other terms
-- summ together
-
-loss = sum batch vals together and l2
-
-backpropagate?
-
-
-- float32 / float64
-
-\subsection{hardware}
-- n of gpus
-- vRAM
-
-\subsection{software}
-- jax prob better
-- torch for arch
-- AD - jacrev,... - jax like
-
-
-
-\section{Experiments}
-
-- memory footprint of AD
-    - grad u
-    - laplace u
-    - div(A grad u)
-    - hessian u
-
-
-\section{grid search exploration}
-importance of weights of losses
-    - hard constrains
-    - fixed losses
-    - adaptive loss weighting via GradNorm
-
-
-
-
-
-\chapter{Conclusion}
+\chapter{to state in Conclusion}
 
 speed and precision still on the side of sparse grids?
-
-established convergence theory
+- established convergence theory
 
 pinns - hyperparameter tuning
-
-
 
 
 

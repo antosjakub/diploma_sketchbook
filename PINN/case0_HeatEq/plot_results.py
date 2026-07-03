@@ -172,7 +172,14 @@ def _plot_class_pde(dir_name, model, pde_model, args, options):
     plotter = viz.FunctionPlotter(**options)
     plotter.add_panel('model', title="model(x,t)").heatmap(model_fn)
     plotter.add_panel('analytic', title="u_analytic(x,t)").heatmap(pde_model.u_analytic)
-    plotter.save_animation(f'{dir_name}/viz/anim_model.gif', num_frames=30, fps=5, t_end=T)#, cbar={"model": "linked:analytic"})
+    plotter.save_animation(f'{dir_name}/viz/anim_model.gif', num_frames=30, fps=5, t_end=T,
+        #cbar="fixed",
+        #cbar={"model": "linked:analytic"}
+        cbar={
+            "analytic": "fixed",
+            "model": "linked:analytic"
+        }
+    )
 
 
 

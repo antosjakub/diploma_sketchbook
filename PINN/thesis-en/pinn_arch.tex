@@ -108,9 +108,9 @@
 
 % Auto-diff & residual
 \node[right=0.5cm of output] (ad) {auto-diff};
-\node[right=0.6cm of ad] (r_pde) {$\ell_{pde} = \mathbb E[(\partial_t u_\theta + \mathcal{L}(u_\theta))^2]_{X_{pde}}$};
-\node[above right=0.05cm and 0.6cm of ad] (r_ic) {$\ell_{ic} = \mathbb E[(u_\theta - u_{ic})^2]_{X_{ic}}$};
-\node[above right=0.5cm and 0.6cm of ad] (r_bc) {$\ell_{bc} =  \mathbb E[(u_\theta - u_{bc})^2]_{X_{bc}}$};
+\node[right=0.6cm of ad] (r_pde) {$\ell_{pde} = \left\langle (\partial_t u_\theta + \mathcal{L}(u_\theta))^2\right\rangle_{X_{pde}}$};
+\node[above right=0.05cm and 0.6cm of ad] (r_ic) {$\ell_{ic} = \left\langle(u_\theta - u_{ic})^2\right\rangle_{X_{ic}}$};
+\node[above right=0.5cm and 0.6cm of ad] (r_bc) {$\ell_{bc} =  \left\langle(u_\theta - u_{bc})^2\right\rangle_{X_{bc}}$};
 \draw[arrow] (output) -- (ad);
 \draw[arrow] (ad) -- (r_pde);
 %\draw[arrow] (output) to[bend left] (r_ic);
