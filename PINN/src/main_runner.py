@@ -13,7 +13,7 @@ def add_common_args(parser):
     parser.add_argument("--lr", default=1e-3, type=float, help="")
     parser.add_argument("--term_loss_val", default=None, type=float, help="")
     # dir
-    parser.add_argument("--output_dir", default="run_latest_vanilla_I", type=str, help="")
+    parser.add_argument("--output_dir", default="run_latest_vanilla", type=str, help="")
     parser.add_argument("--clear_dir", action="store_true", help="Erase contents of the output_dir before the training starts.")
     # problem specific
     parser.add_argument("--d", default=4, type=int, help="Number of spatial dimensions.")

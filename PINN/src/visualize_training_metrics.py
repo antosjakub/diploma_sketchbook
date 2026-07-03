@@ -71,7 +71,7 @@ def plot_causal_weights_losses(hist_data_dict, file_name, wl_type, term_type, t_
         d[f"{i+1}"] = rf"$, \:[t_{i}, t_{i+1}) = [{t_discr[i]}, {t_discr[i+1]})$"
     if wl_type == 'losses':
         linewidth_fn = lambda name: 1.0 if name == term_type else 1.0
-        label_fn = lambda name: fr"$\mathcal{{L}}^{{({name})}}$"+d[name] if name != term_type else rf"$\mathcal{{L}}_{{{term_type}}}$"
+        label_fn = lambda name: fr"$\ell^{{({name})}}$"+d[name] if name != term_type else rf"$\ell_{{{term_type}}}$"
         color_fn = lambda name: 'black' if name == term_type else None
     elif wl_type == 'weights':
         linewidth_fn = lambda name: 1.0
@@ -85,16 +85,16 @@ def plot_GradNorm_weights(weights_data_dict, file_name):
     plot_hist_data_dict(weights_data_dict, file_name, lambda name: rf"$\lambda_{{{name}}}$", lambda name: 1.0, lambda name: None, 'weights', 'GradNorm weights')
 
 def plot_loss(loss_data_dict, file_name):
-    plot_hist_data_dict(loss_data_dict, file_name, lambda name: rf"$\mathcal{{L}}_{{{name}}}$", lambda name: 1.0 if name == 'total' else 1.0, lambda name: 'black' if name == 'total' else None, 'loss', "Training loss")
+    plot_hist_data_dict(loss_data_dict, file_name, lambda name: rf"$\ell_{{{name}}}$", lambda name: 1.0 if name == 'total' else 1.0, lambda name: 'black' if name == 'total' else None, 'loss', "Training loss")
 
 def plot_mem(mem_data_dict, file_name):
     mem_series = {k: v for k, v in mem_data_dict.items() if k != "step"}
     plot_hist_data_dict(mem_series, file_name, lambda name: name, lambda name: 1.0, lambda name: None, 'MB', "Memory")
 
 def plot_test_rel_l2(test_data_dict, file_name):
-    plot_hist_data_dict(test_data_dict, file_name, lambda name: name, lambda name: 1.0, lambda name: None, 'rel L2 error', "Testing: Relative L2 error")
+    plot_hist_data_dict(test_data_dict, file_name, lambda name: rf"$rel\_L2_{{{name}}}$", lambda name: 1.0, lambda name: None, 'rel L2 error', "Testing: Relative L2 error")
 def plot_test_res_mse(test_data_dict, file_name):
-    plot_hist_data_dict(test_data_dict, file_name, lambda name: name, lambda name: 1.0, lambda name: None, 'MSE', "Testing: Residual MSE")
+    plot_hist_data_dict(test_data_dict, file_name, lambda name: rf"$MSE_{{{name}}}$", lambda name: 1.0, lambda name: None, 'MSE', "Testing: Residual MSE")
 
 
 

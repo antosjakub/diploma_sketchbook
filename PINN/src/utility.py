@@ -387,6 +387,8 @@ class TestingSuite:
             assert data["X_ic"].shape[1] == self.d + 1
         if metadata.get("has_analytic_pde", False):
             assert data["analytic_pde"].shape[0] == data["X_pde"].shape[0]
+        if metadata.get("has_analytic_bc", False):
+            assert data["analytic_bc"].shape[0] == data["X_bc"].shape[0]
         if metadata.get("has_terminal_condition", False):
             assert data["X_tc"].shape[1] == self.d + 1
             assert data["analytic_tc"].shape[0] == data["X_tc"].shape[0]
@@ -424,6 +426,10 @@ class TestingSuite:
             X_pde = data["X_pde"]
             with torch.no_grad():
                 data["analytic_pde"] = _to_cpu(analytic_sol_fn(X_pde))
+        if analytic_sol_fn is not None and "bc" in active_losses:
+            X_bc = data["X_bc"]
+            with torch.no_grad():
+                data["analytic_bc"] = _to_cpu(analytic_sol_fn(X_bc))
 
         T = sampling_settings.get("T", 1.0)
         if terminal_condition_fn is not None and "ic" in active_losses:
@@ -441,6 +447,7 @@ class TestingSuite:
                 "sampling_type": sampling_type,
                 "sampling_settings": _to_cpu(sampling_settings),
                 "has_analytic_pde": analytic_sol_fn is not None and "pde" in active_losses,
+                "has_analytic_bc": analytic_sol_fn is not None and "bc" in active_losses,
                 "has_terminal_condition": terminal_condition_fn is not None and "ic" in active_losses,
             },
             "data": data,
@@ -451,7 +458,7 @@ class TestingSuite:
         torch.save(payload, file_path)
 
 
-    def test_model(self, model, pde_model, device, test_bs=10_000):
+    def test_model(self, model, pde_model, device, test_bs=10_000, ignore_bc=True):
 
         import time
         a = time.time()
@@ -488,7 +495,7 @@ class TestingSuite:
                 precomputed_chunk = {k: v[i:j].to(device) for k, v in precomputed_pde.items()}
                 loss_pde = pde_model.pde_loss(X_chunk, model, precomputed_chunk)
                 sum_sq_pde += loss_pde.item() * (j - i)
-            metrics_res_mse["res_mse_pde"] = sum_sq_pde / max(n_pde, 1)
+            metrics_res_mse["pde"] = sum_sq_pde / max(n_pde, 1)
 
         if "bc" in active_losses:
             X_bc = data["X_bc"]
@@ -501,7 +508,7 @@ class TestingSuite:
                 precomputed_chunk = {k: v[i:j].to(device) for k, v in precomputed_bc.items()}
                 loss_bc = pde_model.bc_loss(X_chunk, model, precomputed_chunk)
                 sum_sq_bc += loss_bc.item() * (j - i)
-            metrics_res_mse["res_mse_bc"] = sum_sq_bc / max(n_bc, 1)
+            metrics_res_mse["bc"] = sum_sq_bc / max(n_bc, 1)
 
         if "ic" in active_losses:
             X_ic = data["X_ic"]
@@ -522,8 +529,8 @@ class TestingSuite:
                     u_true = precomputed_chunk["ic"]
                     err_sq_ic += torch.sum((u_pred - u_true) ** 2).item()
                     target_sq_ic += torch.sum(u_true ** 2).item()
-            metrics_res_mse["res_mse_ic"] = sum_sq_ic / max(n_ic, 1)
-            metrics_rel_l2["rel_l2_ic"] = (err_sq_ic / max(target_sq_ic, eps)) ** 0.5
+            metrics_res_mse["ic"] = sum_sq_ic / max(n_ic, 1)
+            metrics_rel_l2["ic"] = (err_sq_ic / max(target_sq_ic, eps)) ** 0.5
 
         if metadata.get("has_analytic_pde", False):
             X_pde = data["X_pde"]
@@ -539,7 +546,23 @@ class TestingSuite:
                     u_pred = model(X_chunk)
                     err_sq_pde += torch.sum((u_pred - target_chunk) ** 2).item()
                     target_sq_pde += torch.sum(target_chunk ** 2).item()
-            metrics_rel_l2["rel_l2_pde"] = (err_sq_pde / max(target_sq_pde, eps)) ** 0.5
+            metrics_rel_l2["pde"] = (err_sq_pde / max(target_sq_pde, eps)) ** 0.5
+
+        if metadata.get("has_analytic_bc", False) and (not ignore_bc):
+            X_bc = data["X_bc"]
+            analytic_bc = data["analytic_bc"]
+            err_sq_bc = 0.0
+            target_sq_bc = 0.0
+            n_bc = len(X_bc)
+            with torch.no_grad():
+                for i in range(0, n_bc, test_bs):
+                    j = min(i + test_bs, n_bc)
+                    X_chunk = X_bc[i:j].to(device)
+                    target_chunk = analytic_bc[i:j].to(device)
+                    u_pred = model(X_chunk)
+                    err_sq_bc += torch.sum((u_pred - target_chunk) ** 2).item()
+                    target_sq_bc += torch.sum(target_chunk ** 2).item()
+            metrics_rel_l2["bc"] = (err_sq_bc / max(target_sq_bc, eps)) ** 0.5
 
         if metadata.get("has_terminal_condition", False):
             X_tc = data["X_tc"]
@@ -555,11 +578,11 @@ class TestingSuite:
                     u_pred = model(X_chunk)
                     err_sq_tc += torch.sum((u_pred - target_chunk) ** 2).item()
                     target_sq_tc += torch.sum(target_chunk ** 2).item()
-            metrics_rel_l2["rel_l2_tc"] = (err_sq_tc / max(target_sq_tc, eps)) ** 0.5
+            metrics_rel_l2["tc"] = (err_sq_tc / max(target_sq_tc, eps)) ** 0.5
 
         model.train()
 
-        #metrics_res_mse["res_mse_total"] = sum(metrics_res_mse[k] for k in metrics_res_mse)
+        #metrics_res_mse["total"] = sum(metrics_res_mse[k] for k in metrics_res_mse)
 
         b = time.time()
         #print(f"Testing took: {b-a}s")

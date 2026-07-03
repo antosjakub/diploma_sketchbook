@@ -48,22 +48,25 @@ args.d = 2
 args.layers="64,64,64,64"
 # bs and sampling
 args.bs=1000
-args.n_res_points=1000
-args.prevent_resampling=True
+args.n_res_points=100_000
+args.resampling_frequency=100
+#args.prevent_resampling=True
+args.prevent_resampling=False
 args.one_batch_per_epoch=True
 # other
 #args.n_steps=10_000
-args.n_steps=199
+args.n_steps=1000
 args.n_steps_decay=args.n_steps/10
 args.active_losses="pde,bc,ic"
 
-args.use_lbfgs = False
+#args.use_lbfgs = False
 args.use_gradnorm = True
 
 #args.enable_profiler = True
 #args.enable_memory_tracking = True
-#args.enable_testing = True
+args.enable_testing = True
 args.clear_dir = True
+args.output_dir = 'run_latest_test'
 
 
 
@@ -102,7 +105,7 @@ if args.enable_testing:
         "f_ic_trajs": 0,
     }
     sampling_settings["res_points"] = args.n_test_points
-    testing_suite.make_test_data("testing_data.pth", test_sampling_type, lambda X: None, pde_model, sampling_settings, active_losses, device, analytic_sol_fn=None, terminal_condition_fn=None)
+    testing_suite.make_test_data("testing_data.pth", test_sampling_type, lambda X: None, pde_model, sampling_settings, active_losses, device, analytic_sol_fn=pde_model.u_analytic, terminal_condition_fn=None)
     print(f"Testing suite ready ({args.n_test_points} points.")
 else:
     testing_suite = None
