@@ -1,23 +1,24 @@
 
-# Numerically solving Partial Differential Equations on high-dimensional domains
-
-## Latest updates
-
-`thesis-en/` - latex folder for the thesis
-
-`PINN/`
-- `launch_dash_webpage.py`
-    - python (dash) webpage for visually checking the quality of the trained PINN model
-    - supports switching between different dimensional axes
-    - displays 2d heatplots
-- `pde_models.py`
-- `main.py` - trainable PINN module
-- `thesis-en/` - latex folder for the pinn chapter
+# Numerically solving high-dimensional diffusion equation via machine learning
 
 
 ## Overview
 
-traditional solvers - FDM, FEM, multigrid, ... - all perform discretization of the domain - issue
+traditional solvers - FDM, FEM, multigrid, ... - all perform discretization of the domain - issue in high-dims - curse of dimensionality
 
+sparse grids - strategically construct a collection of grids - hard limit based on available computer memory
 
+sparse grids combination technique = super parallizable
 
+machine learning approaches - mesh-free - strategies to overcome memoty constrains in high dim - but runtime / convergence issues
+
+## thesis text
+
+`PINN/`
+- `thesis-en/` - latex folder for the theoretical basis of pinns
+
+`SG/`
+- `thesis-en/` - latex folder for the theoretical info bout sparse grids combination technique
+
+`Numerical_experiments/`
+- `thesis-en/` - latex folder for discussing the pdes to solve and the results from numerical experiments
