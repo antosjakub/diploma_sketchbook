@@ -92,8 +92,7 @@ def add_common_args(parser):
 import torch
 import architecture, utility
 import run_utils
-def runner(args, pde_model, sampling_settings, sampling_type, testing_suite, head_fun):
-
+def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_suite, head_fun):
 
     d = args.d  # space dims
     D = d + 1   # space + time dims
@@ -105,8 +104,11 @@ def runner(args, pde_model, sampling_settings, sampling_type, testing_suite, hea
     print(args.layers)
     output_dim = 1
 
+    torch.manual_seed(args.seed)
 
-    dir_name, device = run_utils.setup_run(args)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
+
     run_utils.save_input_config(dir_name, args)
 
     pde_model.dump_pde_metadata(f'{dir_name}/pde_metadata.json')

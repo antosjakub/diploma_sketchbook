@@ -242,7 +242,7 @@ class PINN_Trainer:
                 log = ", ".join(parts)
                 print(log)
                 if self.testing_suite is not None:
-                    test_dict_res_mse, test_dict_rel_l2 = self.testing_suite.test_model(self.model, self.pde_model, device=self.device, test_bs=self.sampling_settings["bs"])
+                    test_dict_res_mse, test_dict_rel_l2 = self.testing_suite.test_model(self.model, self.pde_model, device=self.device) #,test_bs=self.sampling_settings["bs"])
                     test_log_mse_loss = " - Testing: res MSE | " + \
                         ", ".join([f"{k}: {v:.6f}" for k,v in test_dict_res_mse.items()])
                     test_res_mse.append(test_dict_res_mse)
@@ -391,7 +391,7 @@ class PINN_Trainer:
                 print(log)
                 if self.testing_suite is not None:
                     test_dict_res_mse, test_dict_rel_l2 = self.testing_suite.test_model(
-                        self.model, self.pde_model, device=self.device, test_bs=self.sampling_settings["bs"]
+                        self.model, self.pde_model, device=self.device#, test_bs=self.sampling_settings["bs"]
                     )
                     test_log_mse_loss = " - Testing: res MSE | " + \
                         ", ".join([f"{k}: {v:.6f}" for k, v in test_dict_res_mse.items()])

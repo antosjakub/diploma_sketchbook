@@ -352,11 +352,12 @@ class ScorePINNTestingSuite:
 
 import sampling
 class TestingSuite:
-    def __init__(self, d, device: torch.device):
+    def __init__(self, d, device: torch.device, test_bs=1000):
         self.d = d
+        self.device = device
+        self.test_bs = test_bs
         self.test_file_exists = False
         self.test_file_path = None
-        self.device = device
         self.keep_in_cache = True
     
     def connect_test_data(self, file_path: str):
@@ -398,7 +399,7 @@ class TestingSuite:
         self.test_file_path = file_path
 
 
-    def make_test_data(self, file_path, sampling_type, model, pde_model, sampling_settings, active_losses, device, analytic_sol_fn=None, terminal_condition_fn=None):
+    def make_test_data(self, file_path, sampling_type, model, pde_model, sampling_settings, active_losses, device, analytic_sol_fn=None, terminal_condition_fn=None, seed=4242):
         def _to_cpu(value):
             if torch.is_tensor(value):
                 return value.detach().cpu()
@@ -406,10 +407,15 @@ class TestingSuite:
                 return {k: _to_cpu(v) for k, v in value.items()}
             return value
 
-        bundle = sampling.create_dataloaders(
-            sampling_type, model, pde_model,
-            sampling_settings, active_losses, device,
-        )
+        cuda_devices = [torch.cuda.current_device()] if torch.cuda.is_available() else []
+        with torch.random.fork_rng(devices=cuda_devices):
+            torch.manual_seed(seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(seed)
+            bundle = sampling.create_dataloaders(
+                sampling_type, model, pde_model,
+                sampling_settings, active_losses, device,
+            )
 
         active_losses = tuple(active_losses)
         data = {}
@@ -445,6 +451,7 @@ class TestingSuite:
                 "active_losses": active_losses,
                 "batch_sizes": batch_sizes,
                 "sampling_type": sampling_type,
+                "seed": seed,
                 "sampling_settings": _to_cpu(sampling_settings),
                 "has_analytic_pde": analytic_sol_fn is not None and "pde" in active_losses,
                 "has_analytic_bc": analytic_sol_fn is not None and "bc" in active_losses,
@@ -458,7 +465,8 @@ class TestingSuite:
         torch.save(payload, file_path)
 
 
-    def test_model(self, model, pde_model, device, test_bs=10_000, ignore_bc=True):
+    def test_model(self, model, pde_model, device, ignore_bc=True):
+        test_bs = self.test_bs
 
         import time
         a = time.time()

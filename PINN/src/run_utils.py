@@ -46,12 +46,8 @@ def save_input_config(dir_name, args):
     )
 
 
-def setup_run(args):
+def setup_dir(args):
     """Seed, pick device, create/clear the output directory. Returns (dir_name, device)."""
-    torch.manual_seed(args.seed)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
-
     dir_name = args.output_dir
     if dir_name is None:
         raise ValueError("args.output_dir must be set before setup_run().")
@@ -71,7 +67,7 @@ def setup_run(args):
             print("Why clear the new thing me asky??")
     print()
 
-    return dir_name, device
+    return dir_name
 
 
 def make_optim(model, args):

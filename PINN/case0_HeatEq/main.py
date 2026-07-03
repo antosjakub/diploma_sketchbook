@@ -73,6 +73,7 @@ args.output_dir = 'run_latest_test'
 d = args.d  # space dims
 D = d + 1   # space + time dims
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+dir_name = run_utils.setup_dir(args)
 
 ### PREP PDE MODEL
 import pde_models as pde_mod
@@ -89,15 +90,13 @@ print(f"Active losses: {active_losses}")
 spatial_domain = run_utils.make_spatial_domain(d, args.L_min, args.L_max, device=device)
 test_sampling_type = "domain_and_trajectories"
 if args.enable_testing:
-    testing_suite = utility.TestingSuite(d, device)
+    testing_suite = utility.TestingSuite(d, device, args.bs)
     test_sampling_type = "domain_and_trajectories"
-    #termina_cond_fun = 
-    #analytic_sol_fun = 
     sampling_settings = {
         "T": args.T,
         "spatial_domain": spatial_domain,
         "n_res_points": args.n_test_points,
-        "bs": args.bs,
+        "bs": args.n_test_points,
         #
         "f_pde_full_domain": 1,
         "f_pde_trajs": 0,
@@ -105,7 +104,7 @@ if args.enable_testing:
         "f_ic_trajs": 0,
     }
     sampling_settings["res_points"] = args.n_test_points
-    testing_suite.make_test_data("testing_data.pth", test_sampling_type, lambda X: None, pde_model, sampling_settings, active_losses, device, analytic_sol_fn=pde_model.u_analytic, terminal_condition_fn=None)
+    testing_suite.make_test_data(f"{dir_name}/testing_data.pth", test_sampling_type, lambda X: None, pde_model, sampling_settings, active_losses, device, analytic_sol_fn=pde_model.u_analytic, terminal_condition_fn=None)
     print(f"Testing suite ready ({args.n_test_points} points.")
 else:
     testing_suite = None
@@ -143,7 +142,7 @@ elif sampling_type == "domain_and_trajectories":
     }
 
 
-trainer, model, dir_name = main_runner.runner(args, pde_model, sampling_settings, sampling_type, testing_suite, head_fun)
+trainer, model, dir_name = main_runner.runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_suite, head_fun)
 
 
 import plot_results
