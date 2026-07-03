@@ -11,6 +11,7 @@
 \item - $\int p = 1$
 \item - convergence to equilibrium $e^{-V(x)}$
 \item - capture relatively sharp features
+\item - probabilities become 0 very quickly in high dim space
 \end{itemize}
 
 }
@@ -26,10 +27,16 @@ $$
 where $\beta = 1/k_b T$, and $k_B$ is the Bolztman constant.
 
 The corresponding probability density $\rho(x,t)$ then satisfies the so-called Smoluchowski equation.
-\begin{equation}
-\partial_t \rho = \beta^{-1}\Delta\rho + \nabla\cdot\bigl(\rho\nabla V\bigr) \\
-\end{equation}
-(linear drift-diffusion eq).
+$$
+\partial_t \rho = \beta^{-1}\Delta\rho + \nabla\cdot\bigl(\rho\nabla V\bigr)
+$$
+%linear drift-diffusion eq, 
+%mass-conserving convection-diffusion equation
+$$
+\partial_t\rho = -\nabla\cdot J,\qquad J(\rho) = -(\beta^{-1}\nabla\rho + \rho\nabla V)
+$$ 
+PDE lives on $\mathbb R^d$.
+
 
 If $V$ is confining, that is:
 $$
@@ -41,39 +48,32 @@ $$
 \rho_\infty(x) = \frac{1}{Z} e^{-\beta V(x)} \qquad Z=\int_{\mathbb R^d}e^{-\beta V(x)}dx
 $$ 
 
-Note, the equation can be rewritten into the form
-$$
-\partial_t\rho = -\nabla\cdot J,\qquad J(\rho) = -(\beta^{-1}\nabla\rho + \rho\nabla V)
-$$ 
-showing it is a mass-conserving convection-diffusion equation. 
-PDE lives on $\mathbb R^d$.
-
-\subsection{Properties to exploit / address}
-- linear
-- positivity (max-principle)
-- self-adjoint (reversible)
-- known equilibrium distrib
-- mass conversion
-- energy based approaches?
-- schoedinger type operator?
+%\subsection{Properties to exploit / address}
+%- linear
+%- positivity (max-principle)
+%- self-adjoint (reversible)
+%- known equilibrium distrib
+%- mass conversion
+%- energy based approaches?
+%- schoedinger type operator?
 
 
 \subsection{Boundary conditions}
+truncate $\mathbb{R}^d$ to a hypercube $[-L,L]^d$.
 
 \textbf{Dirichlet (reactive / absorbing)}
 
-\begin{equation}
+$$
 \rho(x,t)=0\quad\text{on}\:\:\partial\Omega
-\end{equation}
-truncate $\mathbb{R}^d$ to a hypercube $[-L,L]^d$.
+$$
 The boundary acts as a perfect sink 
 
 \textbf{Neumann (no-flux / reflecting)}
 
-\begin{equation}
+$$
 (\beta^{-1}\nabla\rho+\rho\nabla V)\cdot n = -J(\rho)\cdot n = 0
 \quad\text{on}\:\:\partial\Omega
-\end{equation}
+$$
 Particles are reflected, strictly conserving total mass. 
 
 \subsection{Initial conditions}
@@ -83,13 +83,14 @@ $$\rho(x, 0) = \left( \frac{1}{2\pi \sigma^2} \right)^{d/2} \exp\left( -\frac{\|
 
 
 
+\section{Variants of $V(x)$}
 
 
-\section{Harmonic potential}
+\subsection{Harmonic potential}
 should we??
 
 
-\section{Coupled Quadratic / Double well}
+\subsection{Coupled Quadratic / Double well}
 
 $$
 V(x) = \frac{1}{4}\sum_{i=1}^d (x_i^2-a_i^2)^2
@@ -141,3 +142,17 @@ classic “many-minima” test function adapted as a potential.
 V_{\text{Rast}}(x)=A d+\sum_{i=1}^d\left(x_i^2-A\cos(2\pi x_i)\right),\qquad A>0.
 \tag{V-R}
 \end{equation}
+
+
+
+\textbf{See next page for a visualizations}
+
+
+\begin{figure}
+    \centering
+    \includegraphics[width=150mm]{figures/V=QP.png}
+    \includegraphics[width=150mm]{figures/V=DW.png}
+    \includegraphics[width=150mm]{figures/V=CDW.png}
+    \includegraphics[width=150mm]{figures/V=Rastigin.png}
+    \caption{(left): initial condition - unit gaussina, (right): $e^{-\beta V(x)}\,,\: V(x)=$ Quadratic pot, Double Well, Coupled Double well, Rastrigin}
+\end{figure}
