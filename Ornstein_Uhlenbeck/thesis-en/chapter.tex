@@ -1,0 +1,59 @@
+
+\chapter{Ornstein-Uhlenbeck process}
+
+{
+\color{red}
+\begin{itemize}
+\item 
+\end{itemize}
+
+}
+
+\section{Formulation}
+
+
+We consider the Ornstein-Uhlenbeck (OU) process with anisotropic and correlated noises, 
+
+$$
+dX_t = -\tfrac{1}{2} x\,dt + \Sigma^\frac{1}{2} dW_t
+$$
+
+The Brownian noise is correlated with the covariance matrix $\Sigma\in\mathbb{R}^{d\times d}$
+%, which is constructed as follows:
+%- We generate random orthogonal matrix $Q$ from QR decomposition, serving as the eigenspace of $\Sigma$.
+%- $\Sigma$'s eigenvalues $\Gamma = diag(\lambda_1, \lambda_2, · · · , \lambda_d)$ where $\lambda_{2i} \sim Uniform([1, 1.1])$ and $\lambda_{2i+1} = 1/\lambda_{2i}$.
+%- Finally, $\Sigma = Q^T \Gamma Q$
+
+We have
+\begin{align}
+\mu &= -\tfrac{1}{2} x \\ 
+\sigma &= \Sigma^\frac{1}{2}
+\end{align}
+
+Thus the corresponding PDE then reads
+\begin{equation}
+\partial_t p - \tfrac{1}{2} \operatorname{div}(\Sigma\nabla p + x\,p) =
+\partial_t p + \nabla\cdot J = 0
+\end{equation}
+bc:
+\begin{equation}
+J\cdot n = 
+(\Sigma\nabla p + x\,p)\cdot n = 0
+\end{equation}
+
+
+IC = laplace (no analytic solution)
+
+$$
+p_0(x) = \alpha_d\,  \prod_i e^{-|x_i|}\:, \quad \alpha_d = 2^{-d}
+$$
+Where
+$$
+q_0(x) = \log p_0(x) = \log \alpha_d - \sum_i |x_i|
+$$
+note: p,q discontinuous 
+
+hardcode the initial and boundary conditions into the network output?
+
+Because of the discotinuity, this leads to... issuess
+
