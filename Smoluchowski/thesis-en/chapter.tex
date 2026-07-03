@@ -1,0 +1,143 @@
+
+\chapter{Smoluchowski}
+
+{
+\color{red}
+\begin{itemize}
+\item Fokker Planck, SDE
+\item on whole $\mathbb R$, do box $[-L,L]^d$, Neuman / Dirichlet BC?
+\item instead solve for $q=\ln(p)$ ?
+\item benchmark for:
+\item - $\int p = 1$
+\item - convergence to equilibrium $e^{-V(x)}$
+\item - capture relatively sharp features
+\end{itemize}
+
+}
+
+
+\section{Formulation}
+
+Consider the motion of an overdamped Brownian particle in an external potential $V(x)$ on $\mathbb{R}^d$, whose stochastic differential equation has the form
+
+$$
+dX_t = -\nabla V(X_t)\,dt + \sqrt{2\beta^{-1}}\,dW_t
+$$ 
+where $\beta = 1/k_b T$, and $k_B$ is the Bolztman constant.
+
+The corresponding probability density $\rho(x,t)$ then satisfies the so-called Smoluchowski equation.
+\begin{equation}
+\partial_t \rho = \beta^{-1}\Delta\rho + \nabla\cdot\bigl(\rho\nabla V\bigr) \\
+\end{equation}
+(linear drift-diffusion eq).
+
+If $V$ is confining, that is:
+$$
+\lim_{|x|\to\infty}V(x)=+\infty\quad \text{and} \quad e^{-\beta V}\in L^1
+$$
+
+then there exists a unique stationary solution in the form of a Boltzman density
+$$
+\rho_\infty(x) = \frac{1}{Z} e^{-\beta V(x)} \qquad Z=\int_{\mathbb R^d}e^{-\beta V(x)}dx
+$$ 
+
+Note, the equation can be rewritten into the form
+$$
+\partial_t\rho = -\nabla\cdot J,\qquad J(\rho) = -(\beta^{-1}\nabla\rho + \rho\nabla V)
+$$ 
+showing it is a mass-conserving convection-diffusion equation. 
+PDE lives on $\mathbb R^d$.
+
+\subsection{Properties to exploit / address}
+- linear
+- positivity (max-principle)
+- self-adjoint (reversible)
+- known equilibrium distrib
+- mass conversion
+- energy based approaches?
+- schoedinger type operator?
+
+
+\subsection{Boundary conditions}
+
+\textbf{Dirichlet (reactive / absorbing)}
+
+\begin{equation}
+\rho(x,t)=0\quad\text{on}\:\:\partial\Omega
+\end{equation}
+truncate $\mathbb{R}^d$ to a hypercube $[-L,L]^d$.
+The boundary acts as a perfect sink 
+
+\textbf{Neumann (no-flux / reflecting)}
+
+\begin{equation}
+(\beta^{-1}\nabla\rho+\rho\nabla V)\cdot n = -J(\rho)\cdot n = 0
+\quad\text{on}\:\:\partial\Omega
+\end{equation}
+Particles are reflected, strictly conserving total mass. 
+
+\subsection{Initial conditions}
+
+localized non-equilibrium Gaussian distribution localized at $x_0$:
+$$\rho(x, 0) = \left( \frac{1}{2\pi \sigma^2} \right)^{d/2} \exp\left( -\frac{\|x - x_0\|^2}{2\sigma^2} \right)$$
+
+
+
+
+
+\section{Harmonic potential}
+should we??
+
+
+\section{Coupled Quadratic / Double well}
+
+$$
+V(x) = \frac{1}{4}\sum_{i=1}^d (x_i^2-a_i^2)^2
+$$
+The resulting equilibrium $\rho_\infty\propto e^{-V}$ has $2^d$ well.
+
+%BTW: computing the partition function
+%
+%$$
+%z = \int_{(-\infty,\infty)^d} e^{-\beta V(x_1,...,x_d)} dx_1...dx_d \\
+%= \prod_{i=1}^d \left( \int_{-\infty}^\infty e^{-\frac{\beta}{4} (x_i^2-a_i^2)^2} dx_i \right)
+%$$
+%
+%we uniformly sample $a_i$ from the interval $(0.85,1.15)$
+%
+%choosing L = 3.5 is enough
+%
+%using numpy's polyfit, we get
+%$$
+%\int_{-\infty}^\infty e^{-\beta (x^2-a^2)^2} dx \approx -1.048 a^3 + 1.618 a^2 + 0.03337 a + 2.438 =: z_{fit}(a)
+%$$
+
+
+
+\subsection{Coupled double well}
+
+\begin{equation}
+V_{\text{DW-cpl}}(x)=\sum_{i=1}^d \frac{1}{4}(x_i^2-a^2)^2+\frac{\gamma}{2}\sum_{i=1}^{d-1}(x_{i+1}-x_i)^2,\qquad \gamma\ge 0.
+\tag{V-DWC}
+\end{equation}
+
+The coupling parameter $\gamma$ -> no separability.
+
+
+\subsection{xAx}
+$$
+V(x)=\tfrac12 x^T A x
+$$
+with a positive-definite matrix $A$.
+In coordinates smthg like
+$V(x)=\sum_i \alpha_i x_i^2 + \sum_{i\ne j} \gamma_{ij}x_ix_j$.
+
+
+\subsection{Rastrigin}
+
+classic “many-minima” test function adapted as a potential.
+
+\begin{equation}
+V_{\text{Rast}}(x)=A d+\sum_{i=1}^d\left(x_i^2-A\cos(2\pi x_i)\right),\qquad A>0.
+\tag{V-R}
+\end{equation}
