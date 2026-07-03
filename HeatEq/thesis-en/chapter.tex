@@ -10,38 +10,242 @@
 }
 
 \section{Formulation}
-
 \begin{align*}
 \partial_t u - \alpha \Delta u &= 0 \\
-u(x) &= u_D(x) \\
+u(x) &= u_0(x) \\
 u(x,t) &= 0
 \end{align*}
 where
-$$
-u(x) =
+\begin{align*}
+\Omega &= [0,1]^d\\
+T&=4.0 \\ 
+\alpha &= \frac{\bar{\alpha}}{d}, \quad \bar\alpha>0 \\ 
+u_0(x) &=
 \prod_{i=1}^d \sin(\pi x_i)
 +
-0.67
-\sum_{i=1}^d \sin(2\pi x_i) \left(\prod_{k=1,k\neq i}^d \sin(\pi x_k)\right)
-$$
+\frac{0.67}{\sqrt{d}}
+\sum_{i=1}^d \sin(2\pi x_i) \left(\prod_{k=1,k\neq i}^d \sin(\pi x_k)\right) \\
+\end{align*}
 
 
-the corresponding analytical solution in then
+The corresponding analytical solution in then (see the Appendix for detailed derivation)
 
 $$
 u(t,x) =
 e^{-\gamma t}
 \prod_{i=1}^d \sin(\pi x_i)
 +
-0.67
 e^{-\delta t}
+\frac{0.67}{\sqrt{d}}
 \sum_{i=1}^d \sin(2\pi x_i) \left(\prod_{k=1,k\neq i}^d \sin(\pi x_k)\right)
 $$
-where
+with
 \begin{itemize}
-\item $\gamma = \alpha d \pi^2$
-\item $\delta = \alpha (d+3) \pi^2$
+\item $\gamma = \alpha d \pi^2 = \bar\alpha \pi^2$
+\item $\delta = \alpha (d+3) \pi^2 = \bar\alpha (1+\frac{3}{d}) \pi^2$
 \end{itemize}
 
-
 Chosen so that it is slighlty more interesting then just a product of sines.
+
+
+\section{Behavior in general dimension}
+
+$$
+u((0.5,\dots,0.5), t) = e^{-\gamma t} = e^{-\bar\alpha \pi^2}
+$$
+
+The decay rate, $\gamma$, of the heading term is independent of dimension.
+If $\alpha$ did not depend on $d$, the solution would decay exponentially with dimension,
+leading to negligile values even for relatively modest values of $d$.
+Hence, we consider $\alpha=\frac{\bar\alpha}{d}$.
+
+\textbf{L2 norm} - see Appendix
+$$
+||u(t,\cdot)||_{L^2(\Omega)}^2 =
+\frac{1}{2^d}
+\left(
+e^{-\gamma t}
++
+0.67^2
+e^{-\delta t}
+\right)
+$$
+
+
+
+
+\section{Results}
+
+
+PINNs
+
+latin hypercube sampling
+full batch fixed dataset
+bs pde = 8192
+bs pde = 1024
+bs ic = 1024
+NN size
+n steps
+n steps decay
+
+
+\chapter{Appendix}
+% https://chatgpt.com/share/6a481b37-c04c-83eb-a0e8-b34c1d0ac08c
+
+\section{Heat equation: Derivation of the $L^2$ norm of the analytic solution}
+Consider the analytical solution
+\begin{align*}
+ u(t,x)
+ &=
+ e^{-\gamma t}
+ \prod_{i=1}^d \sin(\pi x_i)
+ +
+ e^{-\delta t}
+ \frac{0.67}{\sqrt d}
+ \sum_{i=1}^d
+ \sin(2\pi x_i)
+ \left(
+ \prod_{\substack{k=1 \\ k\neq i}}^d \sin(\pi x_k)
+ \right)
+\end{align*}
+where
+\[
+\Omega = [0,1]^d
+\qquad
+\gamma = \alpha\pi^2
+\qquad
+\delta = \alpha\left(1+\frac 3d\right)\pi^2
+\]
+Here, we derive an explicit expression for the $L^2$ norm
+\[
+\|u(t,\cdot)\|_{L^2(\Omega)}^2
+=
+\int_{[0,1]^d} |u(t,x)|^2\,dx
+\]
+Define
+\[
+\phi_0(x)
+=
+\prod_{i=1}^d \sin(\pi x_i)
+\]
+and
+\[
+\phi_i(x)
+=
+\sin(2\pi x_i)
+\prod_{\substack{k=1 \\ k\neq i}}^d \sin(\pi x_k)
+\]
+Then the solution can be written compactly as
+\[
+u(t,x)
+=
+e^{-\gamma t}\phi_0(x)
++
+\frac{0.67}{\sqrt d}e^{-\delta t}
+\sum_{i=1}^d \phi_i(x)
+\]
+Therefore
+\begin{align*}
+\|u(t,\cdot)\|_{L^2}^2
+&=
+\left\|
+ e^{-\gamma t}\phi_0
+ +
+ \frac{0.67}{\sqrt d}e^{-\delta t}
+ \sum_{i=1}^d \phi_i
+\right\|_{L^2}^2
+\end{align*}
+Expanding the expression gives
+\begin{align*}
+\|u(t,\cdot)\|_{L^2}^2
+&=
+e^{-2\gamma t}\|\phi_0\|_{L^2}^2
++
+2e^{-\gamma t}e^{-\delta t}\frac{0.67}{\sqrt d}
+\sum_{i=1}^d \langle \phi_0,\phi_i\rangle_{L^2}
+\notag \\
+&\quad+
+\frac{0.67^2}{d}e^{-2\delta t}
+\sum_{i=1}^d\sum_{j=1}^d
+\langle \phi_i,\phi_j\rangle_{L^2}
+\end{align*}
+We now use the orthogonality relation
+\[
+\int_0^1 \sin(m\pi x)\sin(n\pi x)\,dx
+=
+\begin{cases}
+0, & m\neq n \\
+\dfrac12, & m=n
+\end{cases}
+\]
+Hence
+\begin{align*}
+\langle \phi_0,\phi_i\rangle_{L^2}&=0
+\qquad \text{for all } i=1,\dots,d \\
+\langle \phi_i,\phi_j\rangle_{L^2}&=0
+\qquad \text{for } i\neq j
+\end{align*}
+The remaining terms give
+\begin{equation*}
+\|\phi_0\|_{L^2}^2
+=
+\int_{[0,1]^d}
+\prod_{i=1}^d \sin^2(\pi x_i)\,dx
+=
+\prod_{i=1}^d
+\int_0^1 \sin^2(\pi x_i)\,dx_i
+=
+\frac{1}{2^d}
+\end{equation*}
+
+\begin{equation*}
+\|\phi_i\|_{L^2}^2
+=
+\left(
+\int_0^1 \sin^2(2\pi x_i)\,dx_i
+\right)
+\prod_{\substack{k=1 \\ k\neq i}}^d
+\left(
+\int_0^1 \sin^2(\pi x_k)\,dx_k
+\right)
+=
+\frac{1}{2^d}
+\end{equation*}
+
+\begin{equation*}
+\sum_{i=1}^d\sum_{j=1}^d
+\langle \phi_i,\phi_j\rangle_{L^2}
+=
+\sum_{i=1}^d \|\phi_i\|_{L^2}^2
+=
+d\frac{1}{2^d}
+\end{equation*}
+Substituting into the orignal expression, we obtain
+\begin{align*}
+\|u(t,\cdot)\|_{L^2}^2
+&=
+e^{-2\gamma t}\frac{1}{2^d}
++
+\frac{0.67^2}{d}e^{-2\delta t}
+\,
+d\frac{1}{2^d}
+\end{align*}
+Thanks to the normalization $1/\sqrt d$, the factor $d$ cancels.
+Therefore
+\[
+\|u(t,\cdot)\|_{L^2}^2
+=
+\frac{1}{2^d}
+\left(
+ e^{-2\gamma t}
+ +
+ 0.67^2 e^{-2\delta t}
+\right)
+\]
+At $t=0$, this simplifies to
+\[
+\|u_0\|_{L^2}^2
+=
+\frac{1}{2^d}
+(1+0.67^2)
+\]
