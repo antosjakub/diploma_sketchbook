@@ -25,10 +25,10 @@ def main() -> None:
                 1.540342092514038
     ]])
     model = OrnsteinUhlenbeck(sigma)
-    stepper = TimeStepper(dt=0.01, theta=1.0)
+    stepper = TimeStepper(dt=0.001, theta=1.0)
     lvl = 10
-    L = 4.0
-    T = 0.5
+    L = (-4.0, 4.0)
+    T = 0.001
     #backend = "matrix"
     backend = "linear_operator"
 

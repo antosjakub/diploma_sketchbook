@@ -24,16 +24,13 @@ class TensorGrid:
         cls,
         levels: tuple[int, ...],
         *,
-        domain_radius: float | tuple[float, ...] = 1.0,
+        domain_radius: tuple[float, ...] = (0.0, 1.0)
     ) -> "TensorGrid":
-        if isinstance(domain_radius, tuple):
-            if len(domain_radius) != len(levels):
-                raise ValueError("domain_radius tuple must match dimension")
-            bounds = tuple((-float(radius), float(radius)) for radius in domain_radius)
-        else:
-            radius = float(domain_radius)
-            #bounds = tuple((-radius, radius) for _ in levels)
-            bounds = tuple((0.0, radius) for _ in levels)
+        #print("levels = ", levels)
+        assert len(domain_radius) == 2
+        int_min = float(domain_radius[0])
+        int_max = float(domain_radius[1])
+        bounds = tuple((int_min, int_max) for _ in levels)
         return cls(tuple(levels), bounds)
 
     @property

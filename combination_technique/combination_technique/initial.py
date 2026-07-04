@@ -37,6 +37,8 @@ def product_laplace_density(coords: np.ndarray) -> np.ndarray:
 
 
 def heat_eq_IC(coords: np.ndarray):
+    # coords.shape = (d, n_pnts)
+    #print(coords.shape)
     d = coords.shape[0]
     a = 2.0
     b = 0.67
@@ -46,7 +48,7 @@ def heat_eq_IC(coords: np.ndarray):
     out2 = np.zeros_like(out)
     for i in range(d):
         o = np.sin(x)
-        o[:, i:(i+1)] = np.sin(a * x[:, i:(i+1)])
+        o[i:(i+1), :] = np.sin(a * x[i:(i+1), :])
         out2 += np.prod(o, axis=0, keepdims=True)
 
     out2 *= b/np.sqrt(d)

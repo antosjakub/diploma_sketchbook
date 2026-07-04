@@ -16,9 +16,9 @@ def main() -> None:
     alpha = 0.01
     model = HeatEq(d, alpha)
     stepper = TimeStepper(dt=0.0001, theta=1.0)
-    lvl = 10
-    T = 0.1
-    L = 1.0
+    lvl = 8
+    T = 1.0
+    L = (0.0, 1.0)
     n_workers = 10
 
     result = solve_combination(
@@ -37,7 +37,7 @@ def main() -> None:
 
     # plotting
     sparse = result_to_sgpp(result, level=lvl, boundary=True)
-    values = sparse.evaluate(np.array([[0.0, 0.0, 0.0], [1.0, -0.5, 0.25]]))
+    #values = sparse.evaluate(np.array([[0.0, 0.0, 0.0], [1.0, -0.5, 0.25]]))
 
     print(f"component grids: {len(result.components)}")
     print(f"sgpp points: {sparse.size}")
@@ -45,9 +45,9 @@ def main() -> None:
     print("mean from SG++ quadrature:")
     print(sparse.mean())
     print("sparse-grid evaluations:")
-    print(values)
+    #print(values)
 
-    sparse.save_slice_plot("HeatEq.png", axes=(0, 1), fixed={2: 0.0}, resolution=120)
+    sparse.save_slice_plot("HeatEq.png", axes=(0, 1), fixed={2: 0.5}, resolution=120)
     print("saved plot: HeatEq.png")
 
 

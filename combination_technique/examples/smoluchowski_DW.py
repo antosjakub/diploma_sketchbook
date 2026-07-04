@@ -20,7 +20,7 @@ def main() -> None:
     stepper = TimeStepper(dt=0.0001, theta=1.0)
     lvl = 12
     T = 0.8
-    L = 3.0
+    L = (-3.0, 3.0)
     n_workers = 10
 
     result = solve_combination(
