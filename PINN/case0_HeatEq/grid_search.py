@@ -10,18 +10,29 @@ src_dir = os.path.join(os.path.dirname(__file__), '../src/')
 sys.path.append(src_dir)
 import utility
 
-CASE_DIR = Path(__file__).resolve().parent
 
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument("--suffix", default="", type=str, help="suffix of the generated grid search folder")
+parser.add_argument("--suffix", default=None, type=str, help="suffix of the generated grid search folder")
+parser.add_argument("--out_dir", default="lalar", type=str)
 args = parser.parse_args()
+
+CASE_DIR = Path(__file__).resolve().parent # case0_HeatEq/
+if args.out_dir == None:
+    timestamp = time.strftime("%Y-%m-%d--%H-%M-%S", time.localtime())
+    if args.suffix == None:
+        search_root = CASE_DIR / f"gridsearch__{timestamp}"
+    else:
+        search_root = CASE_DIR / f"gridsearch__{timestamp}__{args.suffix}"
+else:
+    print("[ DBG: out_dir specified, ignoring passed suffix... ]")
+    search_root = CASE_DIR / args.out_dir
+print(f"[ DBG: Saving to {search_root} ]")
 
 FIXED_PARAMS = {
     "description": "test",
     "clear_dir": False,
     "seed": 42,
-    "logging_frequency": 100,
 
     "d": 2,
     #"layers": "64,64,64,64",
@@ -36,7 +47,7 @@ FIXED_PARAMS = {
     "eps": 0.1,
     # 2)
     #"n_steps": 39_999,
-    "n_steps": 49,
+    "n_steps": 109,
     "n_steps_decay": 1000, # = n_steps / 25
     # 3)
 
@@ -64,8 +75,8 @@ FIXED_PARAMS = {
 SEARCH_AXES = {
     #"ic_type": ["cauchy", "gauss"],
     "lambda_pde": [0.1, 1.0, 10.0],
-    "lambda_bc": [0.1, 1.0, 10.0],
-    "lambda_ic": [0.1, 1.0, 10.0]
+    #"lambda_bc": [0.1, 1.0, 10.0],
+    #"lambda_ic": [0.1, 1.0, 10.0]
     #"d": [6, 4, 8],
     #"time_strategy": [0,1,2]
     #"box": [
@@ -228,8 +239,6 @@ def run_one(entrypoint: str, run_dir: Path, config: dict) -> int:
 
 
 def main():
-    timestamp = time.strftime("%Y-%m-%d--%H-%M-%S", time.localtime())
-    search_root = CASE_DIR / f"gridsearch__{timestamp}__{args.suffix}"
     search_root.mkdir(parents=True, exist_ok=True)
 
     entrypoint = "main.py"
