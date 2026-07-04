@@ -30,43 +30,41 @@ import main_runner
 import argparse
 parser = argparse.ArgumentParser()
 main_runner.add_common_args(parser)
+
+parser.set_defaults(
+    # FIXED (heat eq specific)
+    mode="class_pde",
+    L_min=0,
+    L_max=1,
+    T=5.0,
+    f_pde_trajs=0,
+    f_pde_full_domain=1,
+    f_ic_trajs=0,
+    f_ic_full_domain=1,
+    # nice defaults
+    d=2,
+    layers="64,64,64,64",
+    bs=1000,
+    n_res_points=100_000,
+    resampling_frequency=100,
+    prevent_resampling=False,
+    one_batch_per_epoch=True,
+    n_steps=1000,
+    active_losses="pde,bc,ic",
+    #use_gradnorm=True,
+    #use_lbfgs=False,
+    #enable_profiler = True,
+    #enable_memory_tracking = True,
+    #enable_testing = True,
+    #clear_dir = True,
+    #output_dir = 'run_latest_test',
+)
+
+
 args = run_utils.parse_args_with_config(
     parser, [] if "__file__" not in globals() else None
 )
-# FIXED (heat eq specific)
-args.mode = "class_pde"
-args.L_min = 0
-args.L_max = 1
-#args.T = 4.5
-args.T = 5.0
-args.f_pde_trajs = 0
-args.f_pde_full_domain = 1
-args.f_ic_trajs = 0
-args.f_ic_full_domain = 1
 
-args.d = 2
-args.layers="64,64,64,64"
-# bs and sampling
-args.bs=1000
-args.n_res_points=100_000
-args.resampling_frequency=100
-#args.prevent_resampling=True
-args.prevent_resampling=False
-args.one_batch_per_epoch=True
-# other
-#args.n_steps=10_000
-args.n_steps=1000
-args.n_steps_decay=args.n_steps/10
-args.active_losses="pde,bc,ic"
-
-#args.use_lbfgs = False
-args.use_gradnorm = True
-
-#args.enable_profiler = True
-#args.enable_memory_tracking = True
-#args.enable_testing = True
-#args.clear_dir = True
-#args.output_dir = 'run_latest_test'
 
 
 
