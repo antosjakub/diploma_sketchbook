@@ -28,6 +28,7 @@ def add_common_args(parser):
     parser.add_argument("--profiler_report_filename", default="profiler_report", type=str, help="")
     parser.add_argument("--enable_memory_tracking", action="store_true", help="Log process RAM and GPU memory at each logging interval.")
     # commonly edited
+    parser.add_argument("--use_hard_constrains", action="store_true", help="")
     #parser.add_argument("--layers", default="256,256,256,256", type=str, help="")
     #parser.add_argument("--layers", default="32,32,32,32", type=str, help="")
     parser.add_argument("--layers", default="64,64,64,64", type=str, help="")

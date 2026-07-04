@@ -44,20 +44,24 @@ parser.set_defaults(
     # nice defaults
     d=2,
     layers="64,64,64,64",
+    active_losses="pde,bc,ic",
+    #
     bs=1000,
     n_res_points=100_000,
     resampling_frequency=100,
     prevent_resampling=False,
     one_batch_per_epoch=True,
+    #
     n_steps=1000,
-    active_losses="pde,bc,ic",
+    n_steps_decay=1000,
     #use_gradnorm=True,
     #use_lbfgs=False,
     #enable_profiler = True,
-    #enable_memory_tracking = True,
+    enable_memory_tracking = True,
     #enable_testing = True,
     #clear_dir = True,
-    #output_dir = 'run_latest_test',
+    output_dir = 'run_latest',
+    use_hard_constrains=False,
 )
 
 
@@ -65,6 +69,11 @@ args = run_utils.parse_args_with_config(
     parser, [] if "__file__" not in globals() else None
 )
 
+if args.use_hard_constrains:
+    #head_fun = lambda out, X: out * torch.prod(X[:,:-1]*(1-X[:,:-1]), dim=1, keepdim=True)
+    head_fun = lambda out, X: out * torch.prod(torch.sin(torch.pi*X[:,:-1]), dim=1, keepdim=True)
+else:
+    head_fun = lambda out, X: out
 
 
 
@@ -77,9 +86,6 @@ dir_name = run_utils.setup_dir(args)
 import pde_models as pde_mod
 pde_model = pde_mod.HeatEquation(d)
 print(type(pde_model))
-
-
-head_fun = lambda out, X: out
 
 active_losses = tuple(k.strip() for k in args.active_losses.split(",") if k.strip())
 print(f"Active losses: {active_losses}")

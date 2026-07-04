@@ -28,7 +28,7 @@ $$
 \Omega_l := \{x_{l,i}=i\cdot h_l : 0\le i\le 2^l\}
 $$
 
-Where, for each level $l$, we define the mesh width
+Where, for each level $l$, we define the mesh width $h_l$ as
 $$
 h_l := 2^{-l}
 $$
@@ -229,7 +229,7 @@ This is the usual curse of dimensionality.
 
 \subsection{Classical sparse-grid space}
 
-To improve this, we formulate an optimization problem: we seek a finite a collection of subspaces $W_l$ that maximizes the approximation benefit for a corresponding prescribed cost.
+To improve this, we formulate the following optimization problem: we seek a finite a collection of subspaces $W_l$ that maximizes the approximation benefit for a corresponding prescribed cost.
 
 The local cost of including a subspace $W_l$ is its dimension (the number of degrees of freedom):
 \begin{equation}
@@ -386,42 +386,11 @@ enegy based norm - no curse
 
 
 
-
-\subsection{Algorithm}
-
-\begin{algorithm}[H]
-\caption{Mini-batch PINN training}
-\begin{algorithmic}[1]
-    \Require Neural network $u_\theta: \mathbb{R}^{d+1}\to\mathbb{R}$, sampled data $\mathbf{X}_{pde}, \mathbf{X}_{ic}, \mathbf{X}_{bc}$
-    \State \textbf{Initialize} network parameters $\theta$
-    \For{epoch $= 1, \dots, E$}
-        \State Shuffle training data
-        \For{each mini-batch $\mathcal{B} \subset \{1,\dots,N\}$, $|\mathcal{B}|=B$}
-            \State \textbf{Forward pass:} compute $\hat{y}_i = \mathcal{N}_\theta(x_i)$ for $i\in\mathcal{B}$
-            \State \textbf{Compute loss:}
-            $\mathcal{L}(\theta) = \dfrac{1}{B}\displaystyle\sum_{i\in\mathcal{B}}
-                \bigl(\hat{y}_i - y_i\bigr)^2$
-            \State \textbf{Backward pass:} compute $\nabla_\theta \mathcal{L}$ via backpropagation
-            \State \textbf{Update:} $\theta \leftarrow \theta - \eta\,\nabla_\theta \mathcal{L}$
-        \EndFor
-        \State Every $k$ epochs, regenerate training data
-    \EndFor
-    \State \Return $\theta$
-\end{algorithmic}
-\end{algorithm}
-
-
-
 \section{Most important}
 
 crutial in high dim:
 
 - parallelization
-
-
-\section{Grid search}
-
-k
 
 
 \section{The curse of dimensionality}
@@ -430,7 +399,6 @@ we suppose that the solution is not heavily depended on mixed derivatives
 
 
 \section{my genious ideas TD}
-
 
 
 \section{Math recap}
