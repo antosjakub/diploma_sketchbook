@@ -155,7 +155,7 @@ class PINN_Trainer:
         use_time_adapt_sampling=False,
         prevent_resampling=False,
         gradnorm_update_freq=50,
-        term_loss_val=None,
+        crit_loss_val=None,
     ):
         """Train the model using Adam optimizer.
 
@@ -266,7 +266,7 @@ class PINN_Trainer:
             #    torch.save({k: torch.tensor(v) for k, v in losses.items()}, f'{loss_name}_.pth')
             #    torch.save(torch.tensor(test_log), f'{l2_name}_.pth')
             #    print("\nResults saved.")
-            if (term_loss_val is not None) and loss < term_loss_val:
+            if (crit_loss_val is not None) and loss < crit_loss_val:
                 return self.losses, test_res_mse, test_rel_l2
 
         return losses_hist_dict, test_res_mse, test_rel_l2
@@ -280,7 +280,7 @@ class PINN_Trainer:
         use_time_adapt_sampling=False,
         prevent_resampling=False,
         gradnorm_update_freq=50,
-        term_loss_val=None,
+        crit_loss_val=None,
     ):
         """Train the model using L-BFGS with one minibatch per step."""
         print(f"\n{'='*60}")
@@ -408,7 +408,7 @@ class PINN_Trainer:
                     print(len(self.causal_weights_hist_pde), self.causal_weights_hist_pde[-1])
                     print(len(self.causal_losses_hist_pde), self.causal_losses_hist_pde[-1])
 
-            if (term_loss_val is not None) and loss < term_loss_val:
+            if (crit_loss_val is not None) and loss < crit_loss_val:
                 return self.losses, test_res_mse, test_rel_l2
 
         return self.losses, test_res_mse, test_rel_l2

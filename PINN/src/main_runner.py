@@ -11,7 +11,7 @@ def add_common_args(parser):
     # don't touch this
     parser.add_argument("--gamma", default=0.9, type=float, help="Decay by 0.9 every 2000 steps.")
     parser.add_argument("--lr", default=1e-3, type=float, help="")
-    parser.add_argument("--term_loss_val", default=None, type=float, help="")
+    parser.add_argument("--crit_loss_val", default=None, type=float, help="")
     # dir
     parser.add_argument("--output_dir", default="run_latest_vanilla", type=str, help="")
     parser.add_argument("--clear_dir", action="store_true", help="Erase contents of the output_dir before the training starts.")
@@ -208,7 +208,7 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
             use_time_adapt_sampling=use_time_adapt_sampling,
             prevent_resampling=args.prevent_resampling,
             gradnorm_update_freq=args.gradnorm_update_freq,
-            term_loss_val=args.term_loss_val,
+            crit_loss_val=args.crit_loss_val,
         )
     else:
         losses_adam, test_log_res_mse, test_log_rel_l2 = trainer.train_adam_minibatch(
@@ -223,7 +223,7 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
             use_time_adapt_sampling=use_time_adapt_sampling,
             prevent_resampling=args.prevent_resampling,
             gradnorm_update_freq=args.gradnorm_update_freq,
-            term_loss_val=args.term_loss_val,
+            crit_loss_val=args.crit_loss_val,
         )
     run_utils.merge_losses(losses, losses_adam)
     print("\nAdam training complete!")
