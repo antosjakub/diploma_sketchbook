@@ -32,7 +32,8 @@ class TensorGrid:
             bounds = tuple((-float(radius), float(radius)) for radius in domain_radius)
         else:
             radius = float(domain_radius)
-            bounds = tuple((-radius, radius) for _ in levels)
+            #bounds = tuple((-radius, radius) for _ in levels)
+            bounds = tuple((0.0, radius) for _ in levels)
         return cls(tuple(levels), bounds)
 
     @property

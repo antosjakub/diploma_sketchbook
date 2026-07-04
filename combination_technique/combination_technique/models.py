@@ -496,3 +496,87 @@ class Smoluchowski(LinearFokkerPlanck):
 
     def divergence_drift(self, coords: np.ndarray) -> np.ndarray:
         return -self.potential.laplacian(coords)
+
+
+@dataclass(frozen=True)
+class HeatEq:
+    """Model for ``p_t = a Δp + b(x) · ∇p + c(x) p``."""
+    """Model for u_t = a \Delta u """
+
+    dimension: int
+    diffusion: float
+
+    def __post_init__(self) -> None:
+        if self.dimension <= 0:
+            raise ValueError("dimension must be positive")
+        if self.diffusion < 0.0:
+            raise ValueError("diffusion must be nonnegative")
+
+    def build_operator(
+        self,
+        grid: TensorGrid,
+        *,
+        bc: BoundaryCondition = "dirichlet",
+    ) -> sparse.csr_matrix:
+        if grid.dimension != self.dimension:
+            raise ValueError("grid dimension does not match model dimension")
+
+        d1, d2 = tensor_derivative_matrices(grid.shape, grid.spacing, bc)
+        operator = sparse.csr_matrix((grid.size, grid.size), dtype=float)
+        if self.diffusion:
+            for second in d2:
+                operator = operator + self.diffusion * second
+
+        if bc == "dirichlet":
+            operator = operator.tolil()
+            operator[grid.boundary_mask(), :] = 0.0
+            operator = operator.tocsr()
+
+        return operator
+
+    def build_linear_operator(
+        self,
+        grid: TensorGrid,
+        *,
+        bc: BoundaryCondition = "dirichlet",
+    ) -> LinearOperator:
+        if grid.dimension != self.dimension:
+            raise ValueError("grid dimension does not match model dimension")
+
+        d1_1d, d2_1d = tensor_derivative_1d_matrices(grid.shape, grid.spacing, bc)
+        boundary_mask = grid.boundary_mask() if bc == "dirichlet" else None
+
+        def matvec(x: np.ndarray) -> np.ndarray:
+            vector = np.asarray(x, dtype=float).reshape(-1)
+            result = np.zeros_like(vector)
+
+            if self.diffusion:
+                for axis, second in enumerate(d2_1d):
+                    result += self.diffusion * apply_axis_operator(vector, second, grid.shape, axis)
+
+            if boundary_mask is not None:
+                result[boundary_mask] = 0.0
+            return result
+
+        return LinearOperator((grid.size, grid.size), matvec=matvec, dtype=float)
+
+    def operator_diagonal(
+        self,
+        grid: TensorGrid,
+        *,
+        bc: BoundaryCondition = "dirichlet",
+    ) -> np.ndarray:
+        if grid.dimension != self.dimension:
+            raise ValueError("grid dimension does not match model dimension")
+
+        _, d2_1d = tensor_derivative_1d_matrices(grid.shape, grid.spacing, bc)
+        diagonal = np.zeros(grid.size, dtype=float)
+
+        if self.diffusion:
+            for axis in range(self.dimension):
+                diagonal += self.diffusion * lift_axis_diagonal(d2_1d[axis].diagonal(), grid.shape, axis)
+
+        if bc == "dirichlet":
+            diagonal[grid.boundary_mask()] = 0.0
+
+        return diagonal
