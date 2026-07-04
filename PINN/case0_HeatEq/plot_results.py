@@ -24,7 +24,7 @@ import utility
 import viz
 import visualize_training_metrics
 
-import pde_model_sde
+import pde_models
 
 
 def _make_head_fn(tag, mode, score_sde_model, T):
@@ -246,7 +246,7 @@ def load_run(dir_name, device=None, specific_paths={}):
     type_sp = args.mode
     head_fn_tag = model_metadata["head_fn"]
 
-    score_sde_cls = utility.get_module_classes(pde_model_sde)[pde_metadata["pde_class"]]
+    score_sde_cls = utility.get_module_classes(pde_models)[pde_metadata["pde_class"]]
     score_sde_model = score_sde_cls(d=d, device=device)
 
     model_s = None

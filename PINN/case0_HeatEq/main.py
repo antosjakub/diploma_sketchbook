@@ -64,9 +64,9 @@ args.use_gradnorm = True
 
 #args.enable_profiler = True
 #args.enable_memory_tracking = True
-args.enable_testing = True
-args.clear_dir = True
-args.output_dir = 'run_latest_test'
+#args.enable_testing = True
+#args.clear_dir = True
+#args.output_dir = 'run_latest_test'
 
 
 
