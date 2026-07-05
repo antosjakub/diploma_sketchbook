@@ -129,7 +129,7 @@ def boundary_condition_loss(model, X_bc, u_target):
 
 
 
-class ConstantWeights:
+class FixedLambdas:
     def __init__(self, weights):
         self.weights = weights
 
@@ -138,7 +138,7 @@ class ConstantWeights:
         return sum(self.weights[i] * losses[i] for i in range(len(losses)))
     
 
-class AdaptiveWeights(ConstantWeights):
+class GradnormAdaptLambdas(FixedLambdas):
     def __init__(self, weights, momentum=0.9, device='cpu'):
         self.weights = weights
         self.momentum = momentum
@@ -150,11 +150,11 @@ class AdaptiveWeights(ConstantWeights):
         total = sum(g.norm() ** 2 for g in grads if g is not None)
         return total.sqrt()
 
-    def update(self, losses, model):
+    def update(self, loss_terms, model):
         """grad_norms: list of grad_\theta(loss) terms"""
         grad_norms = torch.zeros_like(self.weights)
-        for i in range(len(losses)):
-            grad_norms[i] = self.__compute_grad_norm(losses[i], model)
+        for i in range(len(loss_terms)):
+            grad_norms[i] = self.__compute_grad_norm(loss_terms[i], model)
         weights_new = torch.ones_like(self.weights) * grad_norms.sum() + 1e-8
         weights_new /= grad_norms + 1e-8
         if not torch.isfinite(weights_new).all():
@@ -163,5 +163,18 @@ class AdaptiveWeights(ConstantWeights):
             return
         # exponential moving average
         self.weights = self.momentum * self.weights + (1 - self.momentum) * weights_new
+        self.weights_history.append(self.weights.detach().clone())
+        print(f"- updated loss weights: {self.weights.tolist()}")
+
+
+class MaxAdaptLambdas(FixedLambdas):
+    def __init__(self, weights, device='cpu'):
+        self.weights = weights
+        self.weights_history = [self.weights.detach().clone()]
+
+    def update(self, loss_terms):
+        """grad_norms: list of grad_\theta(loss) terms"""
+        losses = torch.tensor([loss.detach() for loss in loss_terms])
+        self.weights *= torch.max(losses) / losses
         self.weights_history.append(self.weights.detach().clone())
         print(f"- updated loss weights: {self.weights.tolist()}")

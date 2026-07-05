@@ -126,7 +126,7 @@ class PINN_Trainer:
     def _build_bundle(self, si, n_steps, resampling_frequency, use_time_adapt_sampling):
         if use_time_adapt_sampling:
             T = min( (si+resampling_frequency)/n_steps, 1.0 ) * self.T_max
-            print(f"si={si}, T={T}")
+            print(f"si={si}, T={T:.4f}")
             self.sampling_settings["T"] = T
             self.time_adapt_sampl_hist.append(T)
         self.bundle = sampling.create_dataloaders(
@@ -222,15 +222,21 @@ class PINN_Trainer:
             if (si + 1) % n_steps_decay == 0:
                 self.scheduler.step()
 
-            if type(self.loss_weighting).__name__ == 'AdaptiveWeights':
+            if isinstance(self.loss_weighting, loss.GradnormAdaptLambdas):
                 if (si + 1) % gradnorm_update_freq == 0:
                     self.optimizer.zero_grad()
-                    per_term_w = [
+                    loss_terms = [
                         self._loss_term(k, batch_term_objs, use_sdgd, sdgd_num_dims, use_causal_loss_weighting, t_discr, eps)
                         for k in self.active_losses
                     ]
+                    self.loss_weighting.update(loss_terms, self.model)
+            elif isinstance(self.loss_weighting, loss.MaxAdaptLambdas):
+                    loss_terms = [
+                        self._loss_term(k, batch_term_objs, use_sdgd, sdgd_num_dims, use_causal_loss_weighting, t_discr, eps)
+                        for k in self.active_losses
+                    ]
+                    self.loss_weighting.update(loss_terms)
 
-                    self.loss_weighting.update(per_term_w, self.model)
 
             if self.profiler: self.profiler.exit(si)
 
@@ -255,8 +261,9 @@ class PINN_Trainer:
                     mem_log = f" - {self.memory_tracker.format_sample(memory_sample)}"
                     print(mem_log)
                 if use_causal_loss_weighting:
-                    print(len(self.causal_weights_hist_pde), self.causal_weights_hist_pde[-1])
-                    print(len(self.causal_losses_hist_pde), self.causal_losses_hist_pde[-1])
+                    pass
+                    #print(len(self.causal_weights_hist_pde), self.causal_weights_hist_pde[-1])
+                    #print(len(self.causal_losses_hist_pde), self.causal_losses_hist_pde[-1])
 
             
             #if si == 130:
@@ -266,8 +273,8 @@ class PINN_Trainer:
             #    torch.save({k: torch.tensor(v) for k, v in losses.items()}, f'{loss_name}_.pth')
             #    torch.save(torch.tensor(test_log), f'{l2_name}_.pth')
             #    print("\nResults saved.")
-            if (crit_loss_val is not None) and loss < crit_loss_val:
-                return self.losses, test_res_mse, test_rel_l2
+            if (crit_loss_val is not None) and loss_value < crit_loss_val:
+                return losses_hist_dict, test_res_mse, test_rel_l2
 
         return losses_hist_dict, test_res_mse, test_rel_l2
 
@@ -300,11 +307,12 @@ class PINN_Trainer:
 
         if self.profiler: self.profiler.make()
 
-        self.losses = {"total": [], **{k: [] for k in self.active_losses}}
+        losses_hist_dict = {"total": [], **{k: [] for k in self.active_losses}}
         test_res_mse = []
         test_rel_l2 = []
 
         self.last_losses = None
+        self.last_total_loss = None
         self.i = 0
 
         def build_closure(batch_term_objs):
@@ -354,7 +362,7 @@ class PINN_Trainer:
                 closure_step_fn = build_closure(batch_term_objs)
                 self.i = 0
                 self.s = si
-                loss = self.optimizer.step(closure_step_fn)
+                loss_value = self.optimizer.step(closure_step_fn)
             else:
                 loaders = [self.bundle[k] for k in self.active_losses]
                 for batches in zip(*loaders):
@@ -362,37 +370,38 @@ class PINN_Trainer:
                     closure_step_fn = build_closure(batch_term_objs)
                     self.i = 0
                     self.s = si
-                    loss = self.optimizer.step(closure_step_fn)
-            self.losses["total"].append(self.last_total_loss)
+                    loss_value = self.optimizer.step(closure_step_fn)
+            losses_hist_dict["total"].append(self.last_total_loss)
             for k in self.active_losses:
-                self.losses[k].append(self.last_losses[k])
+                losses_hist_dict[k].append(self.last_losses[k])
 
-
-            if (si + 1) % n_steps_decay == 0:
-                self.scheduler.step()
-
-            if type(self.loss_weighting).__name__ == 'AdaptiveWeights':
+            if isinstance(self.loss_weighting, loss.GradnormAdaptLambdas):
                 if (si + 1) % gradnorm_update_freq == 0:
                     self.optimizer.zero_grad()
-                    per_term_w = [
+                    loss_terms = [
                         self._loss_term(k, batch_term_objs, use_sdgd, sdgd_num_dims, use_causal_loss_weighting, t_discr, eps)
                         for k in self.active_losses
                     ]
-                    self.loss_weighting.update(per_term_w, self.model)
+                    self.loss_weighting.update(loss_terms, self.model)
+            elif isinstance(self.loss_weighting, loss.MaxAdaptLambdas):
+                    loss_terms = [
+                        self._loss_term(k, batch_term_objs, use_sdgd, sdgd_num_dims, use_causal_loss_weighting, t_discr, eps)
+                        for k in self.active_losses
+                    ]
+                    self.loss_weighting.update(loss_terms)
+
 
             if self.profiler: self.profiler.exit(si)
 
             if (si + 1) % logging_frequency == 0:
-                parts = [f"Step {si+1}/{n_steps}", f"Loss_ret: {loss.item():.6f}", f"Loss_tot: {self.losses['total'][-1]:.6f}"]
+                parts = [f"Step {si+1}/{n_steps}", f"Loss_ret: {loss_value.item():.6f}", f"Loss_tot: {losses_hist_dict['total'][-1]:.6f}"]
                 for k in self.active_losses:
                     parts.append(f"{k}: {self.last_losses[k]:.6f}")
                 parts.append(f"lr: {self.optimizer.param_groups[0]['lr']:.6f}")
                 log = ", ".join(parts)
                 print(log)
                 if self.testing_suite is not None:
-                    test_dict_res_mse, test_dict_rel_l2 = self.testing_suite.test_model(
-                        self.model, self.pde_model, device=self.device#, test_bs=self.sampling_settings["bs"]
-                    )
+                    test_dict_res_mse, test_dict_rel_l2 = self.testing_suite.test_model(self.model, self.pde_model, device=self.device) #, test_bs=self.sampling_settings["bs"])
                     test_log_mse_loss = " - Testing: res MSE | " + \
                         ", ".join([f"{k}: {v:.6f}" for k, v in test_dict_res_mse.items()])
                     test_res_mse.append(test_dict_res_mse)
@@ -405,13 +414,14 @@ class PINN_Trainer:
                     mem_log = f" - {self.memory_tracker.format_sample(memory_sample)}"
                     print(mem_log)
                 if use_causal_loss_weighting:
-                    print(len(self.causal_weights_hist_pde), self.causal_weights_hist_pde[-1])
-                    print(len(self.causal_losses_hist_pde), self.causal_losses_hist_pde[-1])
+                    pass
+                    #print(len(self.causal_weights_hist_pde), self.causal_weights_hist_pde[-1])
+                    #print(len(self.causal_losses_hist_pde), self.causal_losses_hist_pde[-1])
 
-            if (crit_loss_val is not None) and loss < crit_loss_val:
-                return self.losses, test_res_mse, test_rel_l2
+            if (crit_loss_val is not None) and loss_value < crit_loss_val:
+                return losses_hist_dict, test_res_mse, test_rel_l2
 
-        return self.losses, test_res_mse, test_rel_l2
+        return losses_hist_dict, test_res_mse, test_rel_l2
 
 
 

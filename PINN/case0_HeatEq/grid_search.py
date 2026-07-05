@@ -14,7 +14,7 @@ import utility
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--suffix", default=None, type=str, help="suffix of the generated grid search folder")
-parser.add_argument("--out_dir", default="lalar", type=str)
+parser.add_argument("--out_dir", default=None, type=str)
 args = parser.parse_args()
 
 CASE_DIR = Path(__file__).resolve().parent # case0_HeatEq/
@@ -35,34 +35,37 @@ FIXED_PARAMS = {
     "seed": 42,
 
     "d": 2,
-    #"layers": "64,64,64,64",
-    "layers": "128,128,128,128",
+    "layers": "64,64,64,64",
+    #"layers": "128,128,128,128",
     #"layers": "192,192,192,192",
     #"layers": "256,256,256,256",
     #"layers": "512,512,512,512",
-    
-    # 1)
-    "time_strategy": 0,
+
+    "time_strategy": "none",
     "t_discr": "0.0, 0.5, 1.5, 3.5",
     "eps": 0.1,
-    # 2)
-    #"n_steps": 39_999,
+
+    #"n_steps": 29_999,
     "n_steps": 109,
-    "n_steps_decay": 1000, # = n_steps / 25
+    "n_steps_decay": 2000, # = n_steps / 25
     # 3)
 
-    "bs": 1_024,
+    "n_res_points": 8192,
+    "bs": 128,
     "resampling_frequency": 100, # res_freq * bs = n_res_points
-    "n_res_points": 102400,
     "one_batch_per_epoch": True,
 
-    "active_losses": "pde,bc,ic",
-    "use_gradnorm": False,
+    "active_losses": "pde,ic",
+    "use_hard_constrains": True,
+    "lambda_strategy": "fixed",
     "lambda_pde": 1.0,
-    "lambda_bc": 10.0,
-    "lambda_ic": 10.0,
+    "lambda_bc": 1.0,
+    "lambda_ic": 1.0,
+
+    "use_lbfgs": False,
 
     #"enable_profiler": True
+    "enable_memory_tracking": True,
     "enable_testing": False,
     "n_test_points": 100_000,
 }
@@ -74,27 +77,45 @@ FIXED_PARAMS = {
 # - dicts, for grouped parameters such as trajectory sampling settings
 SEARCH_AXES = {
     #"ic_type": ["cauchy", "gauss"],
-    "lambda_pde": [0.1, 1.0, 10.0],
-    #"lambda_bc": [0.1, 1.0, 10.0],
+    #"lambda_pde": [0.1, 1.0, 10.0],
+    "lambda_bc": [0.1, 1.0, 10.0],
     #"lambda_ic": [0.1, 1.0, 10.0]
     #"d": [6, 4, 8],
-    #"time_strategy": [0,1,2]
     #"box": [
     #    {"L_min": -4.0, "L_max": 4.0},
     #    {"L_min": -6.0, "L_max": 6.0},
     #],
-    #"sampling": [
-    #    {
-    #        "n_trajs": 1_000,
-    #        "resampling_frequency": 10,
-    #        "n_res_points": 100_000,
-    #    },
-    #    {
-    #        "n_trajs": 10_000,
-    #        "resampling_frequency": 100,
-    #        "n_res_points": 1_000_000,
-    #    },
-    #],
+    "sampling": [
+        {
+            # full batch, fixed
+            "n_res_points": 8192,
+            "bs": 8192,
+            "one_batch_per_epoch": True,
+            "prevent_resampling": True
+        },
+        {
+            # mini batch, fixed
+            "n_res_points": 8192,
+            "bs": 128,
+            "one_batch_per_epoch": False,
+            "prevent_resampling": True
+        },
+        {
+            # full batch, resampl
+            "n_res_points": 8192,
+            "bs": 8192,
+            "one_batch_per_epoch": True,
+            "prevent_resampling": False
+        },
+        {
+            # mini batch, resampl
+            "n_res_points": 8192,
+            "resampling_frequency": 1,
+            "bs": 128,
+            "one_batch_per_epoch": False,
+            "prevent_resampling": False
+        },
+    ],
     #"T": [5.0, 6.0],
     #"bs": [10_000, 1_000]
     #"stepping": [

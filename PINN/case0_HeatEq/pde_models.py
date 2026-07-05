@@ -39,20 +39,17 @@ class PDEModel:
 
 
 class HeatEquation(PDEModel):
-    def __init__(self, d, alpha=None, k=None):
+    def __init__(self, d, alpha_bar=None, k=None):
         self.d = d
         #self.a = torch.pi * torch.ones(d) if a is None else a
-        self.k     = k     if k     is not None else torch.pi * torch.ones(d)
-        self.alpha = alpha if alpha is not None else 0.01
-        self.k_2 = (self.k**2).sum()
+        self.alpha_bar = alpha_bar if alpha_bar is not None else 0.01
+        self.alpha = self.alpha_bar / float(d)
     def get_pde_metadata(self):
         return {
             "alpha": self.alpha,
-            "k": list(map(lambda x: float(x), self.k)),
         }
     def load_pde_metadata(self, pde_metadata) -> None:
         pde_params = self.__load_pde_metadata(pde_metadata)
-        pde_params["k"] = torch.tensor(pde_params["k"])
         self.__init__(self.d, **pde_params)
 
     #def u_spatial(self, x):
@@ -70,11 +67,11 @@ class HeatEquation(PDEModel):
             t = X[:,-1:]
             x = torch.pi*X[:,:-1]
 
-        gamma = self.alpha * self.d * torch.pi**2
+        gamma = self.alpha_bar * torch.pi**2
         out = torch.exp(-gamma*t) * torch.prod(torch.sin(x), dim=1, keepdim=True)
         a = 2.0
-        b = 0.67
-        delta = self.alpha * (self.d-1+a**2) * torch.pi**2
+        b = 0.67 / float(self.d**0.5)
+        delta = self.alpha_bar * (1+(a**2-1)/float(self.d)) * torch.pi**2
         out2 = torch.zeros_like(out)
         for i in range(self.d):
             o = torch.sin(x)
@@ -82,11 +79,10 @@ class HeatEquation(PDEModel):
             out2 += torch.prod(o, dim=1, keepdim=True)
         out2 *= b*torch.exp(-delta*t)
         return out + out2
-
-        out = c*torch.exp(-0.01*t) * torch.sin(x[:,0:1])*torch.sin(x[:,1:2])
-        out += b*torch.exp(-t) * torch.sin(x[:,0:1])*torch.sin(a*x[:,1:2])
-        out += b*torch.exp(-t) * torch.sin(a*x[:,0:1])*torch.sin(x[:,1:2])
-        return out
+        #out = c*torch.exp(-0.01*t) * torch.sin(x[:,0:1])*torch.sin(x[:,1:2])
+        #out += b*torch.exp(-t) * torch.sin(x[:,0:1])*torch.sin(a*x[:,1:2])
+        #out += b*torch.exp(-t) * torch.sin(a*x[:,0:1])*torch.sin(x[:,1:2])
+        #return out
 
     def u_bc(self, X):
         return self.u_analytic(X)

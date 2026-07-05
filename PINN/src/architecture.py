@@ -291,6 +291,6 @@ def load_model_from_json(model_path: str, device='cpu'):
     model_class = utility.get_module_classes(mod)[
         model_metadata["model_class"]
     ]
-    model= model_class(model_metadata["d"]+1, layers, model_metadata["output_dim"]).to(device)
+    model= model_class(model_metadata["args"]["d"]+1, layers, model_metadata["output_dim"]).to(device)
     model.load_state_dict(torch.load(model_path, weights_only=True))
     return model

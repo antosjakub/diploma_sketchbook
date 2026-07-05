@@ -76,12 +76,17 @@ def make_optim(model, args):
     return optimizer, scheduler
 
 
-def make_loss_weighting(args, active_losses, device=None):
-    """Build Adaptive/Constant weighting with one weight per active loss term."""
+def make_loss_lambdas(args, active_losses, device=None):
+    """Build loss weighting strategy with one lambda weight per active loss term."""
     weights = torch.tensor([getattr(args, f"lambda_{k}") for k in active_losses], device=device)
-    if args.use_gradnorm:
-        return loss.AdaptiveWeights(weights=weights)
-    return loss.ConstantWeights(weights=weights)
+    if args.lambda_strategy == "fixed":
+        return loss.FixedLambdas(weights=weights)
+    elif args.lambda_strategy == "gradnorm_adapt":
+        return loss.GradnormAdaptLambdas(weights=weights)
+    elif args.lambda_strategy == "max_adapt":
+        return loss.MaxAdaptLambdas(weights=weights)
+    else:
+        raise NameError("Learn how to use language sir: ", args.lambda_strategy)
 
 
 def make_spatial_domain(d, x_min, x_max, device=None, dtype=torch.float32):
@@ -143,7 +148,7 @@ def save_run(dir_name, model, losses, args, device, pde_model=None, head_fn=None
     loss_name = f'{dir_name}/training_loss'
     torch.save(model.state_dict(), f'{dir_name}/model.pth')
     torch.save({k: torch.tensor(v) for k, v in losses.items()}, f'{loss_name}.pth')
-    if isinstance(loss_weighting, loss.AdaptiveWeights) and len(loss_weighting.weights_history) > 0:
-        weights_name = f'{dir_name}/training_loss_weights'
-        torch.save(torch.stack(loss_weighting.weights_history), f'{weights_name}.pth')
+    #if isinstance(loss_weighting, loss.AdaptiveWeights) and len(loss_weighting.weights_history) > 0:
+    #    weights_name = f'{dir_name}/training_loss_weights'
+    #    torch.save(torch.stack(loss_weighting.weights_history), f'{weights_name}.pth')
     print("\nResults saved.")

@@ -43,7 +43,7 @@ def add_common_args(parser):
     parser.add_argument("--lambda_bc", default=10.0, type=float, help="")
     parser.add_argument("--lambda_ic", default=10.0, type=float, help="")
     parser.add_argument("--lambda_norm", default=0.1, type=float, help="Weight of the integral p dx = 1 normalization loss.")
-    parser.add_argument("--use_gradnorm", action="store_true", help="grad adaptive loss term weighting.")
+    parser.add_argument("--lambda_strategy", default="fixed", choices=["fixed","gradnorm_adapt","max_adapt"], help="pde,bc,ic loss weighting")
     parser.add_argument("--gradnorm_update_freq", default=50, help="how many steps until we update the weights")
     parser.add_argument("--active_losses", default="pde,ic", type=str, help="Comma-separated subset of {pde,bc,ic,norm}. 'pde' is required.")
     # sampling
@@ -63,7 +63,7 @@ def add_common_args(parser):
     parser.add_argument("--logging_frequency", default=100, type=int, help="")
     parser.add_argument("--enable_testing", action="store_true", help="Compute L2/L1/rel errors during training (requires analytic solution).")
     # causal strategies
-    parser.add_argument("--time_strategy", default=0, type=int, choices=[0,1,2], help="0=none, 1=time_adapt_sampling, 2=causal_loss_weighting")
+    parser.add_argument("--time_strategy", default="none", type=str, choices=["none","time_adapt_sampl","causal_loss"], help="How to approach causality")
     # for causal_loss_weighting
     parser.add_argument("--t_discr", default="0.0, 0.5, 1.5, 3.5", type=str, help="")
     parser.add_argument("--eps", default=0.1, type=float, help="")
@@ -126,7 +126,13 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
 
     if args.custom_ic_model is not None:
         print(f"Using a custom IC function: {args.custom_ic_model}")
-        model_ic = architecture.load_model_from_json(args.custom_ic_model, device)
+        #model_ic = architecture.load_model_from_json(args.custom_ic_model, device)
+        import sys, os
+        parent_dir = os.path.dirname(args.starting_model)
+        model_metadata = utility.json_load(f'{parent_dir}/model_metadata.json')
+        layers = utility.layers_from_string(model_metadata["args"]["layers"])
+        model_ic = architecture.PINN(D, layers, output_dim, head_fn=head_fun).to(device)
+        model_ic.load_state_dict(torch.load(args.starting_model, weights_only=True))
         model_ic.eval()
         custom_ic_fn = model_ic.forward
     else:
@@ -138,7 +144,7 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
     print(f"Active losses: {active_losses}")
 
     optimizer, scheduler = run_utils.make_optim(model, args)
-    loss_weighting = run_utils.make_loss_weighting(args, active_losses, device=device)
+    loss_weighting = run_utils.make_loss_lambdas(args, active_losses, device=device)
     profiler = run_utils.make_profiler(dir_name, args, device)
 
     sdgd_num_dims = args.sdgd_num_dims if args.sdgd_num_dims is not None else d
@@ -168,13 +174,13 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
     use_causal_loss_weighting = False
     use_time_adapt_sampling = False
     t_discr = None
-    if args.time_strategy == 0:
-        print("time_strategy = none")
-    elif args.time_strategy == 1:
-        print("time_strategy = time_adapt_sampling")
+    print()
+    print(f"time_strategy = {args.time_strategy}")
+    if args.time_strategy == "none":
+        pass
+    elif args.time_strategy == "time_adapt_sampl":
         use_time_adapt_sampling = True
-    elif args.time_strategy == 2:
-        print("time_strategy = causal_loss_weighting")
+    elif args.time_strategy == "causal_loss":
         use_causal_loss_weighting = True
         t_discr = torch.tensor(utility.floats_from_string_list(args.t_discr), device=device)
     else:
@@ -258,14 +264,19 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
 
 
     # individual loss term weighting - pde,bc,ic
-    if args.use_gradnorm:
+    if args.lambda_strategy == "gradnorm_adapt" or args.lambda_strategy == "max_adapt":
         weights_hist_tensor = torch.stack(loss_weighting.weights_history, dim=1)
         weights_hist = {}
         for i, loss_name in enumerate(active_losses):
             weights_hist[loss_name] = weights_hist_tensor[i]
-        file_name = f'{dir_name}/training_gradnorm'
+        if args.lambda_strategy == "gradnorm_adapt":
+            title = 'GradNorm-adaptive loss weights'
+            file_name = f'{dir_name}/training_lambdas_gradnorm_adapt'
+        else:
+            title = 'Max-adaptive loss weights'
+            file_name = f'{dir_name}/training_lambdas_max_adapt'
+        visualize_training_metrics.plot_lambda_adapt_weights(weights_hist, file_name, title)
         torch.save(weights_hist, f'{file_name}.pth')
-        visualize_training_metrics.plot_GradNorm_weights(weights_hist, file_name)
 
     if use_time_adapt_sampling:
         file_name = f'{dir_name}/training_time_adapt_sampling'

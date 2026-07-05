@@ -26,10 +26,9 @@ def plot_hist_data_dict(hist_data_dict, file_name, label_fn, line_width_fn, colo
     """
     hist_data_dict: ex. {'pde': [], 'bc': []}
     """
-    # Plot training loss. `loss` may be a list/tensor (total only) or a dict
-    # mapping component name -> per-step values (e.g. {"total", "pde", "bc", "ic", "p_norm"}).
     print(f"Saving: {file_name}.png")
     plt.figure(figsize=(10, 5))
+    
     if isinstance(hist_data_dict, dict):
         # plasma good for causal weights w_m
         #default_color_names = [
@@ -53,14 +52,22 @@ def plot_hist_data_dict(hist_data_dict, file_name, label_fn, line_width_fn, colo
                 plt.semilogy(series, **params, color=color_fn(name))
             else:
                 plt.semilogy(series, **params)
-        plt.legend()
+        
+        # Increased legend font size
+        plt.legend(fontsize=14)
     else:
         plt.semilogy(_to_plot_series(hist_data_dict))
-    plt.xlabel('Step')
-    plt.ylabel(y_label)
-    plt.title(title)
+    
+    # Increased label and title font sizes
+    plt.xlabel('step', fontsize=14)
+    #plt.ylabel(y_label, fontsize=14)
+    plt.title(title, fontsize=16)
+    
+    # Increased axis tick label sizes (numbers on X and Y axes)
+    plt.tick_params(axis='both', labelsize=12)
+    
     plt.grid(True)
-    plt.savefig(f'{file_name}.png', dpi=150)
+    plt.savefig(f'{file_name}.png', dpi=150, bbox_inches='tight') # bbox_inches='tight' ensures labels aren't cut off
 
 
 # term_type: pde, bc
@@ -81,15 +88,15 @@ def plot_causal_weights_losses(hist_data_dict, file_name, wl_type, term_type, t_
 
 
 
-def plot_GradNorm_weights(weights_data_dict, file_name):
-    plot_hist_data_dict(weights_data_dict, file_name, lambda name: rf"$\lambda_{{{name}}}$", lambda name: 1.0, lambda name: None, 'weights', 'GradNorm weights')
+def plot_lambda_adapt_weights(weights_data_dict, file_name, title):
+    plot_hist_data_dict(weights_data_dict, file_name, lambda name: rf"$\lambda_{{{name}}}$", lambda name: 1.0, lambda name: None, 'weights', title)
 
 def plot_loss(loss_data_dict, file_name):
     plot_hist_data_dict(loss_data_dict, file_name, lambda name: rf"$\ell_{{{name}}}$", lambda name: 1.0 if name == 'total' else 1.0, lambda name: 'black' if name == 'total' else None, 'loss', "Training loss")
 
 def plot_mem(mem_data_dict, file_name):
     mem_series = {k: v for k, v in mem_data_dict.items() if k != "step"}
-    plot_hist_data_dict(mem_series, file_name, lambda name: name, lambda name: 1.0, lambda name: None, 'MB', "Memory")
+    plot_hist_data_dict(mem_series, file_name, lambda name: name, lambda name: 1.0, lambda name: None, 'MB', "Memory [MB]")
 
 def plot_test_rel_l2(test_data_dict, file_name):
     plot_hist_data_dict(test_data_dict, file_name, lambda name: rf"$rel\_L2_{{{name}}}$", lambda name: 1.0, lambda name: None, 'rel L2 error', "Testing: Relative L2 error")

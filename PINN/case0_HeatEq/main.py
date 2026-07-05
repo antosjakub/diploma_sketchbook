@@ -41,27 +41,33 @@ parser.set_defaults(
     f_pde_full_domain=1,
     f_ic_trajs=0,
     f_ic_full_domain=1,
+    glorot_init=True,
     # nice defaults
     d=2,
     layers="64,64,64,64",
     active_losses="pde,bc,ic",
     #
-    bs=1000,
-    n_res_points=100_000,
+    bs=500,
+    n_res_points=50_000,
     resampling_frequency=100,
     prevent_resampling=False,
     one_batch_per_epoch=True,
     #
     n_steps=1000,
     n_steps_decay=1000,
-    #use_gradnorm=True,
-    #use_lbfgs=False,
+    #lambda_strategy="max_adapt",
+    lambda_strategy="gradnorm_adapt",
+    #lambda_strategy="fixed",
+    time_strategy="none",
+    #time_strategy="time_adapt_sampl",
+    use_lbfgs=True,
     #enable_profiler = True,
     enable_memory_tracking = True,
     #enable_testing = True,
-    #clear_dir = True,
+    clear_dir = True,
     output_dir = 'run_latest',
     use_hard_constrains=False,
+    #initial_model="run_latest/model.pth"
 )
 
 
@@ -94,6 +100,8 @@ print(f"Active losses: {active_losses}")
 spatial_domain = run_utils.make_spatial_domain(d, args.L_min, args.L_max, device=device)
 test_sampling_type = "domain_and_trajectories"
 if args.enable_testing:
+    # pass in a distribtion for sampling the center more heavily ? - for L_inf error est.
+    # do not do the MSE loss reporting
     testing_suite = utility.TestingSuite(d, device, args.bs)
     test_sampling_type = "domain_and_trajectories"
     sampling_settings = {

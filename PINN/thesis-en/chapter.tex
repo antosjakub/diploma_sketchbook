@@ -1911,7 +1911,14 @@ the other $i\notin I$ are treated as scalars
 \section{Numerical experiments notes}
 
 \subsection{training and accuracy metrics}
-relative l2 error:
+
+As dimensionality $d$ increases, the geometry of the space changes drastically,
+and the volume shifts aggressively toward the boundaries.
+- the notorious peak of the orange has more volume that its core (see Appendix)
+
+
+A. Relative l2 error, for:
+IC,TC pred vs true, if analytical known: PDE pred vs true
 $$
 \frac{
 \sum_{i=1}^n(\hat y_i - y_i)^2
@@ -1920,6 +1927,25 @@ $$
 }
 $$
 where $\hat y_i$ are the predictions and $y_i$ is the ground truth value.
+use LHS
+
+B. $L_inf$ err, for:
+IC,TC pred vs true, if analytic known: PDE pred vs true
+$$
+E_\inf = \max_\Omega|\hat y_i - y_i|
+$$
+need to look at the section of the domain where the solution is to have the max value
+sample the center via gaussian?
+
+select a few important time slides and compute the errs there
+- IC
+- in between
+- TC
+
+%For PINNS during training, we also use:
+%- MSE - loss - really needed? - gives same info as normal loss computed during calc...
+%- just do rell2 w.r.t IC / TC / analytic
+
 
 \begin{itemize}
 \item run 5 times with diff random seeds
