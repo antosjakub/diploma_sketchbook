@@ -177,6 +177,7 @@ class PINN_Trainer:
         losses_hist_dict = {"total": [], **{k: [] for k in self.active_losses}}
         test_rel_l2 = []
         test_linf = []
+        self.log_steps = []
 
         if self.profiler: self.profiler.make()
 
@@ -241,6 +242,7 @@ class PINN_Trainer:
             if self.profiler: self.profiler.exit(si)
 
             if (si + 1) % logging_frequency == 0:
+                self.log_steps.append(si+1)
                 parts = [f"Step {si+1}/{n_steps}", f"Loss: {loss_value.item():.6f}"]
                 for k in self.active_losses:
                     parts.append(f"{k}: {last_losses_dict[k]:.6f}")
@@ -264,8 +266,8 @@ class PINN_Trainer:
                     pass
                     #print(len(self.causal_weights_hist_pde), self.causal_weights_hist_pde[-1])
                     #print(len(self.causal_losses_hist_pde), self.causal_losses_hist_pde[-1])
+                print(f" - {next(self.model.parameters()).device}, {loss_value.device}, {batch_term_objs['pde'][0].device.type}")
 
-            
             #if si == 130:
             #    loss_name = f'{self.dir_name}/training_loss'
             #    l2_name = f'{self.dir_name}/training_l2_error'
@@ -310,6 +312,7 @@ class PINN_Trainer:
         losses_hist_dict = {"total": [], **{k: [] for k in self.active_losses}}
         test_rel_l2 = []
         test_linf = []
+        self.log_steps = []
 
         self.last_losses = None
         self.last_total_loss = None
@@ -394,6 +397,7 @@ class PINN_Trainer:
             if self.profiler: self.profiler.exit(si)
 
             if (si + 1) % logging_frequency == 0:
+                self.log_steps.append(si+1)
                 parts = [f"Step {si+1}/{n_steps}", f"Loss_ret: {loss_value.item():.6f}", f"Loss_tot: {losses_hist_dict['total'][-1]:.6f}"]
                 for k in self.active_losses:
                     parts.append(f"{k}: {self.last_losses[k]:.6f}")
@@ -417,6 +421,7 @@ class PINN_Trainer:
                     pass
                     #print(len(self.causal_weights_hist_pde), self.causal_weights_hist_pde[-1])
                     #print(len(self.causal_losses_hist_pde), self.causal_losses_hist_pde[-1])
+                print(f" - {next(self.model.parameters()).device}, {loss_value.device}, {batch_term_objs['pde'][0].device.type}")
 
             if (crit_loss_val is not None) and loss_value < crit_loss_val:
                 return losses_hist_dict, test_rel_l2, test_linf

@@ -234,7 +234,8 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
         )
     run_utils.merge_losses(losses, losses_adam)
     print("\nAdam training complete!")
-    print(utility.get_duration_h_m_s(t1, time.time(), "Adam training"))
+    t2 = time.time()
+    print(utility.get_duration_h_m_s(t1, t2, "Adam training"))
 
     # create a simulation results file?
     # - add in time
@@ -250,8 +251,18 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
     ) 
     import visualize_training_metrics
 
+    report = {}
+    report['device'] = device.type
+    report['runtime'] = t2-t1
+    report['runtime_fmt'] = utility.get_duration_h_m_s(t1, t2, "Run")
+
+
     file_name = f'{dir_name}/training_loss'
     visualize_training_metrics.plot_loss(losses, file_name)
+    report["loss"] = {}
+    for term in active_losses:
+        report["loss"][term] = losses[term][-1]
+
     if args.enable_testing:
         rel_l2_data = {k: [d[k] for d in test_log_rel_l2] for k in test_log_rel_l2[0]}
         linf_data = {k: [d[k] for d in test_log_linf] for k in test_log_linf[0]}
@@ -262,6 +273,11 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
         visualize_training_metrics.plot_test_linf(linf_data, file_name+'_linf')
         torch.save(rel_l2_data, f'{file_name}_rel_l2.pth')
         torch.save(linf_data, f'{file_name}_linf.pth')
+        report["test_rel_l2"] = {}
+        report["test_linf"] = {}
+        for term in ('pde', 'ic'):
+            report["test_rel_l2"][term] = rel_l2_data[term][-1]
+            report["test_linf"][term] = linf_data[term][-1]
 
 
     # individual loss term weighting - pde,bc,ic
@@ -278,6 +294,9 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
             file_name = f'{dir_name}/training_lambdas_max_adapt'
         visualize_training_metrics.plot_lambda_adapt_weights(weights_hist, file_name, title)
         torch.save(weights_hist, f'{file_name}.pth')
+        report["lambdas_final"] = {}
+        for term in list(weights_hist.keys()):
+            report["lambdas_final"][f"lambda_{term}"] = weights_hist[term][-1].item()
 
     if use_time_adapt_sampling:
         file_name = f'{dir_name}/training_time_adapt_sampling'
@@ -305,5 +324,12 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
         file_name = f'{dir_name}/training_memory_metrics'
         visualize_training_metrics.plot_mem(trainer.memory_history, file_name)
         utility.json_dump(f"{file_name}.json", trainer.memory_history)
+        report["memory_metrics"] = {}
+        for k, v in trainer.memory_history.items():
+            if (len(v) > 0) and (v[0] is not None):
+                report["memory_metrics"][k] = max(v)
+
+    # save the most imporant stufff
+    utility.json_dump(f"{dir_name}/report.json", report)
 
     return trainer, model, dir_name

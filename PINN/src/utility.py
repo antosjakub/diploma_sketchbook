@@ -44,7 +44,6 @@ class MemoryTracker:
         self.use_gpu = getattr(device, "type", device) == "cuda" and torch.cuda.is_available()
         self.peak_process_rss_bytes = 0
         self.history = {
-            "step": [],
             "process_rss_mb": [],
             "process_peak_rss_mb": [],
             "gpu_allocated_mb": [],
@@ -71,7 +70,6 @@ class MemoryTracker:
             gpu_peak_reserved_bytes = torch.cuda.max_memory_reserved(self.device)
 
         sample = {
-            "step": step,
             "process_rss_mb": self._bytes_to_mb(process_rss_bytes),
             "process_peak_rss_mb": self._bytes_to_mb(self.peak_process_rss_bytes) if process_rss_bytes is not None else None,
             "gpu_allocated_mb": self._bytes_to_mb(gpu_allocated_bytes),
@@ -390,11 +388,12 @@ class TestingSuiteHeatEq:
 
     def make_test_data(self, model, pde_model, sampling_type, sampling_settings, analytic_sol_fn, file_path, device, seed=4242):
         def _to_cpu(value):
-            if torch.is_tensor(value):
-                return value.detach().cpu()
-            if isinstance(value, dict):
-                return {k: _to_cpu(v) for k, v in value.items()}
             return value
+            #if torch.is_tensor(value):
+            #    return value.detach().cpu()
+            #if isinstance(value, dict):
+            #    return {k: _to_cpu(v) for k, v in value.items()}
+            #return value
 
         cuda_devices = [torch.cuda.current_device()] if torch.cuda.is_available() else []
         with torch.random.fork_rng(devices=cuda_devices):
@@ -474,7 +473,7 @@ class TestingSuiteHeatEq:
                     if err_max_curr > err_max:
                         err_max = err_max_curr
             metrics_rel_l2[term] = (err_sq/ max(target_sq, eps)) ** 0.5
-            metrics_linf[term] = err_max
+            metrics_linf[term] = err_max.item()
 
         model.train()
 
