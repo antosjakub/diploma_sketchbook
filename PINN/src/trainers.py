@@ -38,6 +38,53 @@ class PINN_Trainer:
         self.active_losses = active_losses
         self.bundle = None  # populated in train_adam_minibatch
 
+    def _init_fast_batch_sources(self):
+        """Cache tensor-backed dataset views to avoid DataLoader collation overhead."""
+        self._fast_batch_sources = {}
+        for k in self.active_losses:
+            loader = self.bundle.get(k)
+            dataset = loader.dataset
+            batch_size = loader.batch_size
+            assert hasattr(dataset, "X")
+            assert hasattr(dataset, "precomputed")
+            n_samples = len(dataset.X)
+            self._fast_batch_sources[k] = {
+                "X": dataset.X,
+                "precomputed": dataset.precomputed,
+                "batch_size": batch_size,
+                "n_samples": n_samples,
+                "perm": torch.randperm(n_samples, device=dataset.X.device),
+                "pos": 0,
+            }
+
+    def _next_batch_fast(self, k):
+        src = self._fast_batch_sources[k]
+        if src["pos"] >= src["n_samples"]:
+            src["perm"] = torch.randperm(src["n_samples"], device=src["X"].device)
+            src["pos"] = 0
+        end = min(src["pos"] + src["batch_size"], src["n_samples"])
+        idx = src["perm"][src["pos"]:end]
+        src["pos"] = end
+        return src["X"][idx], {name: values[idx] for name, values in src["precomputed"].items()}
+
+
+    def _iter_epoch_batches_fast(self):
+        """
+        Yield one shuffled epoch, matching zip(*loaders) stop-at-shortest semantics.
+        Preparation for minibatch loop.
+        """
+        # create a random permutation of indices
+        for src in self._fast_batch_sources.values():
+            src["perm"] = torch.randperm(src["n_samples"], device=src["X"].device)
+            src["pos"] = 0
+        n_batches = min(
+            (src["n_samples"] + src["batch_size"] - 1) // src["batch_size"]
+            for src in self._fast_batch_sources.values()
+        )
+        # lets build iterator
+        for _ in range(n_batches):
+            yield {k: self._next_batch_fast(k) for k in self.active_losses}
+
     def normalization_loss(self, x, model, precomputed, n_time_slices=4):
         """Importance-sampled estimate of (∫p(x,t) dx - 1)^2, averaged over K random
         time slices. `batch` is (x, {"p_inf": p_inf_x}) from the norm DataLoader;
@@ -134,18 +181,20 @@ class PINN_Trainer:
             self.sampling_settings, self.active_losses, device=self.device,
         )
         self._bundle_iters = {k: iter(self.bundle[k]) for k in self.bundle}
+        self._init_fast_batch_sources()
         return self.bundle
 
     def _next_batches(self):
         """Pull one batch per active loader. Reshuffle (re-iter) on exhaustion."""
-        batch_term_objs = {}
-        for k in self.active_losses:
-            try:
-                batch_term_objs[k] = next(self._bundle_iters[k])
-            except StopIteration:
-                self._bundle_iters[k] = iter(self.bundle[k])
-                batch_term_objs[k] = next(self._bundle_iters[k])
-        return batch_term_objs
+        return {k: self._next_batch_fast(k) for k in self.active_losses}
+        #batch_term_objs = {}
+        #for k in self.active_losses:
+        #    try:
+        #        batch_term_objs[k] = next(self._bundle_iters[k])
+        #    except StopIteration:
+        #        self._bundle_iters[k] = iter(self.bundle[k])
+        #        batch_term_objs[k] = next(self._bundle_iters[k])
+        #return batch_term_objs
 
     def train_adam_minibatch(self,
         n_steps, n_steps_decay, resampling_frequency=2000, logging_frequency=100,
@@ -209,9 +258,13 @@ class PINN_Trainer:
                     use_causal_loss_weighting, t_discr, eps
                 )
             else:
-                loaders = [self.bundle[k] for k in self.active_losses]
-                for batches in zip(*loaders):
-                    batch_term_objs = dict(zip(self.active_losses, batches))
+                batch_iter = self._iter_epoch_batches_fast()
+                #loaders = [self.bundle[k] for k in self.active_losses]
+                #batch_iter = (
+                #    dict(zip(self.active_losses, batches))
+                #    for batches in zip(*loaders)
+                #)
+                for batch_term_objs in batch_iter:
                     loss_value, last_losses_dict = self.train_adam_step(
                         batch_term_objs, use_sdgd, sdgd_num_dims,
                         use_causal_loss_weighting, t_discr, eps

@@ -60,7 +60,8 @@ def add_common_args(parser):
     parser.add_argument("--use_rbas", action="store_true", help="Residual-based adaptive resampling")
     parser.add_argument("--rbas_chunk_size", default=1024, type=int, help="Residual-based adaptive resampling chunk size when evaluating the res")
     # testing and logging
-    parser.add_argument("--n_test_points", default=10_000, type=int, help="Number of test points for the testing suite.")
+    parser.add_argument("--n_test_points", default=100_000, type=int, help="Number of test points for the testing suite.")
+    parser.add_argument("--n_test_chunk_size", default=100_000, type=int, help="Number of test points for the testing suite.")
     parser.add_argument("--logging_frequency", default=100, type=int, help="")
     parser.add_argument("--enable_testing", action="store_true", help="Compute L2/L1/rel errors during training (requires analytic solution).")
     # causal strategies

@@ -50,22 +50,26 @@ parser.set_defaults(
     lambda_ic=1.0,
     use_hard_constrains=True,
     #
-    bs=512,
+    bs=128,
     n_res_points=1024,
     one_batch_per_epoch=False,
+
     prevent_resampling=True,
     resampling_frequency=1,
     #
-    n_steps=299,
+    n_steps=399,
     n_steps_decay=1000,
-    lambda_strategy="gradnorm_adapt",
+    #lambda_strategy="gradnorm_adapt",
     #lambda_strategy="fixed",
-    time_strategy="causal_loss",
+    #time_strategy="causal_loss",
     #time_strategy="time_adapt_sampl",
     #use_lbfgs=True,
-    #enable_profiler = True,
+    enable_profiler = False,
     enable_memory_tracking = True,
     enable_testing = True,
+    n_test_points=10_000,
+    n_test_chunk_size=10_000,
+
     clear_dir = True,
     output_dir = 'run_latest',
     #initial_model="run_latest/model.pth"
@@ -104,7 +108,7 @@ test_sampling_type = "domain_and_trajectories"
 if args.enable_testing:
     # pass in a distribtion for sampling the center more heavily ? - for L_inf error est.
     # do not do the MSE loss reporting
-    testing_suite = utility.TestingSuiteHeatEq(d, device, args.bs)
+    testing_suite = utility.TestingSuiteHeatEq(d, device, args.n_test_chunk_size)
     test_sampling_type = "domain_and_trajectories"
     sampling_settings = {
         "T": args.T,
@@ -119,7 +123,7 @@ if args.enable_testing:
     }
     sampling_settings["res_points"] = args.n_test_points
     testing_suite.make_test_data(lambda X: None, pde_model, test_sampling_type, sampling_settings, pde_model.u_analytic, f"{dir_name}/testing_data.pth", device)
-    print(f"Testing suite ready ({args.n_test_points} points.")
+    print(f"Testing suite ready: n_points={args.n_test_points}, n_chunk_size={args.n_test_chunk_size}.")
 else:
     testing_suite = None
 
