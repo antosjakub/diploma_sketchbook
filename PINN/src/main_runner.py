@@ -57,7 +57,8 @@ def add_common_args(parser):
     parser.add_argument("--f_pde_trajs", default=1, type=int, help="")
     parser.add_argument("--f_ic_full_domain", default=1, type=int, help="")
     parser.add_argument("--f_ic_trajs", default=1, type=int, help="")
-    parser.add_argument("--use_rbas", action="store_true", help="Residual-based adaptive sampling")
+    parser.add_argument("--use_rbas", action="store_true", help="Residual-based adaptive resampling")
+    parser.add_argument("--rbas_chunk_size", default=1024, type=int, help="Residual-based adaptive resampling chunk size when evaluating the res")
     # testing and logging
     parser.add_argument("--n_test_points", default=10_000, type=int, help="Number of test points for the testing suite.")
     parser.add_argument("--logging_frequency", default=100, type=int, help="")
@@ -202,7 +203,7 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
             line_search_fn='strong_wolfe'
         )
         trainer.scheduler = torch.optim.lr_scheduler.ExponentialLR(trainer.optimizer, gamma=0.9)
-        losses_adam, test_log_res_mse, test_log_rel_l2 = trainer.train_lbfgs(
+        losses_adam, test_log_rel_l2, test_log_linf = trainer.train_lbfgs(
             n_steps=args.n_steps,
             n_steps_decay=args.n_steps_decay,
             resampling_frequency=args.resampling_frequency,
@@ -217,7 +218,7 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
             crit_loss_val=args.crit_loss_val,
         )
     else:
-        losses_adam, test_log_res_mse, test_log_rel_l2 = trainer.train_adam_minibatch(
+        losses_adam, test_log_rel_l2, test_log_linf = trainer.train_adam_minibatch(
             n_steps=args.n_steps,
             n_steps_decay=args.n_steps_decay,
             resampling_frequency=args.resampling_frequency,
@@ -252,15 +253,15 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
     file_name = f'{dir_name}/training_loss'
     visualize_training_metrics.plot_loss(losses, file_name)
     if args.enable_testing:
-        res_mse_data = {k: [d[k] for d in test_log_res_mse] for k in test_log_res_mse[0]}
         rel_l2_data = {k: [d[k] for d in test_log_rel_l2] for k in test_log_rel_l2[0]}
+        linf_data = {k: [d[k] for d in test_log_linf] for k in test_log_linf[0]}
         file_name = f'{dir_name}/training_test'
-        #n = len(res_mse_data[list(res_mse_data.keys())[0]])
+        #n = len(linf_data[list(linf_data.keys())[0]])
         #x = args.logging_frequency * torch.linspace(1, n, n, dtype=torch.int)
-        visualize_training_metrics.plot_test_res_mse(res_mse_data, file_name+'_res_mse')
         visualize_training_metrics.plot_test_rel_l2(rel_l2_data, file_name+'_rel_l2')
-        torch.save(res_mse_data, f'{file_name}_res_mse.pth')
+        visualize_training_metrics.plot_test_linf(linf_data, file_name+'_linf')
         torch.save(rel_l2_data, f'{file_name}_rel_l2.pth')
+        torch.save(linf_data, f'{file_name}_linf.pth')
 
 
     # individual loss term weighting - pde,bc,ic

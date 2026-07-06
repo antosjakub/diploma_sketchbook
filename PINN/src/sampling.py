@@ -114,6 +114,7 @@ def residual_based_adaptive_sampling(d, residual_fn, model, type="pde", n_new=10
         X_cand = X_cand.requires_grad_(True)
     elif type == 'bc':
         X_cand, normals_cand = sample_bc(n_candidates, d, sampling_strategy=sampling_strategy, device=device)
+        X_cand = X_cand.requires_grad_(True)
         precomputed["normals"] = normals_cand
     elif type == 'ic':
         X_cand = sample_ic(n_candidates, d, sampling_strategy=sampling_strategy, device=device)
@@ -801,6 +802,111 @@ def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settin
     return bundle
 
 
+def rar(residual_fn, X_cand, model, precomputed, picking_criterion, n_new, chunk_size):
+    def _select_subset(data, indexer):
+        return {k: v[indexer] for k, v in data.items()}
+
+    abs_res_chunks = []
+    n_candidates = len(X_cand)
+    for start in range(0, n_candidates, chunk_size):
+        stop = min(start + chunk_size, n_candidates)
+        chunk = X_cand[start:stop].requires_grad_(True)
+        chunk_precomputed = _select_subset(precomputed, slice(start, stop))
+        res = residual_fn(chunk, model, chunk_precomputed).detach()
+        abs_res_chunks.append(res.abs().reshape(-1))
+
+    abs_res = torch.cat(abs_res_chunks, dim=0)
+    if picking_criterion == "top_k":
+        _, idx = torch.topk(abs_res, n_new)
+    elif picking_criterion == "multinomial":
+        probs = abs_res / abs_res.sum()
+        idx = torch.multinomial(probs, n_new, replacement=False)
+    else:
+        raise NameError("Provide a correct picking crierion.")
+
+    return X_cand[idx].detach(), _select_subset(precomputed, idx)
+
+
+def create_dataloaders__domain_RAR(pde_model, model, active_losses, settings, device="cpu"):
+    T = settings.get("T", 1.0)
+    spatial_domain = settings.get("spatial_domain")
+    bs = settings.get("bs", 1_000)
+    n_res_points = settings.get("n_res_points", 100_000)
+    use_rbas = settings.get("use_rbas", False)
+    d = pde_model.d
+
+    n_cycles = n_res_points // bs
+    bs_pde = bs
+    bs_bc = bs // 8
+    bs_ic = bs // 8
+    n_interior = bs_pde * n_cycles
+    n_boundary =  bs_bc * n_cycles if 'bc' in active_losses else 0
+    n_initial  =  bs_ic * n_cycles if 'ic' in active_losses else 0
+
+    if spatial_domain is not None:
+        lo = spatial_domain[:, 0]
+        hi = spatial_domain[:, 1]
+    strategy = settings.get("sampling_strategy", "lhs")
+
+    multiplier = 4 if use_rbas else 1
+    X_bc = X_ic = None
+    if "ic" in active_losses:
+        X_ic = sample_ic(multiplier*n_initial, d, sampling_strategy=strategy, device=device)
+        X_ic = scale_samples__spatial(X_ic, lo, hi)
+    if "bc" in active_losses:
+        X_bc, normals_bc = sample_bc(multiplier*n_boundary, d, sampling_strategy='lhs', device=device)
+        X_bc = scale_samples__spatial(X_bc, lo, hi)
+        X_bc = scale_samples__temporal(X_bc, T)
+    X_pde = sample_domain(multiplier*n_interior, d+1, sampling_strategy=strategy, device=device)
+    X_pde = scale_samples__spatial(X_pde, lo, hi)
+    X_pde = scale_samples__temporal(X_pde, T)
+    custom_ic_fn = settings.get("custom_ic_fn", None)
+    if custom_ic_fn is not None:
+        precomputed = pde_model.precompute(X_pde, X_bc, None)
+    else:
+        precomputed = pde_model.precompute(X_pde, X_bc, X_ic)
+    if "bc" in active_losses and normals_bc is not None:
+        precomputed["bc"]["normals"] = normals_bc
+    
+    if use_rbas:
+        # now go in chunks
+        chunk_size = settings.get("rbas_chunk_size", 1024)
+        picking_criterion = "top_k"
+        X_pde, precomputed["pde"] = rar(
+            pde_model.pde_residual, X_pde, model, precomputed["pde"],
+            picking_criterion, n_interior, chunk_size
+        )
+        if "bc" in active_losses:
+            X_bc, precomputed["bc"] = rar(
+                pde_model.bc_residual, X_bc, model, precomputed["bc"],
+                picking_criterion, n_boundary, chunk_size
+            )
+        if "ic" in active_losses:
+            X_ic, precomputed["ic"] = rar(
+                pde_model.ic_residual, X_ic, model, precomputed["ic"],
+                picking_criterion, n_initial, chunk_size
+            )
+
+
+    # check it the sizes are allright
+    assert len(X_pde) == n_interior
+    if 'bc' in active_losses:
+        assert len(X_bc) == n_boundary
+    if 'ic' in active_losses:
+        assert len(X_ic) == n_initial
+    X_terms = {"pde": X_pde, "bc": X_bc, "ic": X_ic, "norm": None}
+    bs_terms = {"pde": bs_pde, "bc": bs_bc, "ic": bs_ic, "norm": None}
+    bundle = {}
+    for k in active_losses:
+        bundle[k] = DataLoader(
+            CollocationDataset(X_terms[k], precomputed[k]),
+            batch_size=bs_terms[k], shuffle=True,
+            #pin_memory=True if device.type=='cuda' else False
+            #num_workers=
+        )
+    return bundle
+
+
 def create_dataloaders(sampling_type, model, pde_model, settings, active_losses, device="cpu"):
     """
     Build a bundle dict {term_name: loader_or_buffer} for all terms in active_losses.
@@ -812,7 +918,10 @@ def create_dataloaders(sampling_type, model, pde_model, settings, active_losses,
     elif sampling_type == "domain":
         bundle = create_dataloaders__domain(model, pde_model, active_losses, device=device, **settings)
     elif sampling_type == "domain_and_trajectories":
-        bundle = create_dataloaders__domain_and_trajectories(pde_model, active_losses, settings, device=device)
+        if settings.get("use_rbas", False):
+            bundle = create_dataloaders__domain_RAR(pde_model, model, active_losses, settings, device=device)
+        else:
+            bundle = create_dataloaders__domain_and_trajectories(pde_model, active_losses, settings, device=device)
     else:
         raise NameError(f"Incorrect data loader type specified: '{sampling_type}'")
 

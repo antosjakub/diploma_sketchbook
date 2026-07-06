@@ -14,7 +14,7 @@ def plot_time_adapt_sampling(Ts, file_name):
     print(f"Saving: {file_name}.png")
     plt.figure(figsize=(10, 5))
     plt.plot(_to_plot_series(Ts))
-    plt.xlabel('Step')
+    plt.xlabel('epochs')
     plt.ylabel('T (terminal time)')
     plt.title('Time adaptive sampling')
     plt.grid(True)
@@ -59,7 +59,7 @@ def plot_hist_data_dict(hist_data_dict, file_name, label_fn, line_width_fn, colo
         plt.semilogy(_to_plot_series(hist_data_dict))
     
     # Increased label and title font sizes
-    plt.xlabel('step', fontsize=14)
+    plt.xlabel('epochs', fontsize=14)
     #plt.ylabel(y_label, fontsize=14)
     plt.title(title, fontsize=16)
     
@@ -99,9 +99,9 @@ def plot_mem(mem_data_dict, file_name):
     plot_hist_data_dict(mem_series, file_name, lambda name: name, lambda name: 1.0, lambda name: None, 'MB', "Memory [MB]")
 
 def plot_test_rel_l2(test_data_dict, file_name):
-    plot_hist_data_dict(test_data_dict, file_name, lambda name: rf"$rel\_L2_{{{name}}}$", lambda name: 1.0, lambda name: None, 'rel L2 error', "Testing: Relative L2 error")
-def plot_test_res_mse(test_data_dict, file_name):
-    plot_hist_data_dict(test_data_dict, file_name, lambda name: rf"$MSE_{{{name}}}$", lambda name: 1.0, lambda name: None, 'MSE', "Testing: Residual MSE")
+    plot_hist_data_dict(test_data_dict, file_name, lambda name: rf"rel $L^2_{{{name}}}$", lambda name: 1.0, lambda name: None, r'rel $L^2$ error', r"Testing: Relative $L^2$ error")
+def plot_test_linf(test_data_dict, file_name):
+    plot_hist_data_dict(test_data_dict, file_name, lambda name: rf"$L^\inf_{{{name}}}$", lambda name: 1.0, lambda name: None, r'$L^\inf$ error', r"Testing: $L^\inf$ error")
 
 
 

@@ -55,19 +55,19 @@ parser.set_defaults(
     #
     n_steps=1000,
     n_steps_decay=1000,
-    #lambda_strategy="max_adapt",
     lambda_strategy="gradnorm_adapt",
     #lambda_strategy="fixed",
-    time_strategy="none",
-    #time_strategy="time_adapt_sampl",
-    use_lbfgs=True,
+    #time_strategy="none",
+    time_strategy="time_adapt_sampl",
+    #use_lbfgs=True,
     #enable_profiler = True,
     enable_memory_tracking = True,
-    #enable_testing = True,
+    enable_testing = True,
     clear_dir = True,
     output_dir = 'run_latest',
     use_hard_constrains=False,
     #initial_model="run_latest/model.pth"
+    #use_rbas=True
 )
 
 
@@ -102,7 +102,7 @@ test_sampling_type = "domain_and_trajectories"
 if args.enable_testing:
     # pass in a distribtion for sampling the center more heavily ? - for L_inf error est.
     # do not do the MSE loss reporting
-    testing_suite = utility.TestingSuite(d, device, args.bs)
+    testing_suite = utility.TestingSuiteHeatEq(d, device, args.bs)
     test_sampling_type = "domain_and_trajectories"
     sampling_settings = {
         "T": args.T,
@@ -116,7 +116,7 @@ if args.enable_testing:
         "f_ic_trajs": 0,
     }
     sampling_settings["res_points"] = args.n_test_points
-    testing_suite.make_test_data(f"{dir_name}/testing_data.pth", test_sampling_type, lambda X: None, pde_model, sampling_settings, active_losses, device, analytic_sol_fn=pde_model.u_analytic, terminal_condition_fn=None)
+    testing_suite.make_test_data(lambda X: None, pde_model, test_sampling_type, sampling_settings, pde_model.u_analytic, f"{dir_name}/testing_data.pth", device)
     print(f"Testing suite ready ({args.n_test_points} points.")
 else:
     testing_suite = None
@@ -147,6 +147,7 @@ elif sampling_type == "domain_and_trajectories":
         "n_trajs": args.n_trajs,
         "nt_steps": args.nt_steps,
         "use_rbas": args.use_rbas,
+        "rbas_chunk_size": args.rbas_chunk_size,
         "f_pde_full_domain": args.f_pde_full_domain,
         "f_pde_trajs": args.f_pde_trajs,
         "f_ic_full_domain": args.f_ic_full_domain,

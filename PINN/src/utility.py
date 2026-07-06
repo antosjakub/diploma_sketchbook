@@ -351,6 +351,141 @@ class ScorePINNTestingSuite:
 
 
 import sampling
+class TestingSuiteHeatEq:
+    def __init__(self, d, device: torch.device, test_bs=1000):
+        self.d = d
+        self.device = device
+        self.test_bs = test_bs
+        self.test_file_exists = False
+        self.test_file_path = None
+        self.keep_in_cache = True
+    
+    def connect_test_data(self, file_path: str):
+        import os
+        assert os.path.exists(file_path)
+        payload = torch.load(file_path, map_location=self.device)
+        metadata = payload["metadata"]
+        if (metadata["d"] != self.d):
+            raise ValueError(
+                f"Dimension mismatch. Testing suite has d={self.d}, but the loaded data have d={metadata['d']}."
+            )
+        data = payload["data"]
+
+        for term in ("pde", "ic"):
+            X_key = f"X_{term}"
+            analytic_key = f"analytic_{term}"
+            if X_key not in data:
+                raise KeyError(f"Missing '{X_key}' in saved testing payload.")
+            if analytic_key not in data:
+                raise KeyError(f"Missing '{analytic_key}' in saved testing payload.")
+
+        assert data["X_pde"].shape[1] == self.d+1
+        assert data["X_ic"].shape[1] == self.d+1
+        assert data["analytic_pde"].shape[0] == data["X_pde"].shape[0]
+        assert data["analytic_tc"].shape[0] == data["X_tc"].shape[0]
+
+        self.payload = payload
+        self.test_file_exists = True
+        self.test_file_path = file_path
+
+    def make_test_data(self, model, pde_model, sampling_type, sampling_settings, analytic_sol_fn, file_path, device, seed=4242):
+        def _to_cpu(value):
+            if torch.is_tensor(value):
+                return value.detach().cpu()
+            if isinstance(value, dict):
+                return {k: _to_cpu(v) for k, v in value.items()}
+            return value
+
+        cuda_devices = [torch.cuda.current_device()] if torch.cuda.is_available() else []
+        with torch.random.fork_rng(devices=cuda_devices):
+            torch.manual_seed(seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(seed)
+            bundle = sampling.create_dataloaders(
+                sampling_type, model, pde_model,
+                sampling_settings, active_losses=("pde", "ic"), device=device,
+            )
+
+        data = {}
+        for term in ("pde", "ic"):
+            loader = bundle[term]
+            data[f"X_{term}"] = _to_cpu(loader.dataset.X)
+            with torch.no_grad():
+                data[f"analytic_{term}"] = _to_cpu(analytic_sol_fn(data[f"X_{term}"]))
+
+        payload = {
+            "metadata": {
+                "d": self.d,
+                "seed": seed,
+                "sampling_type": sampling_type,
+                "sampling_settings": _to_cpu(sampling_settings),
+            },
+            "data": data,
+        }
+        self.payload = payload
+        self.test_file_exists = True
+        self.test_file_path = file_path
+        torch.save(payload, file_path)
+
+
+    def test_model(self, model, pde_model, device, ignore_bc=True):
+        test_bs = self.test_bs
+
+        import time
+        a = time.time()
+
+        if not self.test_file_exists:
+            raise ValueError(
+                "Make or Connect test data first before testing."
+            )
+
+        try:
+            if self.keep_in_cache:
+                payload = self.payload
+            else:
+                payload = torch.load(self.test_file_path, map_location="cpu")
+            data = payload["data"]
+        except Exception as exc:
+            raise RuntimeError("Unable to load the testing data.") from exc
+
+        metrics_rel_l2 = {}
+        metrics_linf = {}
+        model.eval()
+        eps = 1e-12
+
+        for term in ("pde", "ic"):
+            X = data[f"X_{term}"]
+            analytic = data[f"analytic_{term}"]
+            err_sq = 0.0
+            err_max = -1.0
+            target_sq = 0.0
+            n = len(X)
+            with torch.no_grad():
+                for i in range(0, n, test_bs):
+                    j = min(i + test_bs, n)
+                    X_chunk = X[i:j].to(device)
+                    u_true_chunk = analytic[i:j].to(device)
+                    u_pred_chunk = model(X_chunk)
+                    # rel_l2
+                    err_sq += torch.sum((u_pred_chunk - u_true_chunk) ** 2).item()
+                    target_sq+= torch.sum(u_true_chunk ** 2).item()
+                    # linf
+                    err_max_curr = torch.abs(u_pred_chunk - u_true_chunk).max()
+                    if err_max_curr > err_max:
+                        err_max = err_max_curr
+            metrics_rel_l2[term] = (err_sq/ max(target_sq, eps)) ** 0.5
+            metrics_linf[term] = err_max
+
+        model.train()
+
+        b = time.time()
+        print(f"-- Testing took: {(b-a):.4f}s")
+        return metrics_rel_l2, metrics_linf
+
+
+
+
+import sampling
 class TestingSuite:
     def __init__(self, d, device: torch.device, test_bs=1000):
         self.d = d
@@ -595,6 +730,10 @@ class TestingSuite:
         b = time.time()
         #print(f"Testing took: {b-a}s")
         return metrics_res_mse, metrics_rel_l2
+
+
+
+
 
 
 def generate_SPD(d, eps=1e-10, device=None, dtype=torch.float32):

@@ -175,8 +175,8 @@ class PINN_Trainer:
             self.T_max = self.sampling_settings["T"]
 
         losses_hist_dict = {"total": [], **{k: [] for k in self.active_losses}}
-        test_res_mse = []
         test_rel_l2 = []
+        test_linf = []
 
         if self.profiler: self.profiler.make()
 
@@ -248,15 +248,15 @@ class PINN_Trainer:
                 log = ", ".join(parts)
                 print(log)
                 if self.testing_suite is not None:
-                    test_dict_res_mse, test_dict_rel_l2 = self.testing_suite.test_model(self.model, self.pde_model, device=self.device) #,test_bs=self.sampling_settings["bs"])
-                    test_log_mse_loss = " - Testing: res MSE | " + \
-                        ", ".join([f"{k}: {v:.6f}" for k,v in test_dict_res_mse.items()])
-                    test_res_mse.append(test_dict_res_mse)
-                    print(test_log_mse_loss)
+                    test_dict_rel_l2, test_dict_linf = self.testing_suite.test_model(self.model, self.pde_model, device=self.device) #,test_bs=self.sampling_settings["bs"])
                     test_log_rel_l2 = " - Testing: rel L2  | " + \
                         ", ".join([f"{k}: {v:.6f}" for k,v in test_dict_rel_l2.items()])
                     test_rel_l2.append(test_dict_rel_l2)
                     print(test_log_rel_l2)
+                    test_log_linf = " - Testing: Linf  | " + \
+                        ", ".join([f"{k}: {v:.6f}" for k,v in test_dict_linf.items()])
+                    test_linf.append(test_dict_linf)
+                    print(test_log_linf)
                 if memory_sample is not None:
                     mem_log = f" - {self.memory_tracker.format_sample(memory_sample)}"
                     print(mem_log)
@@ -274,9 +274,9 @@ class PINN_Trainer:
             #    torch.save(torch.tensor(test_log), f'{l2_name}_.pth')
             #    print("\nResults saved.")
             if (crit_loss_val is not None) and loss_value < crit_loss_val:
-                return losses_hist_dict, test_res_mse, test_rel_l2
+                return losses_hist_dict, test_rel_l2, test_linf
 
-        return losses_hist_dict, test_res_mse, test_rel_l2
+        return losses_hist_dict, test_rel_l2, test_linf
 
 
     def train_lbfgs(self,
@@ -308,8 +308,8 @@ class PINN_Trainer:
         if self.profiler: self.profiler.make()
 
         losses_hist_dict = {"total": [], **{k: [] for k in self.active_losses}}
-        test_res_mse = []
         test_rel_l2 = []
+        test_linf = []
 
         self.last_losses = None
         self.last_total_loss = None
@@ -401,15 +401,15 @@ class PINN_Trainer:
                 log = ", ".join(parts)
                 print(log)
                 if self.testing_suite is not None:
-                    test_dict_res_mse, test_dict_rel_l2 = self.testing_suite.test_model(self.model, self.pde_model, device=self.device) #, test_bs=self.sampling_settings["bs"])
-                    test_log_mse_loss = " - Testing: res MSE | " + \
-                        ", ".join([f"{k}: {v:.6f}" for k, v in test_dict_res_mse.items()])
-                    test_res_mse.append(test_dict_res_mse)
-                    print(test_log_mse_loss)
+                    test_dict_rel_l2, test_dict_linf = self.testing_suite.test_model(self.model, self.pde_model, device=self.device) #,test_bs=self.sampling_settings["bs"])
                     test_log_rel_l2 = " - Testing: rel L2  | " + \
-                        ", ".join([f"{k}: {v:.6f}" for k, v in test_dict_rel_l2.items()])
+                        ", ".join([f"{k}: {v:.6f}" for k,v in test_dict_rel_l2.items()])
                     test_rel_l2.append(test_dict_rel_l2)
                     print(test_log_rel_l2)
+                    test_log_linf = " - Testing: Linf  | " + \
+                        ", ".join([f"{k}: {v:.6f}" for k,v in test_dict_linf.items()])
+                    test_linf.append(test_dict_linf)
+                    print(test_log_linf)
                 if memory_sample is not None:
                     mem_log = f" - {self.memory_tracker.format_sample(memory_sample)}"
                     print(mem_log)
@@ -419,9 +419,9 @@ class PINN_Trainer:
                     #print(len(self.causal_losses_hist_pde), self.causal_losses_hist_pde[-1])
 
             if (crit_loss_val is not None) and loss_value < crit_loss_val:
-                return losses_hist_dict, test_res_mse, test_rel_l2
+                return losses_hist_dict, test_rel_l2, test_linf
 
-        return losses_hist_dict, test_res_mse, test_rel_l2
+        return losses_hist_dict, test_rel_l2, test_linf
 
 
 
