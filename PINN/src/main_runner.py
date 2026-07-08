@@ -92,10 +92,13 @@ def add_common_args(parser):
     -
 """
 
+import time
 import torch
 import architecture, utility
 import run_utils
 def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_suite, head_fun):
+
+    t1 = time.time()
 
     d = args.d  # space dims
     D = d + 1   # space + time dims
@@ -123,18 +126,20 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
 
     #model = architecture.PINN_base(D, layers, 1).to(device)
     if args.starting_model:
+        print("Starting from an existin model!")
         model.load_state_dict(torch.load(args.starting_model, weights_only=True))
+        model.train()
 
 
     if args.custom_ic_model is not None:
         print(f"Using a custom IC function: {args.custom_ic_model}")
         #model_ic = architecture.load_model_from_json(args.custom_ic_model, device)
         import sys, os
-        parent_dir = os.path.dirname(args.starting_model)
+        parent_dir = os.path.dirname(args.custom_ic_model)
         model_metadata = utility.json_load(f'{parent_dir}/model_metadata.json')
         layers = utility.layers_from_string(model_metadata["args"]["layers"])
         model_ic = architecture.PINN(D, layers, output_dim, head_fn=head_fun).to(device)
-        model_ic.load_state_dict(torch.load(args.starting_model, weights_only=True))
+        model_ic.load_state_dict(torch.load(args.custom_ic_model, weights_only=True))
         model_ic.eval()
         custom_ic_fn = model_ic.forward
     else:
@@ -155,11 +160,10 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
     else:
         print(f"Using regular Adam training.")
 
-    import time
+    t2 = time.time()
+    print("---- Prep works inside runner()", t2-t1)
+
     t1 = time.time()
-
-
-
     from trainers import PINN_Trainer
     trainer = PINN_Trainer(
         model, optimizer, scheduler, pde_model,
@@ -195,7 +199,7 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
     if args.use_lbfgs:
         trainer.optimizer = torch.optim.LBFGS(
             model.parameters(),
-            lr=1e-3,
+            lr=1.0,
             max_iter=20, # inner CG iterations per step
             max_eval=25,
             history_size=50,
@@ -238,26 +242,31 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
     t2 = time.time()
     print(utility.get_duration_h_m_s(t1, t2, "Adam training"))
 
-    # create a simulation results file?
-    # - add in time
-    # - weights
-
-    print("\nTraining complete!")
-
-    run_utils.save_run(
-        dir_name, model, losses, args, device,
-        head_fn=None,
-        loss_weighting=loss_weighting if args.n_steps > 0 else None,
-        output_dim=output_dim,
-    ) 
-    import visualize_training_metrics
-
     report = {}
     report['device'] = device.type
     report['runtime'] = t2-t1
     report['runtime_fmt'] = utility.get_duration_h_m_s(t1, t2, "Run")
 
 
+    # create a simulation results file?
+    # - add in time
+    # - weights
+
+    print("\nTraining complete!")
+    t1 = time.time()
+    run_utils.save_run(
+        dir_name, model, losses, args, device,
+        head_fn=None,
+        loss_weighting=loss_weighting if args.n_steps > 0 else None,
+        output_dim=output_dim,
+    ) 
+    t2 = time.time()
+    print("---- Time for save_run()", t2-t1)
+
+
+    t1 = time.time()
+
+    import visualize_training_metrics
     file_name = f'{dir_name}/training_loss'
     visualize_training_metrics.plot_loss(losses, file_name)
     report["loss"] = {}
@@ -332,5 +341,8 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
 
     # save the most imporant stufff
     utility.json_dump(f"{dir_name}/report.json", report)
+
+    t2 = time.time()
+    print("---- Time for all training metric saves", t2-t1)
 
     return trainer, model, dir_name

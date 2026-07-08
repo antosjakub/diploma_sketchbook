@@ -424,7 +424,7 @@ class TestingSuiteHeatEq:
         self.payload = payload
         self.test_file_exists = True
         self.test_file_path = file_path
-        torch.save(payload, file_path)
+        #torch.save(payload, file_path)
 
 
     def test_model(self, model, pde_model, device, ignore_bc=True):

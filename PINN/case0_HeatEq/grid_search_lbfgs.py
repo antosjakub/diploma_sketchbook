@@ -42,24 +42,23 @@ FIXED_PARAMS = {
     "time_strategy": "none",
     "t_discr": "0.0, 0.5, 1.5, 3.5",
     "eps": 0.1,
-    "use_lbfgs": False,
     "lambda_strategy": "fixed",
+    "one_batch_per_epoch": True,
     ##############################################
-    "description": "find the lambdas",
+    "description": "lbfgs",
+    "use_lbfgs": True,
 
     # smthg big enough
-    "n_steps": 5000,
-    #"n_steps_decay": 1000,
-    "logging_frequency": 10,
-    # fix the dataset
-    "n_res_points": 1024,
-    "bs": 1024,
-    "one_batch_per_epoch": True,
+    "n_steps": 500,
+    "n_steps_decay": 500,
     "prevent_resampling": True,
+    "resampling_frequency": 100,
+    "logging_frequency": 1,
+
 
     ##############################################
     "enable_profiler": False,
-    "enable_memory_tracking": False,
+    "enable_memory_tracking": True,
     "enable_testing": True,
     "n_test_points": 100_000,
     "n_test_chunk_size": 100_000,
@@ -71,7 +70,28 @@ FIXED_PARAMS = {
 # - scalars, which set one parameter with the axis name
 # - dicts, for grouped parameters such as trajectory sampling settings
 SEARCH_AXES = {
-    "n_steps_decay": [100, 500, 1000]
+    "sampling": [
+        #{
+        #    "n_res_points": 1000,
+        #    "bs": 1000,
+        #},
+        {
+            "n_res_points": 10000,
+            "bs": 10000,
+        },
+        {
+            "n_res_points": 20000,
+            "bs": 20000,
+        },
+        {
+            "n_res_points": 40000,
+            "bs": 40000,
+        },
+    ],
+    "starting_model": [
+        "run_latest_adam1k/model.pth",
+        "run_latest_adam5k/model.pth",
+    ],
     #"ic_type": ["cauchy", "gauss"],
     #"lambda_pde": [0.1, 1.0, 10.0],
     #"lambda_ic": [0.1, 1.0, 10.0],

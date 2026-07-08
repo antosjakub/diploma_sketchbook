@@ -296,9 +296,9 @@ class PINN_Trainer:
 
             if (si + 1) % logging_frequency == 0:
                 self.log_steps.append(si+1)
-                parts = [f"Step {si+1}/{n_steps}", f"Loss: {loss_value.item():.6f}"]
+                parts = [f"Step {si+1}/{n_steps}", f"Loss: {loss_value.item()}"]
                 for k in self.active_losses:
-                    parts.append(f"{k}: {last_losses_dict[k]:.6f}")
+                    parts.append(f"{k}: {last_losses_dict[k]}")
                 parts.append(f"lr: {self.optimizer.param_groups[0]['lr']:.6f}")
                 log = ", ".join(parts)
                 print(log)
@@ -418,18 +418,47 @@ class PINN_Trainer:
                 closure_step_fn = build_closure(batch_term_objs)
                 self.i = 0
                 self.s = si
-                loss_value = self.optimizer.step(closure_step_fn)
+                if (si + 1) % logging_frequency == 0:
+                    params_before = [
+                        p.detach().clone()
+                        for p in self.model.parameters()
+                        if p.requires_grad
+                    ]
+                    self.optimizer.step(closure_step_fn)
+                    max_delta = 0.0
+                    sq_delta = 0.0
+                    for p_before, p_after in zip(params_before, self.model.parameters()):
+                        if not p_after.requires_grad:
+                            continue
+                        d = (p_after.detach() - p_before).reshape(-1)
+                        if d.numel() > 0:
+                            max_delta = max(max_delta, d.abs().max().item())
+                            sq_delta += torch.dot(d, d).item()
+                    param_delta_l2 = sq_delta ** 0.5
+                    print(
+                        f"closure_calls={self.i}, "
+                        f"param_delta_l2={param_delta_l2:.3e}, "
+                        f"param_delta_max={max_delta:.3e}"
+                    )
+                else:
+                    self.optimizer.step(closure_step_fn)
+                with torch.enable_grad():
+                    per_term_post = [
+                        self._loss_term(
+                            k, batch_term_objs, use_sdgd, sdgd_num_dims,
+                            use_causal_loss_weighting, t_discr, eps
+                        )
+                        for k in self.active_losses
+                    ]
+                    loss_value = self.loss_weighting.weight_loss(per_term_post)
             else:
-                loaders = [self.bundle[k] for k in self.active_losses]
-                for batches in zip(*loaders):
-                    batch_term_objs = dict(zip(self.active_losses, batches))
-                    closure_step_fn = build_closure(batch_term_objs)
-                    self.i = 0
-                    self.s = si
-                    loss_value = self.optimizer.step(closure_step_fn)
+                raise TypeError
             losses_hist_dict["total"].append(self.last_total_loss)
             for k in self.active_losses:
                 losses_hist_dict[k].append(self.last_losses[k])
+
+            if (si + 1) % n_steps_decay == 0:
+                self.scheduler.step()
 
             if isinstance(self.loss_weighting, loss.GradnormAdaptLambdas):
                 if (si + 1) % gradnorm_update_freq == 0:
@@ -451,9 +480,9 @@ class PINN_Trainer:
 
             if (si + 1) % logging_frequency == 0:
                 self.log_steps.append(si+1)
-                parts = [f"Step {si+1}/{n_steps}", f"Loss_ret: {loss_value.item():.6f}", f"Loss_tot: {losses_hist_dict['total'][-1]:.6f}"]
+                parts = [f"Step {si+1}/{n_steps}", f"Loss_ret: {loss_value.item()}", f"Loss_tot: {losses_hist_dict['total'][-1]}"]
                 for k in self.active_losses:
-                    parts.append(f"{k}: {self.last_losses[k]:.6f}")
+                    parts.append(f"{k}: {self.last_losses[k]}")
                 parts.append(f"lr: {self.optimizer.param_groups[0]['lr']:.6f}")
                 log = ", ".join(parts)
                 print(log)

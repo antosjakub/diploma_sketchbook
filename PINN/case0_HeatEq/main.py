@@ -47,39 +47,42 @@ parser.set_defaults(
     layers="64,64,64,64",
     active_losses="pde,ic",
     lambda_pde=1.0,
-    lambda_ic=1.0,
+    lambda_ic=0.1,
+    lambda_strategy="fixed",
     use_hard_constrains=True,
+    one_batch_per_epoch=True,
     #
-    bs=128,
-    n_res_points=1024,
-    one_batch_per_epoch=False,
-
-    prevent_resampling=True,
-    resampling_frequency=1,
+    bs=1024,
+    n_res_points=102400,
+    resampling_frequency=100,
+    prevent_resampling=False,
+    #use_rbas=True
     #
-    n_steps=399,
-    n_steps_decay=1000,
-    #lambda_strategy="gradnorm_adapt",
-    #lambda_strategy="fixed",
+    n_steps=1000, # 10_000
+    n_steps_decay=100,
     #time_strategy="causal_loss",
     #time_strategy="time_adapt_sampl",
-    #use_lbfgs=True,
+    time_strategy="none",
     enable_profiler = False,
     enable_memory_tracking = True,
     enable_testing = True,
-    n_test_points=10_000,
-    n_test_chunk_size=10_000,
+    n_test_points=100_000,
+    n_test_chunk_size=100_000,
+    logging_frequency=10,
 
     clear_dir = True,
+    use_lbfgs = False,
+    #starting_model=f"{abs}/run_latest_adam/model.pth"
     output_dir = 'run_latest',
-    #initial_model="run_latest/model.pth"
-    #use_rbas=True
 )
 
 
 args = run_utils.parse_args_with_config(
     parser, [] if "__file__" not in globals() else None
 )
+
+import time
+t1 = time.time()
 
 if args.use_hard_constrains:
     #head_fun = lambda out, X: out * torch.prod(X[:,:-1]*(1-X[:,:-1]), dim=1, keepdim=True)
@@ -160,9 +163,13 @@ elif sampling_type == "domain_and_trajectories":
         "f_ic_trajs": args.f_ic_trajs,
     }
 
+t2 = time.time()
+print("---- Prep works inside main.py", t2-t1)
 
 trainer, model, dir_name = main_runner.runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_suite, head_fun)
 
-
+t1 = time.time()
 import plot_results
 plot_results.plot_viz(dir_name, model, pde_model, None, args, device, model_s=None)
+t2 = time.time()
+print("---- Time for saving viz", t2-t1)

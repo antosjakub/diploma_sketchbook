@@ -14,7 +14,7 @@ def plot_time_adapt_sampling(Ts, file_name):
     print(f"Saving: {file_name}.png")
     plt.figure(figsize=(10, 5))
     plt.plot(_to_plot_series(Ts))
-    plt.xlabel('epochs')
+    plt.xlabel('steps')
     plt.ylabel('T (terminal time)')
     plt.title('Time adaptive sampling')
     plt.grid(True)
@@ -59,7 +59,7 @@ def plot_hist_data_dict(hist_data_dict, file_name, label_fn, line_width_fn, colo
         plt.semilogy(_to_plot_series(hist_data_dict))
     
     # Increased label and title font sizes
-    plt.xlabel('epochs', fontsize=14)
+    plt.xlabel('steps', fontsize=14)
     #plt.ylabel(y_label, fontsize=14)
     plt.title(title, fontsize=16)
     
