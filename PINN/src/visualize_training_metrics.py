@@ -1,6 +1,15 @@
 import torch
 from matplotlib import pyplot as plt
 
+import matplotlib as mpl
+# Configure Matplotlib to use LaTeX for text rendering
+mpl.rcParams.update({
+    "pgf.texsystem": "pdflatex",
+    'font.family': 'serif',
+    'text.usetex': True,
+    'pgf.rcfonts': False,
+})
+
 
 def _to_plot_series(data):
     """Convert tensors to CPU arrays so matplotlib never sees device-backed values."""
@@ -22,24 +31,29 @@ def plot_time_adapt_sampling(Ts, file_name):
 
 
 
-def plot_hist_data_dict(hist_data_dict, file_name, label_fn, line_width_fn, color_fn, y_label, title, x=None):
+def plot_hist_data_dict(hist_data_dict, file_name, label_fn, line_width_fn, color_fn, y_label, title, x=None,
+                        figsize=(10,4), color_prop=None):
     """
     hist_data_dict: ex. {'pde': [], 'bc': []}
+    color_prop = None, "plasma", ...
     """
     print(f"Saving: {file_name}.png")
-    plt.figure(figsize=(10, 5))
+
+
+    plt.figure(figsize=figsize)
     
     if isinstance(hist_data_dict, dict):
         # plasma good for causal weights w_m
-        #default_color_names = [
-        #    name for name, series in hist_data_dict.items()
-        #    if len(series) != 0 and color_fn(name) is None
-        #]
-        #if default_color_names:
-        #    # Use a narrow slice of a sequential colormap so the lines stay visually related.
-        #    plt.gca().set_prop_cycle(
-        #        color=plt.cm.plasma(torch.linspace(0.2, 0.8, len(default_color_names)))
-        #    )
+        default_color_names = [
+            name for name, series in hist_data_dict.items()
+            if len(series) != 0 and color_fn(name) is None
+        ] if color_prop is not None else []
+        if len(default_color_names) > 0:
+            # Use a narrow slice of a sequential colormap so the lines stay visually related.
+            if color_prop == "plasma":
+                plt.gca().set_prop_cycle(
+                    color=plt.cm.plasma(torch.linspace(0.2, 0.8, len(default_color_names)))
+                )
         for name, series in hist_data_dict.items():
             if len(series) == 0:
                 continue
@@ -49,9 +63,15 @@ def plot_hist_data_dict(hist_data_dict, file_name, label_fn, line_width_fn, colo
                 "linewidth": line_width_fn(name)
             }
             if color_fn(name) != None:
-                plt.semilogy(series, **params, color=color_fn(name))
+                if x is not None:
+                    plt.semilogy(x, series, **params, color=color_fn(name))
+                else:
+                    plt.semilogy(series, **params, color=color_fn(name))
             else:
-                plt.semilogy(series, **params)
+                if x is not None:
+                    plt.semilogy(x, series, **params)
+                else:
+                    plt.semilogy(series, **params)
         
         # Increased legend font size
         plt.legend(fontsize=14)
@@ -67,7 +87,7 @@ def plot_hist_data_dict(hist_data_dict, file_name, label_fn, line_width_fn, colo
     plt.tick_params(axis='both', labelsize=12)
     
     plt.grid(True)
-    plt.savefig(f'{file_name}.png', dpi=150, bbox_inches='tight') # bbox_inches='tight' ensures labels aren't cut off
+    plt.savefig(f'{file_name}.png', dpi=250, bbox_inches='tight') # bbox_inches='tight' ensures labels aren't cut off
 
 
 # term_type: pde, bc
@@ -98,10 +118,10 @@ def plot_mem(mem_data_dict, file_name):
     mem_series = {k: v for k, v in mem_data_dict.items() if k != "step"}
     plot_hist_data_dict(mem_series, file_name, lambda name: name, lambda name: 1.0, lambda name: None, 'MB', "Memory [MB]")
 
-def plot_test_rel_l2(test_data_dict, file_name):
-    plot_hist_data_dict(test_data_dict, file_name, lambda name: rf"rel $L^2_{{{name}}}$", lambda name: 1.0, lambda name: None, r'rel $L^2$ error', r"Testing: Relative $L^2$ error")
-def plot_test_linf(test_data_dict, file_name):
-    plot_hist_data_dict(test_data_dict, file_name, lambda name: rf"$L^\inf_{{{name}}}$", lambda name: 1.0, lambda name: None, r'$L^\inf$ error', r"Testing: $L^\inf$ error")
+def plot_test_rel_l2(test_data_dict, file_name, x):
+    plot_hist_data_dict(test_data_dict, file_name, lambda name: rf"rel $L^2_{{{name}}}$", lambda name: 1.0, lambda name: 'black' if name == 'total' else None, r'rel $L^2$ error', r"Testing: Relative $L^2$ error", x=x)
+def plot_test_linf(test_data_dict, file_name, x):
+    plot_hist_data_dict(test_data_dict, file_name, lambda name: rf"$L^\infty_{{{name}}}$", lambda name: 1.0, lambda name: 'black' if name == 'total' else None, r'$L^\infty$ error', r"Testing: $L^\infty$ error", x=x)
 
 
 

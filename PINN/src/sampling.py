@@ -802,7 +802,7 @@ def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settin
     return bundle
 
 
-def rar(residual_fn, X_cand, model, precomputed, picking_criterion, n_new, chunk_size):
+def rar(residual_fn, X_cand, model, precomputed, picking_criterion, n_new, chunk_size, k=None, c=None):
     def _select_subset(data, indexer):
         return {k: v[indexer] for k, v in data.items()}
 
@@ -819,7 +819,9 @@ def rar(residual_fn, X_cand, model, precomputed, picking_criterion, n_new, chunk
     if picking_criterion == "top_k":
         _, idx = torch.topk(abs_res, n_new)
     elif picking_criterion == "multinomial":
-        probs = abs_res / abs_res.sum()
+        # p(x)\sim \frac{\epsilon^k(x)}{\mathbb{E}[\epsilon^k(x)]}+c
+        probs = abs_res**k / (abs_res**k).sum() + c
+        probs /= probs.sum()
         idx = torch.multinomial(probs, n_new, replacement=False)
     else:
         raise NameError("Provide a correct picking crierion.")
@@ -871,20 +873,25 @@ def create_dataloaders__domain_RAR(pde_model, model, active_losses, settings, de
     if use_rbas:
         # now go in chunks
         chunk_size = settings.get("rbas_chunk_size", 1024)
-        picking_criterion = "top_k"
+        k = settings.get("rar_k", 1.0)
+        c = settings.get("rar_c", 0.0)
+        picking_criterion = "multinomial"
         X_pde, precomputed["pde"] = rar(
             pde_model.pde_residual, X_pde, model, precomputed["pde"],
-            picking_criterion, n_interior, chunk_size
+            picking_criterion, n_interior, chunk_size,
+            k, c
         )
         if "bc" in active_losses:
             X_bc, precomputed["bc"] = rar(
                 pde_model.bc_residual, X_bc, model, precomputed["bc"],
-                picking_criterion, n_boundary, chunk_size
+                picking_criterion, n_boundary, chunk_size,
+                k, c
             )
         if "ic" in active_losses:
             X_ic, precomputed["ic"] = rar(
                 pde_model.ic_residual, X_ic, model, precomputed["ic"],
-                picking_criterion, n_initial, chunk_size
+                picking_criterion, n_initial, chunk_size,
+                k, c
             )
 
 

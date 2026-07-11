@@ -224,14 +224,16 @@ class PINN_Trainer:
             self.T_max = self.sampling_settings["T"]
 
         losses_hist_dict = {"total": [], **{k: [] for k in self.active_losses}}
-        test_rel_l2 = []
-        test_linf = []
+        test_rel_l2 = {"pde": [], "ic": []}
+        test_linf = {"pde": [], "ic": []}
         self.log_steps = []
 
         if self.profiler: self.profiler.make()
 
         self._build_bundle(0, n_steps, resampling_frequency, use_time_adapt_sampling)
 
+        #allow_first_save = True
+        #allow_first_save_RAR = True
         for si in range(n_steps):
             memory_sample = None
             if self.memory_tracker is not None:
@@ -304,14 +306,16 @@ class PINN_Trainer:
                 print(log)
                 if self.testing_suite is not None:
                     test_dict_rel_l2, test_dict_linf = self.testing_suite.test_model(self.model, self.pde_model, device=self.device) #,test_bs=self.sampling_settings["bs"])
-                    test_log_rel_l2 = " - Testing: rel L2  | " + \
-                        ", ".join([f"{k}: {v:.6f}" for k,v in test_dict_rel_l2.items()])
-                    test_rel_l2.append(test_dict_rel_l2)
-                    print(test_log_rel_l2)
-                    test_log_linf = " - Testing: Linf  | " + \
-                        ", ".join([f"{k}: {v:.6f}" for k,v in test_dict_linf.items()])
-                    test_linf.append(test_dict_linf)
-                    print(test_log_linf)
+                    test_log_rel_l2 = " - Testing: rel L2  | "
+                    for k,v in test_dict_rel_l2.items():
+                        test_rel_l2[k].append(v)
+                        test_log_rel_l2 += f"{k}: {v:.6f}, "
+                    print(test_log_rel_l2[:-2]) # no ', '
+                    test_log_linf = " - Testing: Linf  | "
+                    for k,v in test_dict_linf.items():
+                        test_linf[k].append(v)
+                        test_log_linf += f"{k}: {v:.6f}, "
+                    print(test_log_linf[:-2]) # no ', '
                 if memory_sample is not None:
                     mem_log = f" - {self.memory_tracker.format_sample(memory_sample)}"
                     print(mem_log)
@@ -321,16 +325,34 @@ class PINN_Trainer:
                     #print(len(self.causal_losses_hist_pde), self.causal_losses_hist_pde[-1])
                 print(f" - {next(self.model.parameters()).device}, {loss_value.device}, {batch_term_objs['pde'][0].device.type}")
 
-            #if si == 130:
-            #    loss_name = f'{self.dir_name}/training_loss'
-            #    l2_name = f'{self.dir_name}/training_l2_error'
-            #    torch.save(self.model.state_dict(), f'{self.dir_name}/model_.pth')
-            #    torch.save({k: torch.tensor(v) for k, v in losses.items()}, f'{loss_name}_.pth')
-            #    torch.save(torch.tensor(test_log), f'{l2_name}_.pth')
-            #    print("\nResults saved.")
+            #frac = si / n_steps
+            #frac_target = 0.5
+            #if allow_first_save_RAR and (frac > frac_target):
+            #    X = self._fast_batch_sources['pde']['X']
+            #    torch.save({f"{self.dir_name}/X_{frac_target}": X}, f"RAR_X_{frac_target}.pth")
+            #    allow_first_save_RAR = False
+
+            #if allow_first_save and (loss_value < 1e-5):
+            #    print("++++++++++++++++++++++++++++++++++++++")
+            #    print("Saving the model!!")
+            #    print("++++++++++++++++++++++++++++++++++++++")
+            #    torch.save(self.model.state_dict(), f'{self.dir_name}/model_1e-5_{si}.pth')
+            #    print("\nModel saved.")
+            #    allow_first_save = False
+            #if loss_value < 1e-6:
+            #    print("++++++++++++++++++++++++++++++++++++++")
+            #    print("Saving the model!!")
+            #    print("++++++++++++++++++++++++++++++++++++++")
+            #    torch.save(self.model.state_dict(), f'{self.dir_name}/model_1e-6_{si}.pth')
+            #    print("\nModel saved.")
+            #    return losses_hist_dict, test_rel_l2, test_linf
+
+
             if (crit_loss_val is not None) and loss_value < crit_loss_val:
                 return losses_hist_dict, test_rel_l2, test_linf
 
+        #X = self._fast_batch_sources['pde']['X']
+        #torch.save({f"X_last": X}, f"RAR_X_last.pth")
         return losses_hist_dict, test_rel_l2, test_linf
 
 

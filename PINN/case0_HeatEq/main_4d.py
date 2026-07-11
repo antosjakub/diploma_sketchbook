@@ -43,38 +43,37 @@ parser.set_defaults(
     f_ic_full_domain=1,
     glorot_init=True,
     # nice defaults
-    d=2,
-    #layers="128,128,128,128",
-    layers="64,64,64,64",
+    d=4,
     active_losses="pde,ic",
     lambda_pde=1.0,
     lambda_ic=0.1,
     lambda_strategy="fixed",
     use_hard_constrains=True,
-    #
     one_batch_per_epoch=True,
+    #
 
-    bs=1024,
+    # TD:
+    #layers="64,64,64,64",
+    layers="128,128,128,128",
+
+
+    bs=2048,
     resampling_frequency=100,
 
+    n_res_points=204800,
+    prevent_resampling=False,
 
-    #n_res_points=102400,
-    #prevent_resampling=False,
-
-    n_res_points=1024,
-    prevent_resampling=True,
+    #n_res_points=1024,
+    #prevent_resampling=True,
 
 
-    #n_steps=20_000,
-    n_steps=400,
-    #n_steps_decay=333,
-    #n_steps_decay=500,
-    n_steps_decay=800,
-    logging_frequency=10,
+    #n_steps=10_000,
+    #n_steps_decay=400, #25x
+    #logging_frequency=40,
 
-    #n_steps=20_000,
-    #n_steps_decay=666,
-    #logging_frequency=80,
+    n_steps=20_000,
+    n_steps_decay=666, #30x
+    logging_frequency=80,
 
 
     #lambda_strategy="gradnorm_adapt",

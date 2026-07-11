@@ -71,33 +71,376 @@ e^{-\delta t}
 \right)
 $$
 
+\textbf{Loss}
+The loss is computed as
 
 
 
-\section{Results}
+\section{PINNs}
+
+%\subsection{Curse of dim}
+%
+%two plots?
+
+%\subsection{Experiments}
+
+In all the experiments below, we consider:
+
+\begin{itemize}
+\item latin hypercube sampling (LHS)
+\item learning rate (lr) of 1e-3
+\item hard constrains for the boundary:
+$$
+u_\theta(t,x) = \hat{u}_\theta(t,x) \cdot \prod_{i=1}^d \sin(\pi x_i)
+$$
+\end{itemize}
+
+\section{2-dimensional calibration case}
+
+Guided by the base PINN architecture mentioned in <chaper of pinns>, we set the following hyperparametrs:
+\begin{center}
+\begin{tabular}{ |c|c|c|c } 
+\hline
+NN size & steps & number of collation points, or batch size (bs)\\
+\hline
+4x64  & 10,000 & 2048 \\
+\hline
+\end{tabular}
+\end{center}
+where by '4x64' mean a neutral network with 4 hidden layers, each consisting of 64 neurons.
+
+Expomential lr decay, with a frequncy of 10 times during the training.
+
+We also fix sample the dataset once, at the begging of training.
+
+Also, the collations points for the initial conditon is 8 times less than that for pde.
+
+For the comparison test, if not stated otherwise we perform 3 runs with separete seed and report the average of the runs.
+
+The reported $L^\infty$ and relative $L^2$ erros are both computed form a collection of
+100,000 points sampled using the LHS throughout the entire spatial-temporal domain.
+If not stated otherwise, the $L^\infty$ is given as $\max(L^\infty_{pde}, L^\infty_{ic})$, and
+the relative $L^2$ error as the average of the corresponding PDE and IC relative $L^2$ errors.
+
+\subsection{Grid search}
+In the machine learing community, many parameters to tune...
+This is called a grid search.
 
 
-PINNs
+\subsubsection{Loss weights: $\lambda_{pde}, \lambda_{ic}$}
+As discussed in <chapter of pinns>, the loss landacape is perticularly sensitive
+to the weight above the individual loss terms. in our case just $\lambda_{pde}, \lambda_{ic}$.
+To determine an optimal, or at least close to optimal value of those weights, we first perform
+a grid search over various differnt values. To this extend, we fix $\lambda_{pde}=1.0$, and carry out
+the grid search over different values of $\lambda_{ic}$,
+spanning 5 orders of magnitude.
+%(with 3 random seeds).
+As seen in \ref{fig:lambda_ic__GS}, the value $\lambda_{ic}=0.1$ gives the best results.
+Hence we fix this value for the following runs.
 
-latin hypercube sampling
-n steps - 20k
-NN size 4x64, 4x128
-n steps decay 
-
-fullbatch fixed / resampling dataset
-n_res = 8192
-bs pde = 8192
-bs bc/ic = 1024
-
-minibatch fixed / resmapling dataset
-n_res = 8192
-bs pde = 256
-bs bc/ic = 32
-
-lambdas
-adaptive lambdas
+\begin{figure}
+    \centering
+    \includegraphics[width=150mm]{figures/lambda_ic__GS.png}
+    \caption{Plot of lambda 0.1 loss and linf run}
+    \label{fig:lambda_ic__GS}
+\end{figure}
 
 
+\subsection{Loss landscape}
+%bs: 1024 2048 4096
+
+\begin{figure}
+    \centering
+    \includegraphics[width=150mm]{figures/bs_gs_training_loss.png}
+    \includegraphics[width=150mm]{figures/bs_gs_test_rel_l2.png}
+    \caption{Loss and bs, and rel l2}
+    \label{fig:bs_gs}
+\end{figure}
+
+We observe that the loss is oscillaring widely messy \ref{fig:bs_gs}.
+And, in our expeirmens, this is irrespective of the value of $\lambda_{ic}$
+As we consider a fixed dataset, 2048 points spanning the entire spatial temporal domain,
+the insufficeint number of collacation points point be the cause.
+TO this effect, we compare our previous run with that of batch size 1024, and 4096.
+
+To our surprise, 
+the final errors and the oscillations do seem to be much correlated with the bs,
+which is suprising given that we a small, fixed number of points from the domain.
+
+What we notice, however, is that the smaller batchsizes run much faster on CPU,
+which is not that suprising given the sequential nature of the hardware.
+On GPU, the situation is very different. Since the model and the dataset are both quite small,
+all the size of the batch size does not have significant effect on the runtime.
+
+\begin{center}
+\begin{tabular}{ |c|c|c|c|c| } 
+\hline
+batch size & time [cpu run] & time[gpu run] & rel $L^2$ & $L^\infty$ \\
+\hline
+1024 & 108s & ?s & 0.617e-3 & 1.27e-3 \\
+\hline 
+2048 & 168s & ?s & 0.684e-3 & 1.44e-3 \\
+\hline 
+4096 & 292s & ?s & 0.7e-3 & 1.3e-3 \\
+\hline
+\end{tabular}
+\end{center}
+
+As we perform some of our experiments on a cpu only,
+to use the rousources most efficiently,
+we select batch size of 1024 for the preceeding experiment.
+
+
+%
+%and the difference between the resampling and fixed datset regimes.
+%Most efficient bs?
+%
+%average over 3 seeds again
+%
+%bs effect on training dynamics, hence apart from the error,
+%we also report time.
+%bs: 512 vs 2048 vs 8096
+%
+%We keep the the number of steps fixed (10k) - fixed n of optimizer steps.
+%- bs = 512, ...
+%
+%%To this effect we consider two modes of grid search.
+%%Second, fix the n of points that pass through the network during training.
+%%- bs = 512 --> nsteps = 40k
+%%- bs = 2048 --> nsteps = 10k
+%%- bs = 8096 --> nsteps = 2.5k
+%The batch size is the botthle neck?
+%If we look at the memoty log, the GPU VRAM usage a peaked at 60MB. During the run...
+%However, we see that smaller batch sizes lead to smaller $L^2$ and $L^\infty$ errors.
+%The GPU needs much large batch size
+%%\begin{figure}
+%%    \centering
+%%    \includegraphics[width=150mm]{figures/training_loss.png}
+%%    \caption{loss minibatch, fixed}
+%%    \label{fig:rar-d}
+%%\end{figure}
+%on gpu:
+%even thought the number of collocation points is the same, 
+%too small peak gpu mem utilization
+%larger bs ?
+%loss landscape ?
+%does not matter that much, 1024 seem like a good compromise
+
+
+Now, we seek to further adress the oscialltiong loss landscape.
+We explore a diffeent strategy to managing the
+oscialltions. (and note the effect on the $L^2$ and $L^\infty$ errors.)
+
+In our base architecture, we exponentially decrease the learning rate every 1000 setps, meaning 10 times during the training.
+We now change this rate to 20. We observe tha the learning rate does indeed have and effect on
+the magnitude and frequency of oscillations, however, the general dynamics of the loss - the platou followed by a huge spike - stay the same.
+We will return to this issue in the next section, here, we just seek to improve the error by
+increasing the trainign horizoon to 20k steps.
+The loss and erorr metrics platou, and hence they decline quite negligily.
+
+The results are as follows:
+\begin{center}
+\begin{tabular}{ |c|c|c|c|c| } 
+\hline
+number of steps & $\ell_{total}$ & rel $L^2$ & $L^\infty$ \\
+%10k & 1.815e-7 & 6.17e-4 & 1.27e-3 \\
+10k & 3.258e-7 & 8.27e-4 & 1.8e-3 \\ % 25x
+\hline
+20k & 5.487e-8 & 4.12e-4 & 1.21e-3 \\ % 25x
+\hline
+\end{tabular}
+\end{center}
+
+
+\subsection{Stochasticity}
+Now, we introduce stochasticity.
+Instead of a fixed set of callocation points,
+we resample the dataset every epoch.
+\footnote{Actually, to avoid unnecessary overhead such frequent samplng would introduce into the training pipeline,
+we sample every 100 steps a dataset of size $100\cdot$bs, and then give a batch of sampled point to the model every step}.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=150mm]{figures/training_losses_fixed_vs_resample.png}
+    \caption{Loss dynamics: lr decay frequency and resampling}
+    \label{fig:lambda_ic__GS}
+\end{figure}
+
+As expected, this dramatically changes the loss dynamics and decrease the infrequent high spikes in the loss,
+allbeit for introducing more randomness into the training prodecure.
+We observe that, again, the batch sizes do not have much effect on the the accuracy of the model, and the
+leraning rate decay frequency influences the model equivalently as in the case of fixed dataset.
+
+In accordance with the fixed dataset above, to impore the accuracy of the model, we next
+increase the number of steps to 20,000 and further tune the learning rate decay to match this new paradigm run.
+
+We report a good middle ground at 25 - which is approximatly 7\% of the starting learning rate.
+
+
+The obtained loss and error metrics are given below:
+
+\begin{center}
+\begin{tabular}{ |c|c|c| } 
+\hline
+number of steps & $\ell_{total}$ & rel $L^2$ & $L^\infty$ \\
+\hline
+10k & 5.21e-7 & 1.10e-3 & 2.12-3 \\ %20x resample
+\hline
+20k & 1.42e-7 & 4.8e-4 & 1.1e-3 \\ % 30x resample
+\hline
+\end{tabular}
+\end{center}
+% gridsearch__26-07-08--10:11:39__GS_6_bs_and_resample
+
+We have more control over the loss landacape her - RAR, causal, ...
+Lets use it for now.
+
+% /home/antos_j/diploma_sketchbook/PINN/case0_HeatEq/gridsearch__2026-07-09--11-27-08_resampl_decay750_20k/seed=42__prevent_resampling=False__bs=1024__n_res_points=102400/report.json
+
+
+% if we try gradnorm, the lambda is optimal - goes to 10 vs 1 but same res
+
+
+%\subsubsection{LBFGS}
+%
+%\paragraph{LBFGS alone}
+%We first consider a pure LBFGS run.
+%LBFGS expects large collation size, hence we slighlty increase the
+%batches of sizes to 2k and 4k. And, since one lbfgs step can consist
+%of multiple line search steps, we select a relatively modes 500 steps.
+%
+%Super quick convergence.
+%line search 0 only a few steps ater the initia period.
+%After that the line search only did not find any better minimum
+%
+%Suprisingly, we observed no noticable change between the two batch sizes.
+%What we noticed, though was a significant worsening of the
+%relative $L^2$ error for the initial conditon.
+%Guide by this we increased the $\lambda_{ic}$ to the default 1.0, and the 
+%performaced imporved by almost an ordr of magnitude - even below the pde one, without affecting the value of pde erros.
+%
+%\begin{center}
+%\begin{tabular}{ |c|c|c|c|c|c| } 
+%\hline
+%$\ell_{pde}$ & $\ell_{ic}$ & $rel L^2$ pde & $rel L^2$ ic & $L^\infty$ pde & $L^\infty$ ic \\
+%\hline
+%2.8e-7 & 2.77e-7 & 0.000604 & 0.0009 & 0.00134 & 0.0014 \\
+%\hline
+%\end{tabular}
+%\end{center}
+%% /home/antos_j/diploma_sketchbook/PINN/case0_HeatEq/run_latest_l3_bs4000_dec50/report.json
+%
+%\paragraph{Adam + LBFGS}
+%We run adam for until adam 1e-5 and 1e-6.
+%At end of each run, we obtain the following errors:
+%
+%\begin{center}
+%\begin{tabular}{ |c|c|c|c|c|c| } 
+%\hline
+%terminal loss value & steps & $rel L^2$ pde & $rel L^2$ ic & $L^\infty$ pde & $L^\infty$ ic \\
+%\hline
+%$1e-5$ & 2384 & 0.00811 & 0.00924 & 0.01693 & 0.01719 \\
+%\hline
+%$1e-6$ & 6121 & 0.00266 & 0.00379 & 0.00563 & 0.00567 \\
+%\hline
+%\end{tabular}
+%\end{center}
+%% /home/antos_j/diploma_sketchbook/PINN/case0_HeatEq/run_latest__adam1e-5/report.json
+%[show plot: adam_e-5,6_starting_points - add lines to 1e-5,6]
+%
+%% consider $\lambda_{ic}=0.1, 1$ or only 1.0 ?
+%
+%For 
+%We then fix the batch size of 2048, and 4096.
+%Then run lbfgs for 250 (since 500 super flat) steps with a few random seeds,
+%starting either from adam 1e-5 or 1e-6.
+%
+%All four resulting runs give almost equivalent results.
+%Regardless of whethet we start from adam 1e5 or 6 and regardless of the batch size.
+%
+%Almost 10x decreate in all error metrics:
+%
+%The most efficient choice:
+%2048, 1e-5, (lambda 1.0)
+%\begin{center}
+%\begin{tabular}{ |c|c|c|c| } 
+%\hline
+%$rel L^2$ pde & $rel L^2$ ic & $L^\infty$ pde & $L^\infty$ ic \\
+%\hline
+%0.000503 & 0.000490 & 0.000995 & 0.000843 \\
+%\hline
+%\end{tabular}
+%\end{center}
+%% /home/antos_j/diploma_sketchbook/PINN/case0_HeatEq/gridsearch__2026-07-09--13-08-44__lbfgs_GS_adam1e-5,6_42/lambda_ic=1p0__n_res_points=204800__bs=2048__starting_model=run_latest__adam1e-5-model.pth/report.json
+%
+%
+%
+%We naturally pick the combiantion of adam for till 1e-5, followed by LBFGS for 250 steps.
+%
+%[figure: pure adam, pure lbfgs, mix]
+%
+%
+%bottom line:
+%- minimizer of L2
+%- prefers lambda 1.0
+
+
+
+\subsection{4-dimensions}
+%Here, we reuse the same optimal net architecutre and hyperparameter choices
+%decay 25
+%n steps, NN, bs
+%We run adam for 20k, 40k and nn 4x64 and 4x128
+%testing point to 1M of the spatial temporal domain.
+%In addition we try lbfgs, also for 4x64 and 4x128.
+%Adam till 1e-5, followed by LBFGS for 250 steps.
+Here, we reuse the optimal set of hyperparameters we arrived at in the previous case, namely
+a lambda 0.1, decay frequency 30, 20k steps.
+
+We also test a batch sizes of smaller and largeer and try to increase the network to 4x128,
+effectively quadrupelling its capacity.
+
+20k, 40k
+bs 512 1k 2k
+4x64, 128
+
+\begin{center}
+\begin{tabular}{ |c|c|c| } 
+\hline
+number of steps & $\ell_{total}$ & rel $L^2$ & $L^\infty$ \\
+%\hline
+%10k & 5.21e-7 & 1.10e-3 & 2.12-3 \\ %20x resample
+%\hline
+%20k & 1.42e-7 & 4.8e-4 & 1.1e-3 \\ % 30x resample
+%\hline
+
+then, pick a few, small mod, run for multiple seeds
+
+adaptive sampling?
+RAR?
+
+\end{tabular}
+\end{center}
+
+
+
+
+\subsection{6d}
+
+bs diff,
+sample ic more
+
+increase network size, number of steps, and number of testing points again?
+
+10M testing pnts
+RAR
+
+
+
+
+
+\text{Plot - max mem during run}
+run till reach loss 1e-4
 
 \chapter{Appendix}
 % https://chatgpt.com/share/6a481b37-c04c-83eb-a0e8-b34c1d0ac08c
@@ -105,18 +448,18 @@ adaptive lambdas
 \section{Heat equation: Derivation of the $L^2$ norm of the analytic solution}
 Consider the analytical solution
 \begin{align*}
- u(t,x)
- &=
- e^{-\gamma t}
- \prod_{i=1}^d \sin(\pi x_i)
- +
- e^{-\delta t}
- \frac{0.67}{\sqrt d}
- \sum_{i=1}^d
- \sin(2\pi x_i)
- \left(
- \prod_{\substack{k=1 \\ k\neq i}}^d \sin(\pi x_k)
- \right)
+u(t,x)
+&=
+e^{-\gamma t}
+\prod_{i=1}^d \sin(\pi x_i)
++
+e^{-\delta t}
+\frac{0.67}{\sqrt d}
+\sum_{i=1}^d
+\sin(2\pi x_i)
+\left(
+\prod_{\substack{k=1 \\ k\neq i}}^d \sin(\pi x_k)
+\right)
 \end{align*}
 where
 \[

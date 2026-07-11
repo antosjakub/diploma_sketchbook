@@ -595,12 +595,18 @@ $$
 %1 epoch = 1 minibatch pass thought the dataset
 %}
 
-The training regime is analogous to that of feed-forward neural network:
+The training procedure is almost equavalent to to that of feed-forward neural networks.
+However, here, we do not have any huge labeled dataset to iterate over.
+In PINNs, we usually proceed in a way that blends together both the minibatch and the fullbarch approaches.
+Instead of passing though the entire dataset in every epoch, we instead pass though a relatively small set of
+callocation points. Those can be either sampled once, before the training, or repeatedly sampled at each epoch.
+Hence the terms collocation points and batch can be used interchangebly.
+Instead of \emph{epochs}, we talk of \emph{steps}.
 
 %Let us save the training data $\{(x_i,t_i)\}_{i=1}^{N_{pde}}$ as a tensor $\mathbf X_{pde}$ of size $(N_r,d+1)$
 
 \begin{algorithm}[H]
-\caption{Full-Batch Gradient Descent}
+\caption{PINN training}
 \begin{algorithmic}[1]
     \Require 
     \begin{itemize} 
@@ -609,8 +615,8 @@ The training regime is analogous to that of feed-forward neural network:
     \item weights $\lambda_{pde}, \lambda_{bc}, \lambda_{ic}$
     \end{itemize} 
     \State \textbf{Initialize} network parameters $\theta$
-    \For{epoch $= 1, \dots, E$}
-        \State Randomly shuffle the callocation points
+    \For{step $= 1, \dots, N$}
+        \State Randomly shuffle or resample the callocation points
         \State \textbf{Forward pass:}
         \begin{itemize} 
             \item $u_{pde,i} = u_\theta(x_i,t_i),\quad \forall(x_i,t_i)\in X_{pde}$
@@ -632,12 +638,6 @@ The training regime is analogous to that of feed-forward neural network:
 \end{algorithmic}
 \end{algorithm}
 
-The mini-batch version is also analogous to the feed-forward case.
-
-However, in addition to the above presented approaches,
-PINNs
-to ensure better covering, instead of fixing the 
-we repeatedly resample the callocation points at the start off each epoch.
 
 
 \section{Automatic differentiation (AD)}
@@ -1929,10 +1929,10 @@ $$
 where $\hat y_i$ are the predictions and $y_i$ is the ground truth value.
 use LHS
 
-B. $L_inf$ err, for:
+B. $L_\infty$ err, for:
 IC,TC pred vs true, if analytic known: PDE pred vs true
 $$
-E_\inf = \max_\Omega|\hat y_i - y_i|
+E_\infty = \max_\Omega\|\hat{y}_i - y_i\|
 $$
 need to look at the section of the domain where the solution is to have the max value
 sample the center via gaussian?

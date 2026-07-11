@@ -57,8 +57,11 @@ def add_common_args(parser):
     parser.add_argument("--f_pde_trajs", default=1, type=int, help="")
     parser.add_argument("--f_ic_full_domain", default=1, type=int, help="")
     parser.add_argument("--f_ic_trajs", default=1, type=int, help="")
+
     parser.add_argument("--use_rbas", action="store_true", help="Residual-based adaptive resampling")
     parser.add_argument("--rbas_chunk_size", default=1024, type=int, help="Residual-based adaptive resampling chunk size when evaluating the res")
+    parser.add_argument("--rbas_k", default=1.0, type=float, help="")
+    parser.add_argument("--rbas_c", default=0.0, type=float, help="")
     # testing and logging
     parser.add_argument("--n_test_points", default=100_000, type=int, help="Number of test points for the testing suite.")
     parser.add_argument("--n_test_chunk_size", default=100_000, type=int, help="Number of test points for the testing suite.")
@@ -223,7 +226,7 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
             crit_loss_val=args.crit_loss_val,
         )
     else:
-        losses_adam, test_log_rel_l2, test_log_linf = trainer.train_adam_minibatch(
+        losses_adam, rel_l2_data, linf_data = trainer.train_adam_minibatch(
             n_steps=args.n_steps,
             n_steps_decay=args.n_steps_decay,
             resampling_frequency=args.resampling_frequency,
@@ -268,26 +271,42 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
 
     import visualize_training_metrics
     file_name = f'{dir_name}/training_loss'
+    # change the order
+    losses = {k: losses[k] for k in active_losses} | {'total': losses['total']}
     visualize_training_metrics.plot_loss(losses, file_name)
     report["loss"] = {}
-    for term in active_losses:
-        report["loss"][term] = losses[term][-1]
+    for term in list(active_losses) + ['total']:
+        last_100 = torch.tensor(losses[term])[-100:]
+        report["loss"][f"{term}_last"] = last_100[-1].item()
+        report["loss"][f"{term}_mean"] = torch.mean(last_100).item()
+        report["loss"][f"{term}_std"] = torch.std(last_100).item()
+        report["loss"][f"{term}_min"] = torch.min(last_100).item()
+        report["loss"][f"{term}_max"] = torch.max(last_100).item()
 
     if args.enable_testing:
-        rel_l2_data = {k: [d[k] for d in test_log_rel_l2] for k in test_log_rel_l2[0]}
-        linf_data = {k: [d[k] for d in test_log_linf] for k in test_log_linf[0]}
+        #rel_l2_data = {k: [d[k] for d in test_log_rel_l2] for k in test_log_rel_l2[0]}
+        #linf_data = {k: [d[k] for d in test_log_linf] for k in test_log_linf[0]}
         file_name = f'{dir_name}/training_test'
-        #n = len(linf_data[list(linf_data.keys())[0]])
-        #x = args.logging_frequency * torch.linspace(1, n, n, dtype=torch.int)
-        visualize_training_metrics.plot_test_rel_l2(rel_l2_data, file_name+'_rel_l2')
-        visualize_training_metrics.plot_test_linf(linf_data, file_name+'_linf')
+        # tot
+        rel_l2_data['total'] = ( torch.tensor(rel_l2_data['pde']) + torch.tensor(rel_l2_data['ic']) ) / 2.0
+        linf_data['total'] = torch.tensor([
+            linf_data['pde'],
+            linf_data['ic'],
+        ]).max(dim=0).values
+        visualize_training_metrics.plot_test_rel_l2(rel_l2_data, file_name+'_rel_l2', x=trainer.log_steps)
+        visualize_training_metrics.plot_test_linf(linf_data, file_name+'_linf', x=trainer.log_steps)
         torch.save(rel_l2_data, f'{file_name}_rel_l2.pth')
         torch.save(linf_data, f'{file_name}_linf.pth')
         report["test_rel_l2"] = {}
         report["test_linf"] = {}
-        for term in ('pde', 'ic'):
-            report["test_rel_l2"][term] = rel_l2_data[term][-1]
-            report["test_linf"][term] = linf_data[term][-1]
+        for term in list(active_losses)+['total']:
+            for test_metric, test_data in zip(('test_rel_l2', 'test_linf'), (rel_l2_data, linf_data)):
+                last_100 = test_data[term][-100:] if (term == 'total') else torch.tensor(test_data[term])[-100:] 
+                report[test_metric][f"{term}_last"] = last_100[-1].item()
+                report[test_metric][f"{term}_mean"] = torch.mean(last_100).item()
+                report[test_metric][f"{term}_std"] = torch.std(last_100).item()
+                report[test_metric][f"{term}_min"] = torch.min(last_100).item()
+                report[test_metric][f"{term}_max"] = torch.max(last_100).item()
 
 
     # individual loss term weighting - pde,bc,ic
@@ -332,12 +351,14 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
 
     if args.enable_memory_tracking:
         file_name = f'{dir_name}/training_memory_metrics'
-        visualize_training_metrics.plot_mem(trainer.memory_history, file_name)
-        utility.json_dump(f"{file_name}.json", trainer.memory_history)
+        memory_history = {}
         report["memory_metrics"] = {}
         for k, v in trainer.memory_history.items():
             if (len(v) > 0) and (v[0] is not None):
                 report["memory_metrics"][k] = max(v)
+                memory_history[k] = v
+        visualize_training_metrics.plot_mem(memory_history, file_name)
+        utility.json_dump(f"{file_name}.json", memory_history)
 
     # save the most imporant stufff
     utility.json_dump(f"{dir_name}/report.json", report)
