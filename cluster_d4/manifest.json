@@ -1,0 +1,47 @@
+{
+    "entrypoint": "main.py",
+    "fixed_params": {
+        "clear_dir": false,
+        "seed": 42,
+        "use_hard_constrains": true,
+        "active_losses": "pde,ic",
+        "lambda_pde": 1.0,
+        "lambda_ic": 0.1,
+        "lambda_strategy": "fixed",
+        "t_discr": "0.0, 0.5, 1.5, 3.5",
+        "time_strategy": "none",
+        "eps": 0.1,
+        "use_lbfgs": false,
+        "one_batch_per_epoch": true,
+        "resampling_frequency": 100,
+        "description": "d=4",
+        "d": 4,
+        "enable_profiler": false,
+        "enable_memory_tracking": true,
+        "enable_testing": true,
+        "n_test_points": 100000,
+        "n_test_chunk_size": 100000
+    },
+    "search_axes": {
+        "seed": [
+            42,
+            13
+        ],
+        "layers": [
+            "64,64,64,64",
+            "128,128,128,128"
+        ],
+        "steps": [
+            {
+                "n_steps": 20000,
+                "n_steps_decay": 800,
+                "logging_frequency": 40
+            },
+            {
+                "n_steps": 40000,
+                "n_steps_decay": 1600,
+                "logging_frequency": 80
+            }
+        ]
+    }
+}

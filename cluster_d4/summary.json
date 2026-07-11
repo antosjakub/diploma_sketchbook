@@ -1,0 +1,94 @@
+{
+    "n_ok": 8,
+    "n_fail": 0,
+    "records": [
+        {
+            "combo": {
+                "seed": 42,
+                "layers": "64,64,64,64",
+                "n_steps": 20000,
+                "n_steps_decay": 800,
+                "logging_frequency": 40
+            },
+            "run_dir": "gridsearch__26-07-09--20:01:51__GS_d4/seed=42__layers=64_64_64_64__n_steps=20000__n_steps_decay=800__logging_frequency=40",
+            "return_code": 0
+        },
+        {
+            "combo": {
+                "seed": 42,
+                "layers": "64,64,64,64",
+                "n_steps": 40000,
+                "n_steps_decay": 1600,
+                "logging_frequency": 80
+            },
+            "run_dir": "gridsearch__26-07-09--20:01:51__GS_d4/seed=42__layers=64_64_64_64__n_steps=40000__n_steps_decay=1600__logging_frequency=80",
+            "return_code": 0
+        },
+        {
+            "combo": {
+                "seed": 42,
+                "layers": "128,128,128,128",
+                "n_steps": 20000,
+                "n_steps_decay": 800,
+                "logging_frequency": 40
+            },
+            "run_dir": "gridsearch__26-07-09--20:01:51__GS_d4/seed=42__layers=128_128_128_128__n_steps=20000__n_steps_decay=800__logging_frequency=40",
+            "return_code": 0
+        },
+        {
+            "combo": {
+                "seed": 42,
+                "layers": "128,128,128,128",
+                "n_steps": 40000,
+                "n_steps_decay": 1600,
+                "logging_frequency": 80
+            },
+            "run_dir": "gridsearch__26-07-09--20:01:51__GS_d4/seed=42__layers=128_128_128_128__n_steps=40000__n_steps_decay=1600__logging_frequency=80",
+            "return_code": 0
+        },
+        {
+            "combo": {
+                "seed": 13,
+                "layers": "64,64,64,64",
+                "n_steps": 20000,
+                "n_steps_decay": 800,
+                "logging_frequency": 40
+            },
+            "run_dir": "gridsearch__26-07-09--20:01:51__GS_d4/seed=13__layers=64_64_64_64__n_steps=20000__n_steps_decay=800__logging_frequency=40",
+            "return_code": 0
+        },
+        {
+            "combo": {
+                "seed": 13,
+                "layers": "64,64,64,64",
+                "n_steps": 40000,
+                "n_steps_decay": 1600,
+                "logging_frequency": 80
+            },
+            "run_dir": "gridsearch__26-07-09--20:01:51__GS_d4/seed=13__layers=64_64_64_64__n_steps=40000__n_steps_decay=1600__logging_frequency=80",
+            "return_code": 0
+        },
+        {
+            "combo": {
+                "seed": 13,
+                "layers": "128,128,128,128",
+                "n_steps": 20000,
+                "n_steps_decay": 800,
+                "logging_frequency": 40
+            },
+            "run_dir": "gridsearch__26-07-09--20:01:51__GS_d4/seed=13__layers=128_128_128_128__n_steps=20000__n_steps_decay=800__logging_frequency=40",
+            "return_code": 0
+        },
+        {
+            "combo": {
+                "seed": 13,
+                "layers": "128,128,128,128",
+                "n_steps": 40000,
+                "n_steps_decay": 1600,
+                "logging_frequency": 80
+            },
+            "run_dir": "gridsearch__26-07-09--20:01:51__GS_d4/seed=13__layers=128_128_128_128__n_steps=40000__n_steps_decay=1600__logging_frequency=80",
+            "return_code": 0
+        }
+    ]
+}

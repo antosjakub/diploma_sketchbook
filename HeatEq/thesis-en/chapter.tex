@@ -386,7 +386,7 @@ Lets use it for now.
 
 
 
-\subsection{4-dimensions}
+\subsection{4 Dimensions}
 %Here, we reuse the same optimal net architecutre and hyperparameter choices
 %decay 25
 %n steps, NN, bs
@@ -394,38 +394,46 @@ Lets use it for now.
 %testing point to 1M of the spatial temporal domain.
 %In addition we try lbfgs, also for 4x64 and 4x128.
 %Adam till 1e-5, followed by LBFGS for 250 steps.
+
+%/storage/praha1/home/simulant_antos/diploma_sketchbook/PINN/case0_HeatEq/gridsearch__26-07-09--20:01:51__GS_d4/
+
 Here, we reuse the optimal set of hyperparameters we arrived at in the previous case, namely
-a lambda 0.1, decay frequency 30, 20k steps.
+$\lambda_{ic}=0.1$, decay frequency 25.
 
-We also test a batch sizes of smaller and largeer and try to increase the network to 4x128,
-effectively quadrupelling its capacity.
-
-20k, 40k
-bs 512 1k 2k
-4x64, 128
-
+We also test try to increase the network size, from 4x64 to 4x128,
+effectively quadrupelling its capacity. To account for this large network,
+we consider a case where we entend the training horizon from 20k to 40k.
+The results are shown in \ref{fig:models_d4}. Of the 4 combinaitons,
+it is apparent that the incresed training horizon leads to better results
+irrespective of the model capacity, and leads to approximately 2x lower errors.
+As for the model capacity, it was a surprise to see the smaller model
+perform so well. In addition, we observe that loss correlates with the error quite well.
+Below we report the two best runs, the two network sizes, each run for 40k steps.
+We also report the used GPU memory (VRAM). The runtime - for both about 540s.
+Compared to the 2-dimensional case, we report the error as so (averaged over the random seeds):
 \begin{center}
-\begin{tabular}{ |c|c|c| } 
+\begin{tabular}{ |c|c|c|c|c| } 
 \hline
-number of steps & $\ell_{total}$ & rel $L^2$ & $L^\infty$ \\
-%\hline
-%10k & 5.21e-7 & 1.10e-3 & 2.12-3 \\ %20x resample
-%\hline
-%20k & 1.42e-7 & 4.8e-4 & 1.1e-3 \\ % 30x resample
-%\hline
-
-then, pick a few, small mod, run for multiple seeds
-
-adaptive sampling?
-RAR?
-
+network size & $\ell_{total}$ & rel $L^2$ & $L^\infty$ & allocated/reserved VRAM\\
+\hline
+4x128 & 3.88e-8 & 1.62e-3 & 2.55e-3 & 120/200 MB\\ 
+\hline
+4x64 & 1.126-7 & 1.89e-3 & 3.04e-3 & 71/124 MB\\ 
+\hline
 \end{tabular}
 \end{center}
 
+\begin{figure}
+    \centering
+    \includegraphics[width=150mm]{figures/model_comparison_for_d=4.png}
+    \caption{Error and loss for various hyperparameter choices}
+    \label{fig:models_d4}
+\end{figure}
 
 
 
-\subsection{6d}
+
+\subsection{6 Dimensions}
 
 bs diff,
 sample ic more
@@ -434,6 +442,21 @@ increase network size, number of steps, and number of testing points again?
 
 10M testing pnts
 RAR
+
+VRAM memory needs
+
+mistake in running..., very good
+
+adaptive sampling?
+RAR?
+
+
+
+\section{Sparse grid combiantion technique}
+
+
+
+
 
 
 
