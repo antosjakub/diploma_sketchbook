@@ -436,27 +436,123 @@ network size & $\ell_{total}$ & rel $L^2$ & $L^\infty$ & allocated/reserved VRAM
 \subsection{6 Dimensions}
 
 bs diff,
-sample ic more
+sample ic more if looking like it
 
 increase network size, number of steps, and number of testing points again?
 
 10M testing pnts
-RAR
 
 VRAM memory needs
 
-mistake in running..., very good
+% mistake in running..., very good - same 1024 bs, new data every 100 steps
+% what bout periodically giving the nn new data?
 
-adaptive sampling?
-RAR?
+%\subsection{8th dimension}
+so far linear / exp. increase in training steps
+exp increase in model size
+scale gets us far - the equavalent of the scaling laws hold
+but long training....
 
+Q: Whether we can me the training more efficiet (smller model size, shorter training time)?
+causal weighs & causal sampling
+RAR
+SDGD
 
 
 \section{Sparse grid combiantion technique}
 
+Crank nicholson
+sparse matrix of the discreeized operaotr
+Here, we consider GMRES with no preditioner. (ilu)
+We tried CG with iLU but GMRES was much faster with same accuracy.
+
+Set of time windows we sample there.
+ic,
+
+as we know the analytic sol, then 4 slices, where 1 at term time t=T
+
+%we neding
+%$r=\alpha \frac{\Delta t}{\Delta x^2}$
+%$$
+%\mu = \frac{a\Delta t}{(\Delta x)^2}
+%$$
+%actually not since crank nic stable irrespective of \Delta t
+
+\subsection{2-dimensional calibraiton case}
+[show plot of the solution at lvl=1,lvl=2,lvl=3 side by side - to see the basis functions / grid points at play]
+[show plot linf and rel l2 err vs lvl -- goes down exponentially]
+
+We set $\Delta t=0.01$, and benchmeark various levels $n$.
+What we notice is the while the runtime increeses linearly $n$, the error
+decreases with $n$ exponentially, see fig TD.
+
+To our initial surprise, the largest was achieved at the initial condition,
+and the errors decreased as $t\to T$.
+This can be explain by the smoothing nature of the heat equaiton.
+
+In addtion, setting smaller timestep $t=0.001$ had negligile effect on the solution accuracy.
+(due to using the implicit scheme?)
+
+\subsection{4 dimensions}
+can run on 12 core AMD laptop without an issue
+with 8 parallel workers and 12GB ram
+
+\begin{center}
+\begin{tabular}{ |c|c|c|c|c|c|c| } 
+\hline
+level $n$ & rel $L^2$ & $L^\infty$ & \# component grids & \# grid points & peak RAM [MB] & runtime \\
+\hline
+4 & 0.0241626 & 0.0506153 & 7 & 113 & 104.867 & 0.194734 \\
+\hline
+5 & 0.0072504 & 0.0155873 & 9 & 257 & 105.066 & 0.203949 \\
+\hline
+6 & 0.00209899 & 0.00464856 & 11 & 577 & 105.273 & 0.190572 \\
+\hline
+7 & 0.00060241 & 0.00131465 & 13 & 1281 & 105.902 & 0.220332 \\
+\hline
+8 & 0.000170055 & 0.000358433 & 15 & 2817 & 109.199 & 0.282883 \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{ |c|c|c|c|c|c|c| } 
+\hline
+level $n$ & rel $L^2$ & $L^\infty$ & \# component grids & \# grid points & peak RAM [MB] & runtime \\
+\hline
+4 & 0.0776054 & 0.152767 & 35 & 2769 & 113.605 & 1.30406 \\
+\hline
+5 & 0.0301881 & 0.0628298 & 69 & 7681 & 121.98 & 2.56963 \\
+\hline
+6 & 0.0110807 & 0.0238831 & 121 & 20481 & 150.711 & 5.96036 \\
+\hline
+7 & 0.00389236 & 0.00863072 & 195 & 52993 & 241.293 & 18.4484 \\
+\hline
+8 & 0.00132089 & 0.00297608 & 295 & 133889 & 527.609 & 71.1404 \\
+\hline
+\end{tabular}
+\end{center}
 
 
+need to set higher level to achieve the same accuracy?
+in higher dimensions?
 
+
+\subsection{6 dimensions}
+THe few lelvels are managable on laptop, but as we saw in the previous case,
+to achieve higher accuracy, we need to explore higher levels.
+To this extend, we now result to running our experiments on cluster [cite metacentrum]
+
+1M test points
+set 24 workers?
+
+consider levels 4:12
+managable?
+just set some fixed n of workers,
+
+i am interested in:
+    - accuracy at diff levels
+    - n of grids / pnts
 
 
 

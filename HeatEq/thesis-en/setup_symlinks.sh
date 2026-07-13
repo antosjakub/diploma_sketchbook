@@ -11,3 +11,6 @@ ln -s ../../thesis-en/.latexmkrc .latexmkrc
 
 rm bibliography.tex
 ln -s ../../thesis-en/bibliography.tex bibliography.tex
+
+rm bibliography.bib
+ln -s ../../thesis-en/bibliography.bib bibliography.bib

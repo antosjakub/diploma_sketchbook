@@ -2,17 +2,62 @@
 
 \chapter{Sparse grids}
 
-bounded mixed derivatives
+{\color{red}
+
+- DOG - number of parallel grids, number of points
+
+- regular / boumded mixed ders.
+
+- crank nic etc
+}
+
+Introduced in 1963 by russian mathematican Smolyak\cite{smolyak}, the sparse grid method
+is a discretizaiton technique for handling problems of high dimensionality.
+First introduces for integrating multidimensional functions,
+%applicability is suited for integraion, interpolation of high dimensional funciton,
+its applicability has been extended to
+handle approximating the grids produced in discretizaition of PDE.
+
+In the discreatizaiton of PDEs, we standartly conssturct
+simple uniform grids which contain on the order $O(N^d)$ degrees of freedom,
+where $d$ si the spatial dimensionality of the problem and $N$
+denotes the number of grid points in a single spatial dimension.
+THe discreatizaiton performed in sparse grids, on the other hand,
+leads to only $O(N(\log{N})^{d-1})$ degrees of freedom.\cite{sg_123}
+
+In addition, provided that the problem is smooth enough, 
+the accuracy obrained this way is comparable to the full grid approach.
+
+This makes the sparse grids construction particullary attractive for
+moderate to high dimensional problsm.
+%Still due to the logarihgm term, the curse of dimensiinality is still present.
+%Buts if effect is weakened.
+%Herem, the grids requited involves only $O(n(\log(n)^{d-1}))$
+%the curse of dim can be overcame to some extend by some extend by the sparse grid construction.
+%THe discreatizaiton performed in sparse grids involves only $O(n(\log(n)^{d-1}))$
+%Compared to the $O(n^d)$ requited for full grid approach. 
+In the context of PDEs, a so called \emph{combinati technique} has been developed,
+which constucts a collection of sparse grids, and the linear algebrain system
+combing from the discreatizaiton of hte pde system can be solved
+on each grid in separetly. This decompositoon can be stronly expoteoid
+for modern parallel compurational archictures. \cite{combitech}
+It is this branch of the sparse grids method that we consider in this thesis.
+
+THe following sections first give a brief introduction to sparse grids method and
+to the combiantion technique.
+Few noes on the implention are given in the last section of this chapter.
+Due to the lack of standard libraris
+discoAdapt and spareSPACE - overkill, mainly focued on Behavior, now extreme perfermoance.
+, and for hte education 
+purposes of this thesis the combination techniqe has been implement
+from scratch.
+
+
 
 \subsection{1-dimensional hierarchical basis}
 
-Consider a PDE defined on a d-dimensional unit cube
-$$
-\Omega := (0,1)^d,
-$$
-
-
-As the basic building block, we take standard linear hat functions
+In the classical sparse grid approach,
+the basis is based on hte standard linear hat functions
 
 $$
 \phi(x)=
@@ -22,7 +67,7 @@ $$
 \end{cases}
 $$
 
-We then create a set of equidistant grids $\Omega_l$ of level $l\in\mathbb{N}$ on the one dimensional unit interval $\bar{\Omega}=\left[0,1\right]$.
+Then, consider a set of equidistant grids $\Omega_l$ of level $l\in\mathbb{N}$ on the one dimensional unit interval $\bar{\Omega}=\left[0,1\right]$
 
 $$
 \Omega_l := \{x_{l,i}=i\cdot h_l : 0\le i\le 2^l\}
@@ -33,33 +78,29 @@ $$
 h_l := 2^{-l}
 $$
 
-The standard hat funciton $\phi$ is then taken to generate a set of basis functions $\phi_{l,i}$ with the support $\left[ x_{l,i}-h_l, x_{l,i}+h_l \right]$.
+The standard hat funciton $\phi$ is then taken to generate a set of basis functions $\phi_{l,i}$
+with support of size $2h_l$, the interval $\left[ x_{l,i}-h_l, x_{l,i}+h_l \right]$.
 
 
 $$
 \phi_{l,i}(x)
 =
-\phi\!\left(\frac{x-i h_l}{h_l}\right),
+\phi\!\left(\frac{x-x_{l,i}}{h_l}\right),
 \qquad 1\le i\le 2^l-1.
 $$
-The corresponding finite element space is
+
+These basic functions and then used to define the finite element space $V_l$ as
 $$
 V_l := \mathrm{span}\{\phi_{l,i} : 1\le i\le 2^l-1\}
 $$
 
-
-Instead of working with the nested spaces
-$$
-V_1 \subset V_2 \subset \cdots,
-$$
-we decompose them into intertwining increments. Define the hierarchical index sets
-$$
+Next, we decompose such space into intertwining increments by constructing so called
+\textit{hierarchical increment spaces} $W_l$, as
+\begin{gather*}
+W_l := \mathrm{span}\{\phi_{l,i}: i\in I_l\}\,,\\
 I_l := \{\, i\in\mathbb{N} : 1\le i\le 2^l-1,\ i\ \text{odd}\,\}
-$$
-The \textit{hierarchical increment spaces} are then given as
-$$
-W_l := \mathrm{span}\{\phi_{l,i}: i\in I_l\}.
-$$
+\end{gather*}
+where (hierarchical index sets)
 
 A visual representation of the definitions given so far is provided in the figure below:
 
@@ -106,7 +147,7 @@ A visual representation of the definitions given so far is provided in the figur
     % Level 3
     \def\y{2.5}
     \node[left] at (-0.5, \y+0.5) {$l=3$};
-    \node[right] at (8.5, \y+0.5) {$W_3=\{\phi_{3,1},\,\phi_{3,3},\,\phi_{3,5}\}$};
+    \node[right] at (8.5, \y+0.5) {$W_3=\{\phi_{3,1},\,\phi_{3,3},\,\phi_{3,5},\,\phi_{3,7}\}$};
     \draw (0,\y) -- (8,\y);
     
     % Basis functions and active points for l=3
@@ -120,58 +161,87 @@ A visual representation of the definitions given so far is provided in the figur
         \fill (\i,\y) circle (1.5pt) node[below, yshift=-2pt] {$x_{3,\i}$};
     }
 
+    \def\y{1.5}
+    \draw (-2,\y) -- (13,\y);
+
+    % Level 3 for V_3
+    \def\y{0.0}
+    \node[left] at (-0.5, \y+0.5) {$l=3$};
+    %\node[right] at (8.5, \y+0.5) {$V_3=\{\phi_{3,1},\,\phi_{3,2},\,\phi_{3,3},\,\phi_{3,4},\,\phi_{3,5},\,\phi_{3,6}$\}};
+    \node[right] at (8.5, \y+0.5) {$V_3=\{\phi_{3,i}\,,\: 1\le i \le 8$\}};
+    \draw (0,\y) -- (8,\y);
+
+    \foreach \i in {1,2,3,4,5,6,7} {
+        \draw (\i-1,\y) -- (\i,\y+1) -- (\i+1,\y);
+        %\node[above] at (\i,\y+1) {$\phi_{3,\i}$};
+        \fill (\i,\y) circle (3pt); %node[below, yshift=-2pt] {$x_{3,\i}$};
+    }
+    \foreach \i in {0,8} {
+        \fill (\i,\y) circle (1.5pt); %node[below, yshift=-2pt] {$x_{3,\i}$};
+    }
+
+
+
 \end{tikzpicture}
 \end{center}
 \vspace{1em}
 
 
-Then, comparing the definition of $V_l$ and $W_l$, one gets the direct-sum decomposition
+The deconstruction of $V_l$ is then carried out using direct-sum formula
 $$
-V_l = \bigoplus_{k=1}^l W_k.
+V_l = \bigoplus_{k=1}^l W_k
 $$
 
 
-Every $u\in V_l$ then admites a unique hierarchical representation
+Every function $u\in V_l$ can then be representaed uniquely as
 $$
 u(x)=\sum_{k=1}^l \sum_{i\in I_k} v_{k,i}\,\phi_{k,i}(x),
 $$
-where $v_{k,i}$ are called \textit{hierarchical surpluses}.
+where $v_{k,i}\in \mathbb R$ are called \textit{hierarchical surpluses}.
+An important feature of this decomposition is that all basic functions $\phi_{k,i}$
+spanning the same space $W_k$ have mutually disjoint support (see again the figure above).
 
 
 \subsection{Tensor product construction in higher dimensions}
 
 
-We now move to a d-dimensional unit cube $\bar{\Omega}=\left[0,1\right]^d$, where the the hierarchical basis in obtained as a tensor product of the indivisual 1-dimensional bases.
+Next, we move to a d-dimensional unit cube $\bar{\Omega}=\left[0,1\right]^d$.
+We discritize this space by a collection of grids, where
+each grid is equidistant with respect to each individual coordinate direction,
+but, in general, has varying mesh sizes in those different directions. 
+Here, the construction is analogous to the 1-dimensinal case presented above.
+%where the the hierarchical basis in obtained as a tensor product of the indivisual 1-dimensional bases.
 
-Let $\mathbf{l}=(l_1,\dots,l_d)\in\mathbb{N}^d$ be a multi-index.
-We then equivalently define the mesh spacing at the individual levels $h_\mathbf{l}\in\mathbb{R}^d$ and a grid point $x_{\mathbf{l},\mathbf{i}}\in\mathbb{R}^d$ as
+Let $\mathbf{l}=(l_1,\dots,l_d)\in\mathbb{N}^d$ be a multi-index of levels.
+We then define he mesh spacing at the individual levels $h_\mathbf{l}\in\mathbb{R}^d$
+and a grid point $x_{\mathbf{l},\mathbf{i}}\in\mathbb{R}^d$
 $$
 h_\mathbf{l} :=  2^{-\mathbf{l}} = (2^{-l_1},\dots,2^{-l_d}),
 $$
 $$
 x_{\mathbf{l},\mathbf{i}}
 %:= (x_{l_1,i_1},\dots,x_{l_d,i_d})
-:= (i_1\,2^{-l_1},\dots,i_d\,2^{-l_d})
+:= (i_1\,2^{-l_1},\dots,i_d\,2^{-l_d})\,,\quad
+\mathbf{i}=(i_1,\dots,i_d)\in\mathbb{N}^d
 $$
+The collection of such points on level $\mathbf l$ then form a grid $\Omega_\mathbf{l}$.
 
-The tensor-product basis functions are then given as a product of one-dimensional functions
+The tensor-product basis functions are then defined as a product of one-dimensional hat functions
 $$
 \phi_{\mathbf{l},\mathbf{i}}(\mathbf{x})
 =
 \prod_{j=1}^d \phi_{l_j,i_j}(x_j),
-\qquad \mathbf{x}=(x_1,\dots,x_d).
+\qquad \mathbf{x}=(x_1,\dots,x_d)
 $$
 
-The corresponding tensor-product finite element space is
+The corresponding tensor-product finite element space is then
 $$
 V_\mathbf{l} := \mathrm{span}\{\phi_{\mathbf{l},\mathbf{i}}: 1\le \mathbf{i} \le 2^\mathbf{l}-1\},
 $$
-and the multivariate hierarchical increment space is
+and the hierarchical increment space is
 $$
 W_\mathbf{l} := \mathrm{span}\{\phi_{\mathbf{l},\mathbf{i}}: \mathbf{i}\in I_\mathbf{l}\},
 $$
-
-where
 $$
 I_\mathbf{l}
 =
@@ -183,11 +253,12 @@ Again,
 $$
 V_\mathbf{l} = \bigoplus_{\mathbf{k}\le \mathbf{l}} W_\mathbf{k},
 $$
-with componentwise ordering.
+where the inequality sing $\le$ is interpreted componentwise.
 
-Each grid is equidistant with respect to each individual coordinate direction, but, in general, has varying mesh sizes in the different directions. 
+Again the support of any two hierarchical basis functions $\phi_{\mathbf{l}, \mathbf{k}}$
+spanning the same space $W_l$ are disjoint.
 
-Hence any sufficiently regular function admits a multilevel expansion
+Also, each function $u\in V_\mathbf{l}$ admits a unique representation
 $$
 u(\mathbf{x})
 =
@@ -200,96 +271,98 @@ v_{
     \mathbf{i}
 }(\mathbf{x})
 $$
-
 with hierarchical coefficients $v_{\mathbf{l},\mathbf{i}}\in\mathbb{R}$.
 
 
 \subsection{From full grids to sparse grids}
 
-\subsection{Full-grid space}
-
-
-
-
-
-
-
 If one fixes a maximal one-dimensional level $n$ in each coordinate, one obtains the classical full tensor-product space
 $$
-V_n^{\left(\infty\right)}
+V_n := V_{(n,\dots, n)}
 =
-\bigoplus_{|l|_\infty\le n} W_l.
+\bigoplus_{|\mathbf l|_\infty\le n} W_\mathbf{l}.
 $$
 Its dimension behaves like
 $$
-\dim V_n^{\left(\infty\right)} = O(2^{nd}).
+\dim V_n = O(2^{nd}).
 $$
 This is the usual curse of dimensionality.
 
+To improve this, we formulate the following cost benefit analysis in the
+function approximation:
+we seek a finite a collection of subspaces $W_\mathbf{l}$ that
+maximize the approximation benefit of adding that space, against a cost
+comming from the introduced degrees of freedom.
 
-\subsection{Classical sparse-grid space}
+%Under the conditoin of mixed regularity, that the approximation lives in the following space
+%$$
+%H_2^{mix}(\overline\Omega) = \{u : \overline{\Omega} \rightarrow \mathbb{R} :
+%D^\alpha u \in L_2(\Omega), |\alpha|_\infty \le 2,\:\:
+%u|_{\partial\Omega} = 0
+%\}
+%$$
+%$$
+%D^\alpha u := \frac{ \partial^{|\mathbf{\alpha}|_1} u }{ \partial x_1^{\alpha_1} \cdots \partial x_d^{\alpha_d} }
+%$$
+%
+%$$
+%|\alpha|_1 = \sum^d_{j=1} \alpha_j, \quad |\alpha|_\infty = \max_{1\le i\le d} \alpha_j
+%$$
 
-To improve this, we formulate the following optimization problem: we seek a finite a collection of subspaces $W_l$ that maximizes the approximation benefit for a corresponding prescribed cost.
+%The local cost of including a subspace $W_l$ is its dimension (the number of degrees of freedom):
+%\begin{equation}
+%c(l) := |W_l| = 2^{|l|_1-d}
+%\end{equation}
+%
+%The local benefit is bounded by the squared norm of the contribution $u_l$.
+%
+%For this purpose, let us define the space of functions with bounded mixed derivatives:
+%We then consider the space of functions with bounded mixed derivatives:
+%
+%$$
+%X^{q,r}(\overline{\Omega}) := \{u : \overline{\Omega} \rightarrow \mathbb{R} : D^\alpha u \in L_q(\Omega), |\alpha|_\infty \le r \}
+%$$
+%$$
+%X_0^{q,r}(\overline{\Omega}) := \{u \in X^{q,r}(\overline{\Omega}): u|_{\partial\Omega} = 0\}
+%$$
+%Under the bounded mixed derivatives assumption ($|u|_{2,\infty} < \infty$), the bounds decay rapidly.
+%Specifically, $||u_l||_\infty \le 2^{-d} 2^{-2|l|_1} |u|_{2,\infty}$.
+%Defining the cost-benefit ratio $cbr(l) = b(l)/c(l)$,
+%an optimal grid contains all subspaces $W_l$ where the cost-benefit ratio is above a certain threshold.
+%\begin{equation}
+%|l|_1 \le n + d - 1
+%\end{equation}
+%This explicitly defines the standard sparse grid space $V_n^{(1)}$:
+%\begin{equation}
+%V_n^{(1)} := \bigoplus_{|l|_1 \le n + d - 1} W_l
+%\end{equation}
+%which is Linf and L2-optimal with respect to our cost-benefit setting
 
-The local cost of including a subspace $W_l$ is its dimension (the number of degrees of freedom):
-\begin{equation}
-c(l) := |W_l| = 2^{|l|_1-d}
-\end{equation}
-
-The local benefit is bounded by the squared norm of the contribution $u_l$.
-
-For this purpose, let us define the space of functions with bounded mixed derivatives:
-
+Under the conditoin of mixed regularity of the approximation, the sparse-grid construction keeps only the subspaces satisfying
 $$
-D^\alpha u := \frac{ \partial^{|\mathbf{\alpha}|_1} u }{ \partial x_1^{\alpha_1} \cdots \partial x_d^{\alpha_d} }
+|\mathbf{l}|_1 \le n+d-1.
 $$
 
-We then consider the space of functions with bounded mixed derivatives:
-
-$$
-X^{q,r}(\overline{\Omega}) := \{u : \overline{\Omega} \rightarrow \mathbb{R} : D^\alpha u \in L_q(\Omega), |\alpha|_\infty \le r \}
-$$
-$$
-X_0^{q,r}(\overline{\Omega}) := \{u \in X^{q,r}(\overline{\Omega}): u|_{\partial\Omega} = 0\}
-$$
-
-
-Under the bounded mixed derivatives assumption ($|u|_{2,\infty} < \infty$), the bounds decay rapidly. Specifically, $||u_l||_\infty \le 2^{-d} 2^{-2|l|_1} |u|_{2,\infty}$.
-
-Defining the cost-benefit ratio $cbr(l) = b(l)/c(l)$, an optimal grid contains all subspaces $W_l$ where the cost-benefit ratio is above a certain threshold. For both the $L_2$ and $L_\infty$ norms, this logic results in selecting subspaces that satisfy the condition:
-\begin{equation}
-|l|_1 \le n + d - 1
-\end{equation}
-This explicitly defines the standard sparse grid space $V_n^{(1)}$:
-\begin{equation}
-V_n^{(1)} := \bigoplus_{|l|_1 \le n + d - 1} W_l
-\end{equation}
-which is Linf and L2-optimal with respect to our cost-benefit setting
-
-
-Hence, The classical sparse-grid space keeps only the subspaces satisfying
-$$
-|l|_1 \le n+d-1.
-$$
-Thus one defines
+This lead to the definition of \emph{sparse grid} spaces $\widehat V_n$ of level,
 $$
 \widehat V_n
 :=
-\bigoplus_{|l|_1\le n+d-1} W_l.
+\bigoplus_{|\mathbf l|_1\le n+d-1} W_\mathbf{l}.
 $$
-This is the canonical Smolyak-type sparse space for piecewise multilinear approximation.
 
-Its dimension satisfies
+The number of degrees of freedom (the number of grid points) is then only
 $$
 \dim \widehat V_n
 =
 \sum_{i=0}^{n-1} 2^i \binom{d-1+i}{d-1}
-=
-O(2^n n^{d-1}).
+= O(h_n^{-1}|\log_2(h_n)|^{d-1})
+= O(2^n n^{d-1}).
 $$
+where $h_n$ is the size the smallest mesh.
+Note, that for $N=2^n$ this gives the mentioned $O(N(\log{N})^{d-1})$ dependece.
 
-
-For $u\in X^{q,2}_0(\Omega)$, the interpolation error of the sparse-grid interpolant $\widehat u_n\in\widehat V_n$ satisfies
+On the other hand, for functions satisfying the regularity conditions,
+the interpolation error of the sparse-grid approximation $\widehat u_n\in\widehat V_n$ satisfies
 $$
 \|u-\widehat u_n\|_{L^2(\Omega)}
 =
@@ -299,124 +372,300 @@ O(h_n^2\:n^{d-1}),
 =
 O(h_n^2\:n^{d-1}).
 $$
-Thus, compared with the full-grid error $O(h_n^2)$, one loses only a logarithmic factor.
+Thus, compared with the full-grid error $O(h_n^2)$, the error is scaled approximately polynomially with dimension.
+\cite{sg_123}
 
-
-Here is the table summarizing the main results:
+Here we offer a table summarizing the main differences between full grid and sparse grid construction:
 
 \renewcommand{\arraystretch}{1.5}
 \begin{center}
 \begin{tabular}{c c c}
     \hline
-    \textbf{grid space} & \textbf{dimension} & \textbf{$L^2$ and $L^\infty$ error} \\
+    \textbf{grid space} & \textbf{degrees of freedom} & \textbf{$L^2$ and $L^\infty$ error} \\
     \hline
-    $V_n^{\left(\infty\right)}=\bigoplus_{|l|_\infty\le n} W_l$ & $\dim(V_n^{\left(\infty\right)})=O(2^{nd})$ & $\|u-u_n\|_{L^p(\Omega)}=O(h_n^2)$ \\
-    $\widehat V_n=\bigoplus_{|l|_1\le n+d-1} W_l$ & $\dim(\widehat V_n)=O(2^n n^{d-1})$ & $\|u-\widehat u_n\|_{L^p(\Omega)}=O(h_n^2\:n^{d-1})$ \\
+    $V_n=\bigoplus_{|\mathbf l|_\infty\le n} W_\mathbf{l}$ & $\dim(V_n)=O(2^{nd})$ & $\|u-u_n\|_{L^p(\Omega)}=O(h_n^2)$ \\
+    $\widehat V_n=\bigoplus_{|\mathbf l|_1\le n+d-1} W_\mathbf{l}$ & $\dim(\widehat V_n)=O(2^n n^{d-1})$ & $\|u-\widehat u_n\|_{L^p(\Omega)}=O(h_n^2\:n^{d-1})$ \\
 \end{tabular}
 \end{center}
 \vspace{1em}
 
 
-\subsection{Energy norm}
-error
-
 
 \subsection{Combination technique}
-parallelize
+
+For the numerical solutions of partial differential equaitons,
+the so called \emph{combination technique} is commonly employed.
+
+In this method, the approximaiton $\widehat u_n$ is given as
+weighted combination of solutions on the anisotropic
+grids $\Omega_\mathbf{l}$
+based on the combination formula
+
+$$
+\widehat u_n(\mathbf x)
+=
+\sum_{n\le |\mathbf l|_1\le n+d-1}
+(-1)^{n+d-1-|\mathbf l|_1}
+\binom{d-1}{|\mathbf l|_1-n}
+u_\mathbf{l}(\mathbf x)
+$$
+
+where $u_\mathbf{l}$ is a solution on the anisotropic grid
+$\Omega_\mathbf{l}$ of mesh size $2^{-\mathbf l}$.
+
+%Note, that since we require $l_j>1$ for $j=1,\dots,d$,
+%then in the case $n<d$ the lower bound on $|\mathbf l|_1$ changes to $d$.
+
+Notice, that in comparison to the construction of $\widehat V_n$,
+the levels $\mathbf l$ in the combiatioin formula above are bounded below by $n$.
+
+%So, for the case $d=2$, we get the combination formula
+%$$
+%\sum_{|\mathbf l|_1=n+1}
+%u_\mathbf{l}(\mathbf x)
+%-
+%\sum_{|\mathbf l|_1=n}
+%u_\mathbf{l}(\mathbf x)
+%$$
+%
+%In $d=3$, we get
+%$$
+%\sum_{|\mathbf l|_1=n+2}
+%u_\mathbf{l}(\mathbf x)
+%- 2
+%\sum_{|\mathbf l|_1=n+1}
+%u_\mathbf{l}(\mathbf x)
+%+
+%\sum_{|\mathbf l|_1=n}
+%u_\mathbf{l}(\mathbf x)
+%$$
 
 
+For example, the case $d=2,\:n=3$ gives
+$$
+|\mathbf l|_1 \in \{3,4\}
+$$
+hence we get the anisotropic grds
+$$
+\Omega_{(2,1)},\:\,
+\Omega_{(1,2)},\:\,
+\Omega_{(3,1)},\:\,
+\Omega_{(1,3)},\:\,
+\Omega_{(2,2)}
+$$
+Note that in the context of the combination technique,
+such grids are commolly refered to as \emph{component grids}.
+[show plot as in pg 4 of the 5 pg sparse grids pdf]
+
+In general, for a sparse grid combiantion technique of level $n$ in dimensions $d$,
+the number of component grids is:
+$$
+\binom{n+d-1}{d+1}
+$$
+which, for fixed $d$, rises polynomially with $n$.
+%TD: [show plot : n vs number of componetns grids - for fixed d=2,4,6]
 
 
-\subsection{The sg}
+% pg 28 of discoAdapt.pdf - time dep pdes - combining grids at intervals
+% pf 41 - CFL condition on time step size - each can at diff rate
 
-o n (log n)d-1
+%However, in the combination technique, we separete the problem into several subproblems which can be solve independently
+%on anisotropic but cheap full grids called \emph{component grids}.
+%Such approach offers several benefits.
 
-1 d multilevel basis
+However, as the solution is combinattion
+over independent grids, we can reuse the exisitng full grid solvers
+and solve each grid separatly. As result, each
+solver can be run in parallel and the results combined at the end of the computation.
+This makes the combinatin techniqe computationaly very appealing as it can
+levarage parallel nature of existing hardware.
+\cite{discoadapt}
 
-grid $\Omega_l$ of level l - $2^l$ points
+The algorithmic realization of the combiantion technique is given below:
 
-basis function on each grid point with 0 support
+%\subsection{The sg}
+%
+%energy norm
+%
+%o n (log n)d-1
+%
+%1 d multilevel basis
+%
+%grid $\Omega_l$ of level l - $2^l$ points
+%
+%basis function on each grid point with 0 support
+%
+%space $V_l$
+%
+%increment spaces $W_l$
+%
+%$V_l = sum k<l W_k$
+%
+%hierarchical basis
+%
+%$u(x) = sum sum v_ik \phi_ik (x) $
+%
+%
+%in high dim:
+%
+%interval -> rectangles
+%
+%$phi = \prod_{i=1}^d phis$
+%
+%---
+%classical sg
+%
+%multiindex of derivatives
+%sobol space $u \in L2$, 0 on bc
+%
+%only combine some rect grids - $\hat{V}_n$
+%-> number of dog -> $n (log n)^d-1$
+%
+%accuracy only slightly(?) worse
+%
+%--- 
+%sg optimized for 
+%- energy norm problems
+%- sobolev norms
+%
+%higher order polynomials
+%non-smooth problem? - local adaptive refinement
+%
+%use FEM to discretize, sg to solve
+%
+%for pdes:
+%combination technique
+%- optimized for the particular differential operator
+%
+%
+%----------
+%
+%enegy based norm - no curse
+%
+%
+%
+%\section{Most important}
+%
+%crutial in high dim:
+%
+%- parallelization
+%
+%
 
-space $V_l$
+\begin{algorithm}[H]
+\caption{Combination technique}
+\begin{algorithmic}[1]
+    \Require rectangular domain $\Omega$, time interval $[0,T]$, sparse-grid level $n$, time step $\Delta t$, parameter $\theta \in [0,1]$
+    \State Construct the multi-index set
+    $$
+    \mathcal I_{n,d}
+    =
+    \left\{
+    \mathbf l \in \mathbb N^d : n \le |\mathbf l|_1 \le n+d-1
+    \right\}
+    $$
+    \ForAll{$\mathbf l \in \mathcal I_{n,d}$} \textbf{(in parallel)}
+        \State Construct the full anisotropic component grid $\Omega_\mathbf l$
+        %\State Project the initial condition onto $\Omega_\mathbf l$
+        \State Assemble the discrete spatial differential operator $L_\mathbf l$
+        \State Fill $u_\mathbf l^0$ based on the initial condition
+        \State Set $N=T / \Delta t$
+        \For{$j = 0, \dots, N-1$}
+            \State Advance one time step by
+            $$
+            \left(I-\theta \,\Delta t\, L_\mathbf l\right) u_\mathbf l^{j+1}
+            =
+            \left(I+(1-\theta)\,\Delta t\, L_\mathbf l\right) u_\mathbf l^j
+            $$
+            \State where $\theta=0$ gives Euler, $\theta=1$ backward Euler, and $\theta=0.5$ Crank Nicolson scheme.
+        \EndFor
+        \State Store the terminal solution $u_\mathbf l(T):=u_\mathbf l^N$
+    \EndFor
+    \State Interpolate all component solutions to a common grid
+    \State Combine the terminal solutions according to the combination formula
+    $$
+    \widehat u_n(T, \mathbf x)
+    =
+    \sum_{\mathbf l \in \mathcal I_{n,d}}
+    (-1)^{n+d-1-|\mathbf l|_1}
+    \binom{d-1}{|\mathbf l|_1-n}
+    u_\mathbf{l}(T, \mathbf x)
+    $$
+    \State \Return $\widehat u_n(T,\mathbf x)$
+\end{algorithmic}
+\end{algorithm}
 
-increment spaces $W_l$
+Here, each component grid $\Omega_{\mathbf l}$ is treated as an
+independent full-grid problem,
+and the same spatial discretization and time stepping
+scheme is applied on every component grid.
 
-$V_l = sum k<l W_k$
+Moreover, the discrete operators have the same tensor-product
+structure as in standard finite-difference discretizations. In one spatial
+dimension, the second derivative is represented by a tridiagonal matrix
+with the laplace stencil $(1,-2,1)$, while the first derivative is approximated by the
+central-difference $(-1,0,1)$. In higher dimensions, these one-dimensional operators
+are combined using Kronecker products and thus mapped onto the full tensor grid.
 
-hierarchical basis
-
-$u(x) = sum sum v_ik \phi_ik (x) $
-
-
-in high dim:
-
-interval -> rectangles
-
-$phi = \prod_{i=1}^d phis$
-
----
-classical sg
-
-multiindex of derivatives
-sobol space $u \in L2$, 0 on bc
-
-only combine some rect grids - $\hat{V}_n$
--> number of dog -> $n (log n)^d-1$
-
-accuracy only slightly(?) worse
-
---- 
-sg optimized for 
-- energy norm problems
-- sobolev norms
-
-higher order polynomials
-non-smooth problem? - local adaptive refinement
-
-use FEM to discretize, sg to solve
-
-for pdes:
-combination technique
-- optimized for the particular differential operator
+Lastly, since the final solutions $u_\mathbf{T,\mathbf x}$ are defined on different
+anisotropic grids, they cannot be trivially summed together. Instead, they are first
+evaluated on a common target grid and only then combined via the summation formula.
 
 
-----------
+%For example, for
+%$$
+%\partial_t u
+%=
+%a \Delta u + b(\mathbf x)\cdot \nabla u + c(\mathbf x)u,
+%$$
+%the discrete operator on $\Omega_{\mathbf l}$ takes the form
+%$$
+%L_{\mathbf l}
+%=
+%a \sum_{j=1}^d
+%\left(
+%I \otimes \cdots \otimes D^{(2)}_j \otimes \cdots \otimes I
+%\right)
+%+
+%\sum_{j=1}^d \operatorname{diag}(b_j)\, D^{(1)}_j
+%+
+%\operatorname{diag}(c),
+%$$
+%where $D^{(1)}_j$ and $D^{(2)}_j$ denote the lifted first- and second-derivative
+%matrices in direction $j$. Thus, in the isotropic diffusion case one recovers
+%the familiar five-point type structure in two dimensions, whereas non-diagonal
+%diffusion matrices introduce additional mixed-derivative couplings through terms
+%of the form $D^{(1)}_i D^{(1)}_j$.
 
-enegy based norm - no curse
+%Note that hte discreatization scheme, iratetive method for hte linear system Ax=b, preditioner, times step
+%- are all problem dependet.
 
+\section{Implementaton}
+We implent the sparse grids combiantion technique using the established SG++ sparse grids toolskit.
+using its python binding.
+Some existing combination techniqe specific
+software exists\cite{discoadapt} but it setup and adaptation to general PDE is too complex for our case.
 
+We add each grid to a pool, have multiple workers?
+SG++ handles component level constructop, hierarchization
+the numerical solvers using python's scipy.
+The matrices / linear operator and the pipeline is custom in python.
+%Either sparse matrices or linear operator.
 
-\section{Most important}
+To compute the erros we choose a specific time slices, usualy a relatively few,
+proceed the simulation till there, combine the grids, compute the error metrics,
+and proceed.
 
-crutial in high dim:
-
-- parallelization
 
 
 \section{The curse of dimensionality}
 
+Avoid by:
 we suppose that the solution is not heavily depended on mixed derivatives
 
+Issues:
+number of grid points / component grids still rises
 
-\section{my genious ideas TD}
-
-
-\section{Math recap}
-
-$$
-|\mathbf{\alpha}|_\infty = \max_{j=1,\dots,d} \alpha_j \quad \text{and} \quad
-|\mathbf{\alpha}|_1 = \sum_{j=1,\dots,d} \alpha_j
-$$
-
-
-
-
-\cite{sg_123}
-
-
-
-
-
-
+need more levels in larged d to achive set accuracy
 
 

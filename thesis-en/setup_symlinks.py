@@ -1,86 +1,66 @@
-
-import subprocess
 from pathlib import Path
 
-names = ["PINN", "fdm"]
-fig_dir = 'figures'
+
+names = ["PINN", "SG", "HeatEq", "Smoluchowski"]
+fig_dir = "figures"
 LINK_CHAPTERS = True
-LINK_FIGURES =  True
-SETUP_BIB =     True # concentrate all bib files into one
+LINK_FIGURES = True
 
-chapter_separator = '%  ==========================================================================='
 
-if SETUP_BIB:
-    print("===== 1. Concentrate all bibs into one")
-    info = [
-        chapter_separator,
-        '%',
-        '%  An example of a bibliographical database in BibTeX format,',
-        '%  which is used by biblatex to create the list of referenced works.',
-        '%',
-        '%  Academic search engines and software for maintenance of bibliography',
-        '%  often supports exporting records in BibTeX format. We recommend:',
-        '%',
-        '%    - Google Scholar (https://scholar.google.com/)',
-        '%    - JabRef (https://www.jabref.org/)',
-        '%    - zoterobib (https://zbib.org/)',
-        '%',
-        '%  BEWARE:',
-        '%',
-        '%    *  If a name contains a capital letter, which must be kept such,',
-        '%       use curly brackets ({T}hailand, {HIV}).',
-        '%',
-        chapter_separator
-    ]
-    all_lines = [f'{l}\n' for l in info]
-    filename = "bibliography.bib"
-    for name in names:
-        filename_rel = f'../{name}/thesis-en/{filename}'
-        with open(filename_rel, "r") as f:
-            lines = f.readlines()
-            all_lines.append(f"\n\n{chapter_separator}")
-            all_lines.append(f"\n% --- {name}\n")
-            all_lines.extend(lines)
-            all_lines.append("\n")
-    #text = '\n'.join(all_lines)
-    with open(filename, "w") as f:
-        f.writelines(all_lines)
+def ensure_directory_exists(directory: Path) -> None:
+    if not directory.exists():
+        raise FileNotFoundError(f"Directory does not exist: {directory}")
+    if not directory.is_dir():
+        raise NotADirectoryError(f"Path is not a directory: {directory}")
+
+
+def remove_existing_symlink(path: Path) -> None:
+    if not path.exists() and not path.is_symlink():
+        return
+    if not path.is_symlink():
+        raise RuntimeError(f"Refusing to remove non-symlink path: {path}")
+    print(f"Removing symlink: {path}")
+    path.unlink()
+
+
+def create_symlink(source: Path, destination: Path) -> None:
+    if not source.exists():
+        raise FileNotFoundError(f"Symlink source does not exist: {source}")
+    if destination.exists() or destination.is_symlink():
+        raise FileExistsError(f"Destination already exists: {destination}")
+    print(f"Creating symlink: {destination} -> {source}")
+    destination.symlink_to(source)
 
 
 if LINK_CHAPTERS:
     print("===== 2. Link chapters (PINN/thesis-en/chapter.tex to chapter_pinn.tex, etc.)")
     for name in names:
-        name_lower = name.lower()
-        chapter_tex = f'chapter_{name_lower}.tex'
-        print(f"Creating symlink: {chapter_tex}")
-        command = ['rm', chapter_tex]
-        result = subprocess.run(command, capture_output=True, text=True)
-        command = ['ln', '-s', f'../{name}/thesis-en/chapter.tex', chapter_tex]
-        result = subprocess.run(command, capture_output=True, text=True)
-        #print("STDOUT:", result.stdout)
-        #print("STDERR:", result.stderr)
-        #print("Return code:", result.returncode)
+        chapter_tex = Path(f"chapter_{name.lower()}.tex")
+        chapter_source = Path(f"../{name}/thesis-en/chapter.tex")
+        remove_existing_symlink(chapter_tex)
+        create_symlink(chapter_source, chapter_tex)
 
 
 if LINK_FIGURES:
     print("===== 3. Link figures")
 
     print("-- 3a: Remove all symlinks")
-    directory = Path(fig_dir)
-    for entry in directory.iterdir():
-        is_link = entry.is_symlink()
-        file = entry.name
-        #print(file, "-> symlink" if is_link else "-> regular")
-        if is_link:
-            print(f'Removing symlink: {file}')
-            command = ['rm', f'{fig_dir}/{file}']
-            result = subprocess.run(command, capture_output=True, text=True)
+    figures_directory = Path(fig_dir)
+    ensure_directory_exists(figures_directory)
+    for entry in figures_directory.iterdir():
+        if entry.is_symlink():
+            remove_existing_symlink(entry)
 
     print("-- 3b: Populate figures/ with PINN/thesis-en/figures/*, etc.")
+    seen_destinations = set()
     for name in names:
-        directory = Path(f'../{name}/thesis-en/{fig_dir}')
-        for entry in directory.iterdir():
-            file = entry.name
-            print(f'Creating a symlink: {file}')
-            command = ['ln', '-s', str(entry), f'{fig_dir}/{file}']
-            result = subprocess.run(command, capture_output=True, text=True)
+        source_directory = Path(f"../{name}/thesis-en/{fig_dir}")
+        ensure_directory_exists(source_directory)
+        for entry in source_directory.iterdir():
+            destination = figures_directory / entry.name
+            if destination.name in seen_destinations:
+                raise RuntimeError(
+                    f"Duplicate figure filename detected: {destination.name}"
+                )
+            seen_destinations.add(destination.name)
+            create_symlink(entry, destination)
