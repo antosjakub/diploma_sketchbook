@@ -1,63 +1,57 @@
 
+\chapter{Sparse grids combination technique}
 
-\chapter{Sparse grids}
 
-{\color{red}
 
-- DOG - number of parallel grids, number of points
+% TD:
+% add info about mixed regularity assumption
 
-- regular / boumded mixed ders.
 
-- crank nic etc
-}
+Introduced in 1963 by Russian mathematician Smolyak\cite{smolyak}, the sparse grid method
+is a discretization technique for handling problems of high dimensionality.
+It was first introduced for the integration of multidimensional functions,
+but it has since found a bodar random of applications, including in
+numeral method for solving partial differential equations.
 
-Introduced in 1963 by russian mathematican Smolyak\cite{smolyak}, the sparse grid method
-is a discretizaiton technique for handling problems of high dimensionality.
-First introduces for integrating multidimensional functions,
-%applicability is suited for integraion, interpolation of high dimensional funciton,
-its applicability has been extended to
-handle approximating the grids produced in discretizaition of PDE.
-
-In the discreatizaiton of PDEs, we standartly conssturct
+In the discretization of PDEs, we usually construct
 simple uniform grids which contain on the order $O(N^d)$ degrees of freedom,
-where $d$ si the spatial dimensionality of the problem and $N$
+where $d$ is the spatial dimension of the problem and $N$
 denotes the number of grid points in a single spatial dimension.
-THe discreatizaiton performed in sparse grids, on the other hand,
+The discretization performed in sparse grids, on the other hand,
 leads to only $O(N(\log{N})^{d-1})$ degrees of freedom.\cite{sg_123}
 
 In addition, provided that the problem is smooth enough, 
-the accuracy obrained this way is comparable to the full grid approach.
+the accuracy obtained in this way is comparable to the full-grid approach.
 
-This makes the sparse grids construction particullary attractive for
-moderate to high dimensional problsm.
+This makes the sparse-grid construction particularly attractive for
+moderate to high dimensional problems.
 %Still due to the logarihgm term, the curse of dimensiinality is still present.
 %Buts if effect is weakened.
 %Herem, the grids requited involves only $O(n(\log(n)^{d-1}))$
 %the curse of dim can be overcame to some extend by some extend by the sparse grid construction.
 %THe discreatizaiton performed in sparse grids involves only $O(n(\log(n)^{d-1}))$
 %Compared to the $O(n^d)$ requited for full grid approach. 
-In the context of PDEs, a so called \emph{combinati technique} has been developed,
-which constucts a collection of sparse grids, and the linear algebrain system
-combing from the discreatizaiton of hte pde system can be solved
-on each grid in separetly. This decompositoon can be stronly expoteoid
-for modern parallel compurational archictures. \cite{combitech}
+In the context of PDEs, the so-called \emph{combination technique} has been developed.\cite{combitech}
+The combination technique approximates the full grid by a collection of anisotropic grids,
+on which the linear algebraic system
+arising from the discretization of the PDE can be solved independently.
+This decomposition can be strongly exploited on modern parallel computational
+architectures. \cite{combitech}
 It is this branch of the sparse grids method that we consider in this thesis.
 
-THe following sections first give a brief introduction to sparse grids method and
-to the combiantion technique.
-Few noes on the implention are given in the last section of this chapter.
-Due to the lack of standard libraris
-discoAdapt and spareSPACE - overkill, mainly focued on Behavior, now extreme perfermoance.
-, and for hte education 
-purposes of this thesis the combination techniqe has been implement
-from scratch.
+The following sections first give a brief introduction to the sparse-grid method and
+to the combination technique.
+The final sections describe the implementation of the method.
+%are given in the last section of this chapter.
+%For the educational purposes of this thesis, the combination technique has been
+%implemented from scratch.
 
 
 
 \subsection{1-dimensional hierarchical basis}
 
-In the classical sparse grid approach,
-the basis is based on hte standard linear hat functions
+In the classical sparse-grid approach,
+the basis is built from the standard linear hat functions
 
 $$
 \phi(x)=
@@ -67,19 +61,19 @@ $$
 \end{cases}
 $$
 
-Then, consider a set of equidistant grids $\Omega_l$ of level $l\in\mathbb{N}$ on the one dimensional unit interval $\bar{\Omega}=\left[0,1\right]$
+Consider a set of equidistant grids $\Omega_l$ of level $l\in\mathbb{N}$ on the one-dimensional unit interval $\bar{\Omega}=\left[0,1\right]$
 
 $$
 \Omega_l := \{x_{l,i}=i\cdot h_l : 0\le i\le 2^l\}
 $$
 
-Where, for each level $l$, we define the mesh width $h_l$ as
+For each level $l$, we define the mesh width $h_l$ as
 $$
 h_l := 2^{-l}
 $$
 
-The standard hat funciton $\phi$ is then taken to generate a set of basis functions $\phi_{l,i}$
-with support of size $2h_l$, the interval $\left[ x_{l,i}-h_l, x_{l,i}+h_l \right]$.
+The standard hat function $\phi$ is then used to generate a set of basis functions $\phi_{l,i}$
+with support $\left[ x_{l,i}-h_l, x_{l,i}+h_l \right]$
 
 
 $$
@@ -89,18 +83,18 @@ $$
 \qquad 1\le i\le 2^l-1.
 $$
 
-These basic functions and then used to define the finite element space $V_l$ as
+These basis functions are then used to define the finite element space $V_l$ as
 $$
 V_l := \mathrm{span}\{\phi_{l,i} : 1\le i\le 2^l-1\}
 $$
 
-Next, we decompose such space into intertwining increments by constructing so called
+Next, we decompose this space into hierarchical increments by constructing the so-called
 \textit{hierarchical increment spaces} $W_l$, as
 \begin{gather*}
 W_l := \mathrm{span}\{\phi_{l,i}: i\in I_l\}\,,\\
 I_l := \{\, i\in\mathbb{N} : 1\le i\le 2^l-1,\ i\ \text{odd}\,\}
 \end{gather*}
-where (hierarchical index sets)
+where $I_l$ are the hierarchical index sets.
 
 A visual representation of the definitions given so far is provided in the figure below:
 
@@ -168,7 +162,7 @@ A visual representation of the definitions given so far is provided in the figur
     \def\y{0.0}
     \node[left] at (-0.5, \y+0.5) {$l=3$};
     %\node[right] at (8.5, \y+0.5) {$V_3=\{\phi_{3,1},\,\phi_{3,2},\,\phi_{3,3},\,\phi_{3,4},\,\phi_{3,5},\,\phi_{3,6}$\}};
-    \node[right] at (8.5, \y+0.5) {$V_3=\{\phi_{3,i}\,,\: 1\le i \le 8$\}};
+    \node[right] at (8.5, \y+0.5) {$V_3=\{\phi_{3,i}\,,\: 1\le i \le 7\}$};
     \draw (0,\y) -- (8,\y);
 
     \foreach \i in {1,2,3,4,5,6,7} {
@@ -186,33 +180,33 @@ A visual representation of the definitions given so far is provided in the figur
 \vspace{1em}
 
 
-The deconstruction of $V_l$ is then carried out using direct-sum formula
+The decomposition of $V_l$ is then given by the direct-sum formula
 $$
 V_l = \bigoplus_{k=1}^l W_k
 $$
 
 
-Every function $u\in V_l$ can then be representaed uniquely as
+Every function $u\in V_l$ can then be represented uniquely as
 $$
 u(x)=\sum_{k=1}^l \sum_{i\in I_k} v_{k,i}\,\phi_{k,i}(x),
 $$
 where $v_{k,i}\in \mathbb R$ are called \textit{hierarchical surpluses}.
-An important feature of this decomposition is that all basic functions $\phi_{k,i}$
+An important feature of this decomposition is that all basis functions $\phi_{k,i}$
 spanning the same space $W_k$ have mutually disjoint support (see again the figure above).
 
 
 \subsection{Tensor product construction in higher dimensions}
 
 
-Next, we move to a d-dimensional unit cube $\bar{\Omega}=\left[0,1\right]^d$.
-We discritize this space by a collection of grids, where
+Next, we move to a $d$-dimensional unit cube $\bar{\Omega}=\left[0,1\right]^d$.
+We discretize this space by a collection of grids, where
 each grid is equidistant with respect to each individual coordinate direction,
 but, in general, has varying mesh sizes in those different directions. 
-Here, the construction is analogous to the 1-dimensinal case presented above.
+The construction is analogous to the one-dimensional case presented above.
 %where the the hierarchical basis in obtained as a tensor product of the indivisual 1-dimensional bases.
 
 Let $\mathbf{l}=(l_1,\dots,l_d)\in\mathbb{N}^d$ be a multi-index of levels.
-We then define he mesh spacing at the individual levels $h_\mathbf{l}\in\mathbb{R}^d$
+We then define the mesh spacing at the individual levels $h_\mathbf{l}\in\mathbb{R}^d$
 and a grid point $x_{\mathbf{l},\mathbf{i}}\in\mathbb{R}^d$
 $$
 h_\mathbf{l} :=  2^{-\mathbf{l}} = (2^{-l_1},\dots,2^{-l_d}),
@@ -223,7 +217,7 @@ x_{\mathbf{l},\mathbf{i}}
 := (i_1\,2^{-l_1},\dots,i_d\,2^{-l_d})\,,\quad
 \mathbf{i}=(i_1,\dots,i_d)\in\mathbb{N}^d
 $$
-The collection of such points on level $\mathbf l$ then form a grid $\Omega_\mathbf{l}$.
+The collection of such points on level $\mathbf l$ then forms a grid $\Omega_\mathbf{l}$.
 
 The tensor-product basis functions are then defined as a product of one-dimensional hat functions
 $$
@@ -248,29 +242,30 @@ I_\mathbf{l}
 i\in\mathbb{N}^d:\ 1\le \mathbf{i} \le 2^\mathbf{l}-1,\ \text{and each } i_j \text{ is odd}
 \right\}.
 $$
+
 Again,
 $$
 V_\mathbf{l} = \bigoplus_{\mathbf{k}\le \mathbf{l}} W_\mathbf{k},
 $$
-where the inequality sing $\le$ is interpreted componentwise.
+where the inequality sign $\le$ is interpreted componentwise.
 
-Again the support of any two hierarchical basis functions $\phi_{\mathbf{l}, \mathbf{k}}$
-spanning the same space $W_l$ are disjoint.
+Next, the support of any two hierarchical basis functions $\phi_{\mathbf{l}, \mathbf{k}}$
+spanning the same space $W_\mathbf{l}$ is disjoint.
 
-Also, each function $u\in V_\mathbf{l}$ admits a unique representation
+And also, each function $u\in V_\mathbf{l}$ admits a unique representation
 $$
 u(\mathbf{x})
 =
-\sum_{\mathbf{l}\in\mathbb{N}^d} \sum_{\mathbf{i}\in I_\mathbf{l}}
+\sum_{\mathbf{k}\le \mathbf{l}} \sum_{\mathbf{i}\in I_\mathbf{k}}
 v_{
-    \mathbf{l},
+    \mathbf{k},
     \mathbf{i}
 }\,\phi_{
-    \mathbf{l},
+    \mathbf{k},
     \mathbf{i}
 }(\mathbf{x})
 $$
-with hierarchical coefficients $v_{\mathbf{l},\mathbf{i}}\in\mathbb{R}$.
+with hierarchical coefficients $v_{\mathbf{k},\mathbf{i}}\in\mathbb{R}$.
 
 
 \subsection{From full grids to sparse grids}
@@ -287,11 +282,11 @@ $$
 $$
 This is the usual curse of dimensionality.
 
-To improve this, we formulate the following cost benefit analysis in the
+To improve this, we formulate the following cost-benefit argument in
 function approximation:
-we seek a finite a collection of subspaces $W_\mathbf{l}$ that
+we seek a finite collection of subspaces $W_\mathbf{l}$ that
 maximize the approximation benefit of adding that space, against a cost
-comming from the introduced degrees of freedom.
+coming from the introduced degrees of freedom.
 
 %Under the conditoin of mixed regularity, that the approximation lives in the following space
 %$$
@@ -337,12 +332,12 @@ comming from the introduced degrees of freedom.
 %\end{equation}
 %which is Linf and L2-optimal with respect to our cost-benefit setting
 
-Under the conditoin of mixed regularity of the approximation, the sparse-grid construction keeps only the subspaces satisfying
+Under the assumption of mixed regularity of the approximation, the sparse-grid construction keeps only the subspaces satisfying
 $$
 |\mathbf{l}|_1 \le n+d-1.
 $$
 
-This lead to the definition of \emph{sparse grid} spaces $\widehat V_n$ of level,
+This leads to the definition of the \emph{sparse-grid} space $\widehat V_n$ of level $n$,
 $$
 \widehat V_n
 :=
@@ -357,8 +352,8 @@ $$
 = O(h_n^{-1}|\log_2(h_n)|^{d-1})
 = O(2^n n^{d-1}).
 $$
-where $h_n$ is the size the smallest mesh.
-Note, that for $N=2^n$ this gives the mentioned $O(N(\log{N})^{d-1})$ dependece.
+where $h_n=2^{-n}$.
+Note that for $N=2^n$ this gives the stated $O(N(\log{N})^{d-1})$ dependence.
 
 On the other hand, for functions satisfying the regularity conditions,
 the interpolation error of the sparse-grid approximation $\widehat u_n\in\widehat V_n$ satisfies
@@ -374,7 +369,7 @@ $$
 Thus, compared with the full-grid error $O(h_n^2)$, the error is scaled approximately polynomially with dimension.
 \cite{sg_123}
 
-Here we offer a table summarizing the main differences between full grid and sparse grid construction:
+The following table summarizes the main differences between the full-grid and sparse-grid constructions:
 
 \renewcommand{\arraystretch}{1.5}
 \begin{center}
@@ -392,10 +387,10 @@ Here we offer a table summarizing the main differences between full grid and spa
 
 \subsection{Combination technique}
 
-For the numerical solutions of partial differential equaitons,
-the so called \emph{combination technique} is commonly employed.
+For the numerical solution of partial differential equations,
+the so-called \emph{combination technique} is commonly employed.
 
-In this method, the approximaiton $\widehat u_n$ is given as
+In this method, the approximation $\widehat u_n$ is given as a
 weighted combination of solutions on the anisotropic
 grids $\Omega_\mathbf{l}$
 based on the combination formula
@@ -415,8 +410,8 @@ $\Omega_\mathbf{l}$ of mesh size $2^{-\mathbf l}$.
 %Note, that since we require $l_j>1$ for $j=1,\dots,d$,
 %then in the case $n<d$ the lower bound on $|\mathbf l|_1$ changes to $d$.
 
-Notice, that in comparison to the construction of $\widehat V_n$,
-the levels $\mathbf l$ in the combiatioin formula above are bounded below by $n$.
+Notice that, in comparison to the construction of $\widehat V_n$,
+the levels $\mathbf l$ in the combination formula above are bounded below by $n$.
 
 %So, for the case $d=2$, we get the combination formula
 %$$
@@ -444,7 +439,7 @@ For example, the case $d=2,\:n=3$ gives
 $$
 |\mathbf l|_1 \in \{3,4\}
 $$
-hence we get the anisotropic grds
+hence we get the anisotropic grids
 $$
 \Omega_{(1,2)},\:\,
 \Omega_{(2,1)},\:\,
@@ -453,7 +448,7 @@ $$
 \Omega_{(3,1)}
 $$
 Note that in the context of the combination technique,
-such grids are commolly refered to as \emph{component grids}.
+such grids are commonly referred to as \emph{component grids}.
 
 
 %\documentclass{article}
@@ -554,12 +549,12 @@ such grids are commolly refered to as \emph{component grids}.
 
 
 
-In general, for a sparse grid combiantion technique of level $n$ in dimensions $d$,
+In general, for a sparse-grid combination technique of level $n$ in dimension $d$,
 the number of component grids is:
 $$
 \binom{n+d-1}{d+1}
 $$
-which, for fixed $d$, rises polynomially with $n$.
+which, for fixed $d$, grows polynomially with $n$.
 %TD: [show plot : n vs number of componetns grids - for fixed d=2,4,6]
 
 
@@ -570,15 +565,15 @@ which, for fixed $d$, rises polynomially with $n$.
 %on anisotropic but cheap full grids called \emph{component grids}.
 %Such approach offers several benefits.
 
-However, as the solution is combinattion
-over independent grids, we can reuse the exisitng full grid solvers
-and solve each grid separatly. As result, each
+However, since the solution is obtained as a combination
+over independent grids, we can reuse existing full-grid solvers
+and solve each grid separately. As a result, each
 solver can be run in parallel and the results combined at the end of the computation.
-This makes the combinatin techniqe computationaly very appealing as it can
-levarage parallel nature of existing hardware.
+This makes the combination technique computationally very appealing, as it can
+leverage the parallel nature of existing hardware.
 \cite{discoadapt}
 
-The algorithmic realization of the combiantion technique is given below:
+The algorithmic realization of the combination technique is given below:
 
 %\subsection{The sg}
 %
@@ -674,7 +669,7 @@ The algorithmic realization of the combiantion technique is given below:
             =
             \left(I+(1-\theta)\,\Delta t\, L_\mathbf l\right) u_\mathbf l^j
             $$
-            \State where $\theta=0$ gives Euler, $\theta=1$ backward Euler, and $\theta=0.5$ Crank Nicolson scheme.
+            \State where $\theta=0$ gives Euler, $\theta=1$ backward Euler, and $\theta=0.5$ gives the Crank--Nicolson scheme.
         \EndFor
         \State Store the terminal solution $u_\mathbf l(T):=u_\mathbf l^N$
     \EndFor
@@ -700,11 +695,11 @@ scheme is applied on every component grid.
 Moreover, the discrete operators have the same tensor-product
 structure as in standard finite-difference discretizations. In one spatial
 dimension, the second derivative is represented by a tridiagonal matrix
-with the laplace stencil $(1,-2,1)$, while the first derivative is approximated by the
-central-difference $(-1,0,1)$. In higher dimensions, these one-dimensional operators
+with the Laplace stencil $(1,-2,1)$, while the first derivative is approximated by the
+central-difference stencil $(-1,0,1)$. In higher dimensions, these one-dimensional operators
 are combined using Kronecker products and thus mapped onto the full tensor grid.
 
-Lastly, since the final solutions $u_\mathbf{T,\mathbf x}$ are defined on different
+Lastly, since the final solutions $u_\mathbf{l}(T,\mathbf x)$ are defined on different
 anisotropic grids, they cannot be trivially summed together. Instead, they are first
 evaluated on a common target grid and only then combined via the summation formula.
 
@@ -737,32 +732,30 @@ evaluated on a common target grid and only then combined via the summation formu
 %Note that hte discreatization scheme, iratetive method for hte linear system Ax=b, preditioner, times step
 %- are all problem dependet.
 
-\section{Implementaton}
-We implent the sparse grids combiantion technique using the established SG++ sparse grids toolskit.
-using its python binding.
-Some existing combination techniqe specific
-software exists\cite{discoadapt} but it setup and adaptation to general PDE is too complex for our case.
+\section{Implementation}
+We implement the sparse-grid combination technique using the established SG++ sparse-grids toolkit
+through its Python bindings.
+Some existing combination-technique-specific software exists\cite{discoadapt},
+but its setup and adaptation to a general PDE setting is too complex for our case.
 
-We add each grid to a pool, have multiple workers?
-SG++ handles component level constructop, hierarchization
-the numerical solvers using python's scipy.
-The matrices / linear operator and the pipeline is custom in python.
+SG++ handles the component-grid construction and hierarchization,
+while the numerical solvers are built using Python's \texttt{scipy}.
+The matrices or linear operators, as well as the overall computational pipeline,
+are implemented in custom Python code.
 %Either sparse matrices or linear operator.
 
-To compute the erros we choose a specific time slices, usualy a relatively few,
-proceed the simulation till there, combine the grids, compute the error metrics,
+To compute the errors we choose specific time slices, usually only a few,
+proceed the simulation up to each such time, combine the grids, compute the error metrics,
 and proceed.
 
 
 
 \section{The curse of dimensionality}
 
-Avoid by:
-we suppose that the solution is not heavily depended on mixed derivatives
+The sparse-grid construction alleviates the curse of dimensionality by assuming that
+the solution does not depend too strongly on high-order mixed derivatives.
 
 Issues:
-number of grid points / component grids still rises
+the number of grid points and component grids still rises
 
-need more levels in larged d to achive set accuracy
-
-
+in larger dimensions, more levels are needed to achieve a given accuracy
