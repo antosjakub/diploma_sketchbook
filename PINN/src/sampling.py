@@ -873,8 +873,8 @@ def create_dataloaders__domain_RAR(pde_model, model, active_losses, settings, de
     if use_rbas:
         # now go in chunks
         chunk_size = settings.get("rbas_chunk_size", 1024)
-        k = settings.get("rar_k", 1.0)
-        c = settings.get("rar_c", 0.0)
+        k = settings.get("rbas_k", 1.0)
+        c = settings.get("rbas_c", 0.0)
         picking_criterion = "multinomial"
         X_pde, precomputed["pde"] = rar(
             pde_model.pde_residual, X_pde, model, precomputed["pde"],

@@ -8,6 +8,7 @@ def add_common_args(parser):
     parser.add_argument("--seed", default=42, type=int, help="Random seed.")
     parser.add_argument("--grad_clip_norm", default=None, type=float, help="Max-norm gradient clipping for the train step. None disables it.")
     parser.add_argument("--mode", default="class_pde", type=str, help="score_pde, ll_ode, q_pde, class_pde")
+    parser.add_argument("--act_fn", default="tanh", type=str, help="tanh, silu, relu")
     # don't touch this
     parser.add_argument("--gamma", default=0.9, type=float, help="Decay by 0.9 every 2000 steps.")
     parser.add_argument("--lr", default=1e-3, type=float, help="")
@@ -123,7 +124,16 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
     pde_model.dump_pde_metadata(f'{dir_name}/pde_metadata.json')
     print()
 
-    model = architecture.PINN(D, layers, output_dim, head_fn=head_fun).to(device)
+    if args.act_fn == 'tanh':
+        act_fn = torch.nn.Tanh
+    elif args.act_fn == 'silu':
+        act_fn = torch.nn.SiLU
+    elif args.act_fn == 'relu':
+        act_fn = torch.nn.ReLU
+    else:
+        raise NameError
+
+    model = architecture.PINN(D, layers, output_dim, head_fn=head_fun, activation_fn=act_fn).to(device)
     if args.glorot_init:
         model.apply(architecture.init_glorot_weights)
 
@@ -141,7 +151,7 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
         parent_dir = os.path.dirname(args.custom_ic_model)
         model_metadata = utility.json_load(f'{parent_dir}/model_metadata.json')
         layers = utility.layers_from_string(model_metadata["args"]["layers"])
-        model_ic = architecture.PINN(D, layers, output_dim, head_fn=head_fun).to(device)
+        model_ic = architecture.PINN(D, layers, output_dim, head_fn=head_fun, activation_fn=act_fn).to(device)
         model_ic.load_state_dict(torch.load(args.custom_ic_model, weights_only=True))
         model_ic.eval()
         custom_ic_fn = model_ic.forward

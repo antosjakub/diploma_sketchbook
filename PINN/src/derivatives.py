@@ -13,13 +13,14 @@ def compute_grad(inputs, outputs, grad_outputs):
         retain_graph=True,
     )[0]
 
-def compute_derivatives(model, X, compute_laplace=True):
+def compute_derivatives(model, X, compute_laplace=True, I=[]):
     """
     Compute u, grad u, and laplace u
     X: (batch_size, D) where D = d + 1 (spatial dims + time)
     """
     u = model(X)
     bs, D = X.shape
+    I = [*range(D-1)] if I == [] else I
 
 
     with record_function("grad_u"):
@@ -44,6 +45,8 @@ def compute_derivatives(model, X, compute_laplace=True):
                     create_graph=True,
                     retain_graph=True
                 )[0]
+                if i not in I:
+                    hess_row = hess_row.detach()
                 spatial_laplace_u.append(hess_row[:,i:i+1])
         spatial_laplace_u = torch.cat(spatial_laplace_u, dim=1)
     else:
