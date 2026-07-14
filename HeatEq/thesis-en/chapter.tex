@@ -631,15 +631,38 @@ the number of grid points from $3645$ to $483201$,
 and the runtime from several seconds to more than $18$ minutes.
 At the same time, the peak memory usage grows beyond $2$\,GB.
 
-To push the method further, higher levels must be evaluated on a compute cluster rather than on a amd laptop as was done up to this point.
-To achieve furhter achive higher levels, we
+To push the method to higher level, we increase the number of workers from 8 to 48 and and 16GB to 72GB of RAM and run our experimetns on compute cluster.
+%rather than on a amd laptop as was done up to this point.
+In addition, to achieve higher efficiently, we
 avoid forming the full sparse matrix explicitly and instead represent the discretized operator via SciPy's \texttt{LinearOperator} class,
-which reduced the memory footprint in our experiments by approximately a factor of two.
+which substantially reduced the memory footprint.
 
-\subsection{Conclution}
+ram memory nonreliable and broken and gibberish so ignore it before i remove it pls
+\begin{table}[ht]
+\centering
+\begin{tabular}{ |c|c|c|c|c|c| } 
+6 & 0.031 & 0.058 & 462 & 500k & 350MB & 6m \\
+\hline
+7 & 0.012 & 0.024 & 900 & 1.4M & 600MB & 10m \\ % 32 workers
+\hlinej
+8 & 0.0046 & 0.0098 & 1700 & 4M & 1.5GB & 25m \\ % 48
+\hline
+9 & 0.0017 & 0.0037 & 3000 & 10M & 4GM & 45m \\
+\hline
+\end{tabular}
+\caption{Accuracy and computational cost of the sparse grid combination technique in six dimensions.}
+\label{tab:sg-6d}
+\end{table}
 
-The sparse grid combination technique provides a strong method in low dimensions,
+
+\subsection{Conclusion}
+
+The sparse grid combination technique provides a strong method in low to moderate dimensions,
 but its computational cost rises quickly with the dimension and the level required to maintain an acceptable error tolerance.
+
+As the level or dimension increases, the memory needs of each worker rise as well.
+So in higher dims, somewhat contrary to the advantage the combiantion technique offers,
+one needs to either dramatically increase the available memroy, or reduce the number of workers.
 
 
 \chapter{Appendix}
