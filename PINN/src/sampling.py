@@ -663,6 +663,8 @@ def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settin
     spatial_domain = settings.get("spatial_domain")
     bs = settings.get("bs", 1_000)
     n_res_points = settings.get("n_res_points", 100_000)
+    #n_norm_points = settings.get("n_norm_points", 100_000)
+    bs_norm = settings.get("bs_norm", 10_000)
     n_trajs = settings.get("n_trajs", 1_000)
     nt_steps = settings.get("nt_steps", 1_000)
     d = pde_model.d
@@ -677,9 +679,10 @@ def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settin
     bs_pde = bs
     bs_bc = bs // 8
     bs_ic = bs // 8
-    n_interior = bs_pde * n_cycles
-    n_boundary =  bs_bc * n_cycles
-    n_initial  =  bs_ic * n_cycles
+    n_interior =  bs_pde * n_cycles
+    n_boundary =   bs_bc * n_cycles
+    n_initial  =   bs_ic * n_cycles
+    n_norm     = bs_norm * n_cycles
 
     X_ic = None
     if "ic" in active_losses:
@@ -783,14 +786,20 @@ def create_dataloaders__domain_and_trajectories(pde_model, active_losses, settin
     if "bc" in active_losses and normals_bc is not None:
         precomputed["bc"]["normals"] = normals_bc
 
+    X_norm = None
+    if "norm" in active_losses:
+        X_norm = sample_domain(n_norm, d, sampling_strategy=strategy, device=device)
+        X_norm = lo + (hi - lo) * X_norm
+        precomputed["norm"] = {}
+
     # check it the sizes are allright
     assert len(X_pde) == n_interior
     if 'bc' in active_losses:
         assert len(X_bc) == n_boundary
     if 'ic' in active_losses:
         assert len(X_ic) == n_initial
-    X_terms = {"pde": X_pde, "bc": X_bc, "ic": X_ic, "norm": None}
-    bs_terms = {"pde": bs_pde, "bc": bs_bc, "ic": bs_ic, "norm": None}
+    X_terms = {"pde": X_pde, "bc": X_bc, "ic": X_ic, "norm": X_norm}
+    bs_terms = {"pde": bs_pde, "bc": bs_bc, "ic": bs_ic, "norm": bs_norm}
     bundle = {}
     for k in active_losses:
         bundle[k] = DataLoader(
@@ -833,24 +842,27 @@ def create_dataloaders__domain_RAR(pde_model, model, active_losses, settings, de
     T = settings.get("T", 1.0)
     spatial_domain = settings.get("spatial_domain")
     bs = settings.get("bs", 1_000)
+    bs_norm = settings.get("bs_norm", 10_000)
     n_res_points = settings.get("n_res_points", 100_000)
     use_rbas = settings.get("use_rbas", False)
+    rbas_multiplier = settings.get("rbas_multiplier", 4)
     d = pde_model.d
 
     n_cycles = n_res_points // bs
     bs_pde = bs
     bs_bc = bs // 8
     bs_ic = bs // 8
-    n_interior = bs_pde * n_cycles
-    n_boundary =  bs_bc * n_cycles if 'bc' in active_losses else 0
-    n_initial  =  bs_ic * n_cycles if 'ic' in active_losses else 0
+    n_interior =  bs_pde * n_cycles
+    n_boundary =   bs_bc * n_cycles if 'bc' in active_losses else 0
+    n_initial  =   bs_ic * n_cycles if 'ic' in active_losses else 0
+    n_norm     = bs_norm * n_cycles
 
     if spatial_domain is not None:
         lo = spatial_domain[:, 0]
         hi = spatial_domain[:, 1]
     strategy = settings.get("sampling_strategy", "lhs")
 
-    multiplier = 4 if use_rbas else 1
+    multiplier = rbas_multiplier if use_rbas else 1
     X_bc = X_ic = None
     if "ic" in active_losses:
         X_ic = sample_ic(multiplier*n_initial, d, sampling_strategy=strategy, device=device)
@@ -894,6 +906,11 @@ def create_dataloaders__domain_RAR(pde_model, model, active_losses, settings, de
                 k, c
             )
 
+    X_norm = None
+    if "norm" in active_losses:
+        X_norm = sample_domain(n_norm, d, sampling_strategy=strategy, device=device)
+        X_norm = lo + (hi - lo) * X_norm
+        precomputed["norm"] = {}
 
     # check it the sizes are allright
     assert len(X_pde) == n_interior
@@ -901,8 +918,8 @@ def create_dataloaders__domain_RAR(pde_model, model, active_losses, settings, de
         assert len(X_bc) == n_boundary
     if 'ic' in active_losses:
         assert len(X_ic) == n_initial
-    X_terms = {"pde": X_pde, "bc": X_bc, "ic": X_ic, "norm": None}
-    bs_terms = {"pde": bs_pde, "bc": bs_bc, "ic": bs_ic, "norm": None}
+    X_terms = {"pde": X_pde, "bc": X_bc, "ic": X_ic, "norm": X_norm}
+    bs_terms = {"pde": bs_pde, "bc": bs_bc, "ic": bs_ic, "norm": bs_norm}
     bundle = {}
     for k in active_losses:
         bundle[k] = DataLoader(

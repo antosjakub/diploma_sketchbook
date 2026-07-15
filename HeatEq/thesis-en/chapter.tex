@@ -1,13 +1,6 @@
 
-\chapter{Heat Equation}
-
-{
-\color{red}
-\begin{itemize}
-\item class
-\end{itemize}
-
-}
+\chapter{Force free diffusion}
+We consider a diffusion void of any drift term, also called the heat equaiton.
 
 \section{Formulation}
 \begin{align*}
@@ -45,21 +38,22 @@ with
 \item $\delta = \alpha (d+3) \pi^2 = \bar\alpha (1+\frac{3}{d}) \pi^2$
 \end{itemize}
 
-Chosen so that it is slighlty more interesting then just a product of sines.
+This system was chosen so the term with higher frequency slighly increase complexity compare to the simple case of a product of sines.
 
 
 \section{Behavior in general dimension}
 
-$$
-u((0.5,\dots,0.5), t) = e^{-\gamma t} = e^{-\bar\alpha \pi^2}
-$$
+%$$
+%u((0.5,\dots,0.5), t) = e^{-\gamma t} = e^{-\bar\alpha \pi^2}
+%$$
+\textbf{decay rate in general dimension}
 
 The decay rate, $\gamma$, of the heading term is independent of dimension.
 If $\alpha$ did not depend on $d$, the solution would decay exponentially with dimension,
 leading to negligile values even for relatively modest values of $d$.
 Hence, we consider $\alpha=\frac{\bar\alpha}{d}$.
 
-\textbf{L2 norm} - see Appendix
+\textbf{L2 norm} (see Appendix)
 $$
 ||u(t,\cdot)||_{L^2(\Omega)}^2 =
 \frac{1}{2^d}
@@ -71,9 +65,208 @@ e^{-\delta t}
 \right)
 $$
 
+We see that the 
+
+In the experiments below, we proceeed by every 2nd dimension.
+
+\section{Sparse grid combination technique}
+
+As a classical baseline, we next consider the sparse grid combination technique.
+For the time discretization, we use the Crank--Nicolson scheme.
+On each component grid, this yields a sparse linear system, which we solve by GMRES without preconditioning.
+We also tested CG with ILU preconditioning, but in our experiments, GMRES consistently reached the same accuracy faster, and will be therefe employed throughout this section.
+
+Since the analytical solution is available, we evaluate the approximation error directly at randomly sampled points using latin hypercube sampling.
+annd report both the relative $L^2$ error and the $L^\infty$ error.
+Due to the parallel nature of the algorithm, we the sampled points cannot be uniformly randomly scattered
+in the temporal domain, as that would require a frequent composition of the parallel solvers, thus signigicanlty
+hindering its main advantage. To this effect, we select a set of time slices $t \in \{1.25, 2.5, 3.75, 5\}$
+and cumulatively compute the errror metrics in this way.
+The error of the initial is computed separately.
+
+\subsection{2-dimensional calibration case}
+
+We begin with the two-dimensional setting, where the method can be calibrated against the analytical solution at still negligible computational cost.
+We set $\Delta t=0.01$ and benchmark several sparse-grid levels $n$.
+We also tested a smaller time step, $\Delta t=0.001$, but observed only a negligible change in the reported errors,
+which is consistent with the good stability property of the implicit Crank--Nicolson scheme.
+
+All runs in this subsection use 8 parallel workers.
+In the 2 dimentioinal setting, even at larger levels, the number of component grids is still small, and both runtime and memory footprint remain nearly constant across tested the values of $n$:
+the runs finish in about $0.2$\,s and require about $100$\,MB of RAM.
+The approximation accuracy provided by increasing levels is not therefore
+hindered by compurational cost.
+
+Below, we report the levels that achieved either relative $L^2$ error or $L^\infty$ error of approximately $10^{-2}$ or smaller.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{ |c|c|c|c|c|c|c| } 
+\hline
+level $n$ & rel $L^2$ & $L^\infty$ & \# grids & \# grid points \\
+%\hline
+%4 & 0.0241626 & 0.0506153 & 7 & 113 \\
+\hline
+5 & 0.0072504 & 0.0155873 & 9 & 257 \\
+\hline
+6 & 0.00209899 & 0.00464856 & 11 & 577 \\
+\hline
+7 & 0.00060241 & 0.00131465 & 13 & 1281 \\
+\hline
+8 & 0.000170055 & 0.000358433 & 15 & 2817 \\
+\hline
+\end{tabular}
+\caption{Accuracy of the sparse grid combination technique in the two-dimensional case.}
+\label{tab:sg-2d}
+\end{table}
+
+%The pattern is clear: increasing the sparse-grid level leads to a rapid reduction in both error metrics.
+To our initial surprisse, the largest error was attained at the initial condition, while decreasing as $t \to T$.
+However, due to the smoothening effeect of the heat equation, this behavior is not that unexpected.
+
+As mentioned in the chapter on teh sparse grids method,
+the theoretical estimate for the approximation error is given as
+$$
+\|u-\widehat u_n\|_{L^\infty(\Omega)}
+=
+O(h_n^2\:n^{d-1}).
+$$
+in fact, our experiments support this estimate quire well in the asymptotic case.
+In particular, the observed decay of the $L^\infty$ error for larger values of $n$ follows the theoretical prediction closely, see Figure~\ref{fig:sg_linf_matches_theor_err}.
 
 
-In the experiments below, we go by every 2nd dimension.
+%[show plot of the solution at lvl=1,lvl=2,lvl=3 side by side - to see the basis functions / grid points at play]
+\begin{figure}
+    \centering
+    % see combination technique repo: gs_heat_eq__2026-07-13--01-28-36__d=4_gmres_levels=2:8
+    \includegraphics[width=\linewidth]{figures/sg_2d_basis_funs_visible.png}
+    \caption{Clearly visible basis functions in the interpolation of the initial condition for levels $n=1,2,3$.}
+    \label{fig:sg_2d_basis_funs_visible}
+\end{figure}
+
+
+\begin{figure}
+    \centering
+    % see combination technique repo: gs_heat_eq__2026-07-13--01-28-36__d=4_gmres_levels=2:8
+    \includegraphics[width=\linewidth]{figures/sg_linf_matches_theor_err.png}
+    \caption{Asymptotical approach of the error measures in our experimental setup vs the theoretical result.}
+    \label{fig:sg_linf_matches_theor_err}
+\end{figure}
+
+
+
+\subsection{4 dimensions}
+In four dimensions, the sparse-grid approximation remains computationally manageable on modest hardware, but the growth in complexity is already visible.
+The number of component grids and the total number of grid points increase substantially with the level, and runtime rises from a few seconds to about a minute.
+At the same time, the accuracy degrades relative to the two-dimensional case, and an error below $10^{-2}$ is only first achieved at $n=7$.
+
+For this experiment, we increase the test set to $10^5$ sampled space-time points.
+The results are summarized as so
+\begin{table}[ht]
+\centering
+\begin{tabular}{ |c|c|c|c|c|c|c| } 
+\hline
+level $n$ & rel $L^2$ & $L^\infty$ & \# grids & \# grid points & peak RAM [MB] & runtime \\
+%\hline
+%4 & 0.0776054 & 0.152767 & 35 & 2769 & 113.605 & 1.30406 \\
+%\hline
+%5 & 0.0301881 & 0.0628298 & 69 & 7681 & 121.98 & 2.56963 \\
+\hline
+6 & 0.0110807 & 0.0238831 & 121 & 20481 & 150.711 & 5.96036 \\
+\hline
+7 & 0.00389236 & 0.00863072 & 195 & 52993 & 241.293 & 18.4484 \\
+\hline
+8 & 0.00132089 & 0.00297608 & 295 & 133889 & 527.609 & 71.1404 \\
+\hline
+\end{tabular}
+\caption{Accuracy and computational cost of the sparse grid combination technique in 4 dimensions.}
+\label{tab:sg-4d}
+\end{table}
+Already in this case, the cost grows quite rapidly with the level.
+From $n=6$ to $n=8$, the number of component grids increases from $121$ to $295$,
+the peak memory footprint more than triples,
+and runtime increases by more than an order of magnitude.
+This behavior becomes even more pronounced in higher dimensions.
+
+
+\subsection{6 dimensions}
+The 6-dimensional case marks the point where the practical limitations of the combination technique become significant.
+Although a few hundred component grids are still manageable, reaching acceptable accuracy requires moving to higher levels,
+where both runtime and memory consumption grow rapidly.
+
+The computations still use 8 workers, but the runtime is now on the order of minutes rather than seconds.
+The obtained results are shown in Table~\ref{tab:sg-6d}.
+Note, that the test set to was again increased 10 fold, to $10^6$ sampled space-time points.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{ |c|c|c|c|c|c|c| } 
+\hline
+level $n$ & rel $L^2$ & $L^\infty$ & \# grids & number of grid points & peak RAM [MB] & runtime \\
+\hline
+2 & 0.537902 & 0.762118 & 7 & 3645 & 220.648 & 6.66377 \\
+\hline
+3 & 0.30475 & 0.472944 & 28 & 14337 & 250.809 & 25.8216 \\
+\hline
+4 & 0.154217 & 0.258022 & 84 & 49761 & 361.441 & 85.0774 \\
+\hline
+5 & 0.0715752 & 0.12763 & 210 & 159489 & 745.379 & 283.596 \\
+\hline
+6 & 0.0310339 & 0.0578681 & 462 & 483201 & 2186.69 & 1113.44 \\
+\hline
+\end{tabular}
+\caption{Accuracy and computational cost of the sparse grid combination technique in six dimensions.}
+    \label{tab:sg-6d-estimate}
+\end{table}
+
+Here, the cost of each level increment is substantial.
+Going from $n=2$ to $n=6$ increases the number of component grids from $7$ to $462$,
+the number of grid points from $3645$ to $483201$,
+and the runtime from several seconds to more than $18$ minutes.
+At the same time, the peak memory usage grows beyond $2$\,GB.
+
+To push the method to higher level, we increase the number of workers from 8 to 48 and and 16GB to 72GB of RAM and run our experimetns on compute cluster.
+%rather than on a amd laptop as was done up to this point.
+In addition, to achieve higher efficiently, we
+avoid forming the full sparse matrix explicitly and instead represent the discretized operator via SciPy's \texttt{LinearOperator} class,
+which substantially reduced the memory footprint.
+
+ram memory nonreliable and broken and gibberish so ignore it before i remove it pls
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{ |c|c|c|c|c|c|c| } 
+\hline
+level $n$ & rel $L^2$ & $L^\infty$ & \# grids & number of grid points & peak RAM [MB] & runtime \\
+\hline
+6 & 0.031 & 0.058 & 462 & 500k & 350MB & 6m \\
+\hline
+7 & 0.012 & 0.024 & 900 & 1.4M & 600MB & 10m \\ % 32 workers
+\hline
+8 & 0.0046 & 0.0098 & 1700 & 4M & 1.5GB & 25m \\ % 48
+\hline
+9 & 0.0017 & 0.0037 & 3000 & 10M & 4GM & 45m \\
+\hline
+\end{tabular}
+\caption{Accuracy and computational cost of the sparse grid combination technique in six dimensions.}
+\label{tab:sg-6d}
+\end{table}
+
+
+
+\subsection{8 Dimensions}
+
+
+Here, ridiculous, the number
+
+cannot really fit into memory, cluster gives OOM even for 256 GB on 32 workers
+
+
+
+
+
+
+
 
 \section{PINNs}
 
@@ -140,9 +333,9 @@ Hence we fix this value for the following runs.
 
 \begin{figure}
     \centering
-    \includegraphics[width=150mm]{figures/lambda_ic__GS.png}
+    \includegraphics[width=\linewidth]{figures/lambda_ic__GS.png}
     \caption{Plot of lambda 0.1 loss and linf run}
-    \label{fig:lambda_ic__GS}
+    \label{fig:resampling}
 \end{figure}
 
 
@@ -151,8 +344,10 @@ Hence we fix this value for the following runs.
 
 \begin{figure}
     \centering
-    \includegraphics[width=150mm]{figures/bs_gs_training_loss.png}
-    \includegraphics[width=150mm]{figures/bs_gs_test_rel_l2.png}
+    \includegraphics[width=\linewidth]{figures/bs_gs_training_loss.png}
+
+    \medskip
+    \includegraphics[width=\linewidth]{figures/bs_gs_test_rel_l2.png}
     \caption{Loss and bs, and rel l2}
     \label{fig:bs_gs}
 \end{figure}
@@ -261,7 +456,7 @@ we sample every 100 steps a dataset of size $100\cdot$bs, and then give a batch 
 
 \begin{figure}
     \centering
-    \includegraphics[width=150mm]{figures/training_losses_fixed_vs_resample.png}
+    \includegraphics[width=\linewidth]{figures/training_losses_fixed_vs_resample.png}
     \caption{Loss dynamics: lr decay frequency and resampling}
     \label{fig:lambda_ic__GS}
 \end{figure}
@@ -429,7 +624,7 @@ network size & $\ell_{total}$ & rel $L^2$ & $L^\infty$ & allocated/reserved VRAM
 
 \begin{figure}
     \centering
-    \includegraphics[width=150mm]{figures/model_comparison_for_d=4.png}
+    \includegraphics[width=\linewidth]{figures/model_comparison_for_d=4.png}
     \caption{Error and loss for various hyperparameter choices}
     \label{fig:models_d4}
 \end{figure}
@@ -451,6 +646,10 @@ VRAM memory needs
 % mistake in running..., very good - same 1024 bs, new data every 100 steps
 % what bout periodically giving the nn new data?
 
+
+larger net = more expressive power
+
+4x256 ?
 %\subsection{8th dimension}
 so far linear / exp. increase in training steps
 exp increase in model size
@@ -459,9 +658,9 @@ but long training....
 
 Q: Whether we can me the training more efficiet (smller model size, shorter training time)?
 
-We consider the smaller 4x128 network with 40_000 steps and try to match the 80k steps one.
+We consider the smaller 4x128 network with 40\,000 steps and try to match the 80k-steps one.
 
-causal weighs & causal sampling
+causal weights and causal sampling
 RAR
 SDGD
 
@@ -469,200 +668,47 @@ Network to focus on the important regions.
 RAR - we sample 4 times as many points callocation points and then pick to top 1/4 with the highest residuum based on the RAR forulama.
 We perform a grid search over the various levels of k,r.
 
+128 and 80k - RAR and grid search over $k,r$
+[show gs results]
+
+keep d=6
+
+
+\subsection{8 Dimensions}
+base: 4x256 x 100k
+base + what we learned in 6 dims
 
 
 
 
-
-
-\section{Sparse grid combination technique}
-
-As a classical baseline, we next consider the sparse grid combination technique.
-For the time discretization, we use the Crank--Nicolson scheme.
-On each component grid, this yields a sparse linear system, which we solve by GMRES without preconditioning.
-We also tested CG with ILU preconditioning, but in our experiments, GMRES consistently reached the same accuracy faster, and will be therefe employed throughout this section.
-
-Since the analytical solution is available, we evaluate the approximation error directly at randomly sampled points using latin hypercube sampling.
-annd report both the relative $L^2$ error and the $L^\infty$ error.
-Due to the parallel nature of the algorithm, we the sampled points cannot be uniformly randomly scattered
-in the temporal domain, as that would require a frequent composition of the parallel solvers, thus signigicanlty
-hindering its main advantage. To this effect, we select a set of time slices $t \in \{1.25, 2.5, 3.75, 5\}$
-and cumulatively compute the errror metrics in this way.
-The error of the initial is computed separately.
-
-\subsection{2-dimensional calibration case}
-
-We begin with the two-dimensional setting, where the method can be calibrated against the analytical solution at still negligible computational cost.
-We set $\Delta t=0.01$ and benchmark several sparse-grid levels $n$.
-We also tested a smaller time step, $\Delta t=0.001$, but observed only a negligible change in the reported errors,
-which is consistent with the good stability property of the implicit Crank--Nicolson scheme.
-
-All runs in this subsection use 8 parallel workers.
-In the 2 dimentioinal setting, even at larger levels, the number of component grids is still small, and both runtime and memory footprint remain nearly constant across tested the values of $n$:
-the runs finish in about $0.2$\,s and require about $100$\,MB of RAM.
-The approximation accuracy provided by increasing levels is not therefore
-hindered by compurational cost.
-
-Below, we report the levels that achieved either relative $L^2$ error or $L^\infty$ error of approximately $10^{-2}$ or smaller.
-
-\begin{table}[ht]
-\centering
-\begin{tabular}{ |c|c|c|c|c|c|c| } 
-\hline
-level $n$ & rel $L^2$ & $L^\infty$ & \# component grids & \# grid points \\
-%\hline
-%4 & 0.0241626 & 0.0506153 & 7 & 113 \\
-\hline
-5 & 0.0072504 & 0.0155873 & 9 & 257 \\
-\hline
-6 & 0.00209899 & 0.00464856 & 11 & 577 \\
-\hline
-7 & 0.00060241 & 0.00131465 & 13 & 1281 \\
-\hline
-8 & 0.000170055 & 0.000358433 & 15 & 2817 \\
-\hline
-\end{tabular}
-\caption{Accuracy of the sparse grid combination technique in the two-dimensional case.}
-\label{tab:sg-2d}
-\end{table}
-
-%The pattern is clear: increasing the sparse-grid level leads to a rapid reduction in both error metrics.
-To our initial surprisse, the largest error was attained at the initial condition, while decreasing as $t \to T$.
-However, due to the smoothening effeect of the heat equation, this behavior is not that unexpected.
-
-As mentioned in the chapter on teh sparse grids method,
-the theoretical estimate for the approximation error is given as
-$$
-\|u-\widehat u_n\|_{L^\infty(\Omega)}
-=
-O(h_n^2\:n^{d-1}).
-$$
-in fact, our experiments support this estimate quire well in the asymptotic case.
-In particular, the observed decay of the $L^\infty$ error for larger values of $n$ follows the theoretical prediction closely, see Figure~\ref{fig:sg_linf_matches_theor_err}.
-
-
-%[show plot of the solution at lvl=1,lvl=2,lvl=3 side by side - to see the basis functions / grid points at play]
-\begin{figure}
-    \centering
-    % see combination technique repo: gs_heat_eq__2026-07-13--01-28-36__d=4_gmres_levels=2:8
-    \includegraphics[width=150mm]{figures/sg_2d_basis_funs_visible.png}
-    \caption{Clearly visible basis functions in the interpolation of the initial condition for levels $n=1,2,3$.}
-    \label{fig:sg_2d_basis_funs_visible}
-\end{figure}
-
-
-\begin{figure}
-    \centering
-    % see combination technique repo: gs_heat_eq__2026-07-13--01-28-36__d=4_gmres_levels=2:8
-    \includegraphics[width=150mm]{figures/sg_linf_matches_theor_err.png}
-    \caption{Asymptotical approach of the error measures in our experimental setup vs the theoretical result.}
-    \label{fig:sg_linf_matches_theor_err}
-\end{figure}
+\subsection{Curse of dimensionality}
 
 
 
-\subsection{4 dimensions}
-In four dimensions, the sparse-grid approximation remains computationally manageable on modest hardware, but the growth in complexity is already visible.
-The number of component grids and the total number of grid points increase substantially with the level, and runtime rises from a few seconds to about a minute.
-At the same time, the accuracy degrades relative to the two-dimensional case, and an error below $10^{-2}$ is only first achieved at $n=7$.
-
-For this experiment, we increase the test set to $10^5$ sampled space-time points.
-The results are summarized as so
-\begin{table}[ht]
-\centering
-\begin{tabular}{ |c|c|c|c|c|c|c| } 
-\hline
-level $n$ & rel $L^2$ & $L^\infty$ & \# component grids & \# grid points & peak RAM [MB] & runtime \\
-%\hline
-%4 & 0.0776054 & 0.152767 & 35 & 2769 & 113.605 & 1.30406 \\
-%\hline
-%5 & 0.0301881 & 0.0628298 & 69 & 7681 & 121.98 & 2.56963 \\
-\hline
-6 & 0.0110807 & 0.0238831 & 121 & 20481 & 150.711 & 5.96036 \\
-\hline
-7 & 0.00389236 & 0.00863072 & 195 & 52993 & 241.293 & 18.4484 \\
-\hline
-8 & 0.00132089 & 0.00297608 & 295 & 133889 & 527.609 & 71.1404 \\
-\hline
-\end{tabular}
-\caption{Accuracy and computational cost of the sparse grid combination technique in 4 dimensions.}
-\label{tab:sg-4d}
-\end{table}
-Already in this case, the cost grows quite rapidly with the level.
-From $n=6$ to $n=8$, the number of component grids increases from $121$ to $295$,
-the peak memory footprint more than triples,
-and runtime increases by more than an order of magnitude.
-This behavior becomes even more pronounced in higher dimensions.
-
-
-\subsection{6 dimensions}
-The 6-dimensional case marks the point where the practical limitations of the combination technique become significant.
-Although a few hundred component grids are still manageable, reaching acceptable accuracy requires moving to higher levels,
-where both runtime and memory consumption grow rapidly.
-
-The computations still use 8 workers, but the runtime is now on the order of minutes rather than seconds.
-The obtained results are shown in Table~\ref{tab:sg-6d}.
-Note, that the test set to was again increased 10 fold, to $10^6$ sampled space-time points.
-
-\begin{table}[ht]
-\centering
-\begin{tabular}{ |c|c|c|c|c|c| } 
-\hline
-level $n$ & rel $L^2$ & $L^\infty$ & number of component grids & number of grid points & peak RAM [MB] & runtime \\
-\hline
-2 & 0.537902 & 0.762118 & 7 & 3645 & 220.648 & 6.66377 \\
-\hline
-3 & 0.30475 & 0.472944 & 28 & 14337 & 250.809 & 25.8216 \\
-\hline
-4 & 0.154217 & 0.258022 & 84 & 49761 & 361.441 & 85.0774 \\
-\hline
-5 & 0.0715752 & 0.12763 & 210 & 159489 & 745.379 & 283.596 \\
-\hline
-6 & 0.0310339 & 0.0578681 & 462 & 483201 & 2186.69 & 1113.44 \\
-\hline
-\end{tabular}
-\caption{Accuracy and computational cost of the sparse grid combination technique in six dimensions.}
-\label{tab:sg-6d}
-\end{table}
-
-Here, the cost of each level increment is substantial.
-Going from $n=2$ to $n=6$ increases the number of component grids from $7$ to $462$,
-the number of grid points from $3645$ to $483201$,
-and the runtime from several seconds to more than $18$ minutes.
-At the same time, the peak memory usage grows beyond $2$\,GB.
-
-To push the method to higher level, we increase the number of workers from 8 to 48 and and 16GB to 72GB of RAM and run our experimetns on compute cluster.
-%rather than on a amd laptop as was done up to this point.
-In addition, to achieve higher efficiently, we
-avoid forming the full sparse matrix explicitly and instead represent the discretized operator via SciPy's \texttt{LinearOperator} class,
-which substantially reduced the memory footprint.
-
-ram memory nonreliable and broken and gibberish so ignore it before i remove it pls
-\begin{table}[ht]
-\centering
-\begin{tabular}{ |c|c|c|c|c|c| } 
-6 & 0.031 & 0.058 & 462 & 500k & 350MB & 6m \\
-\hline
-7 & 0.012 & 0.024 & 900 & 1.4M & 600MB & 10m \\ % 32 workers
-\hlinej
-8 & 0.0046 & 0.0098 & 1700 & 4M & 1.5GB & 25m \\ % 48
-\hline
-9 & 0.0017 & 0.0037 & 3000 & 10M & 4GM & 45m \\
-\hline
-\end{tabular}
-\caption{Accuracy and computational cost of the sparse grid combination technique in six dimensions.}
-\label{tab:sg-6d}
-\end{table}
-
-
-\subsection{Conclusion}
 
 The sparse grid combination technique provides a strong method in low to moderate dimensions,
 but its computational cost rises quickly with the dimension and the level required to maintain an acceptable error tolerance.
 
 As the level or dimension increases, the memory needs of each worker rise as well.
 So in higher dims, somewhat contrary to the advantage the combiantion technique offers,
-one needs to either dramatically increase the available memroy, or reduce the number of workers.
+one needs to either dramatically increase the available memroy, or reduce the number of workers to fit the
+increased number of compoennt grids and the grid points in memory.
+
+
+
+\section{Conclusion}
+
+Show the degrees of freedom needed to achieve some accuracy
+
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\linewidth]{figures/model_comparison_for_d=4.png}
+    \caption{Error and loss for various hyperparameter choices}
+    \label{fig:models_d4_repeat}
+\end{figure}
+
+
 
 
 \chapter{Appendix}

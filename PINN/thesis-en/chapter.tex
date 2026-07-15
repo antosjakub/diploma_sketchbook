@@ -1,32 +1,32 @@
-{\color{red}
-
-TD write
-- background:
-    - sde ito
-- pinns
-    -x fourier features
-    - samping: Euler Maruyama
-    - score pinns
-    - optimization strats notes
-    - torch basics for pinns
-    - ? nn basics - bs, backprop, ad (can add in later)
-    - ? lbfgs
-        - needs a fixed set of points
-        - slowly change points during training
-
-TD impl:
-    - causal nope - my causal sampling yes
-    - lbfgs on existing good runs
-    - save runs to diploma-sketchbook case1-..
-
-experiments
-    - try score pinns and lbfgs on cluster
-    - do large gs in d=3 for each case
-        - sampling - trajs / latin
-        - causal weighting
-        - loss weighting - fixed vs adaptive
-
-}
+%{\color{red}
+%
+%TD write
+%- background:
+%    - sde ito
+%- pinns
+%    -x fourier features
+%    - samping: Euler Maruyama
+%    - score pinns
+%    - optimization strats notes
+%    - torch basics for pinns
+%    - ? nn basics - bs, backprop, ad (can add in later)
+%    - ? lbfgs
+%        - needs a fixed set of points
+%        - slowly change points during training
+%
+%TD impl:
+%    - causal nope - my causal sampling yes
+%    - lbfgs on existing good runs
+%    - save runs to diploma-sketchbook case1-..
+%
+%Experiments
+%    - try score pinns and lbfgs on cluster
+%    - do large gs in d=3 for each case
+%        - sampling - trajs / latin
+%        - causal weighting
+%        - loss weighting - fixed vs adaptive
+%
+%}
 
 
 
@@ -79,7 +79,7 @@ The nonlinearities $\sigma$ are essential: without them, the above given composi
 and the network's modelling capacity would be that of linear regression.
 
 The number of hidden layers $L$ (\emph{depth}) and the layer sizes $d_l$ (\emph{width}) together control the capacity,
-commonly reffered to as the expressive power, of the network.
+also reffered to as the expressive power, of the network.
 
 
 
@@ -93,7 +93,8 @@ and targets $y_i$ (most commonly using the mean squared error as the metric), on
 $$
 \theta^{\star} = \arg\min_{\theta}\, \ell(\theta)
 $$
-Because $\ell$ is in general non-convex and high-dimensional (the networks we will consider have on the order of $10^4$--$10^7$ parameters),
+
+Because $\ell$ is in general non-convex and high-dimensional (the networks we will consider have on the order of $10^4$--$10^6$ parameters),
 the minimization is carried out by first-order iterative methods, starting from \emph{(stochastic) gradient descent}
 $$
 \theta \leftarrow \theta - \eta\, \nabla_\theta \ell(\theta)
@@ -101,7 +102,7 @@ $$
 with learning rate $\eta > 0$. In practice, more complex variants such as Adam \cite{king_adam} are preferred, as they converge faster and are less sensitive to the choice of $\eta$.
 
 A core part of the the training pipeline that enables efficient compuation of the gradient w.r.t the network parameters $\theta$ is \emph{automatic differentiation} (AD).
-Since the ouput of $\mathcal{N}_\theta$ is computed from a finite sequence of elementary operations whose derivatives are known analytically, ($\frac{d}{dx}(x\cdot w) = w, \frac{d}{dx}\tanh{x} = sech^2 x$, etc.),
+Since the ouput of $\mathcal{N}_\theta$ is computed from a finite sequence of elementary operations whose derivatives are known analytically, ($\frac{d}{dx}(x\cdot w) = w, \:\frac{d}{dx}\tanh{x} = sech^2 x$, etc.),
 we can simply apply the chain rule to obtain $\nabla_\theta \ell$ exactly (up to machine precision).
 
 % note: forward and backpropagation
@@ -176,13 +177,13 @@ the architecture and training loop of traditional feed-forward neural networks
 with the information about the physics governing the system under consideration.
 This information is added in in a form of a specific loss function which the model is trained to minimize.
 
-Pior to the introduction of PINNs, neural netoworks were used in the scientific computing
+Pior to the introduction of PINNs, neural networks were mainly used in the scientific machine learing community
 as interpolators of measurement data. 
 In this context, the network learns a mapping from input data to output data,
 but it does not necessarily respect the physical laws unterlying the phenomena.
 
 The novel idea introduced by PINNs was to extend the loss function by an extra term incorporating the knowledge about the phycics.
-As a result, the resulting network becomes less prone to overfitting, and the resulting predictions are much more in accordance with the governing physical law(s).
+As a result, the resulting network becomes less prone to overfitting, and the resulting predictions are much more in accordance with the governing physical laws.
 
 On the other hand, such a formulation allow us to train the network even when no labelel measurement data are available.
 In that case, the loss relies entirely on the governing equation and the prescribed initial and boundary conditions.
@@ -206,7 +207,7 @@ In more complex settings
 training can become expensive and unstable, and
 the method may require additional tuning.
 For this reason, understanding the
-construction and tools underlying PINNs is essential before applying them
+construction and tools underlying PINNs is importance before applying them
 to the more challenging, in our case
 high-dimensional, setting.
 
@@ -262,7 +263,7 @@ The main differenting factor of PINNs is not the architecture itself,
 but rather the construction of the loss and a few training specific details
 depending on the differetial equation at hand.
 
-Consider, for example, a system of the form
+Consider, a system of the form
 \begin{align}
 \partial_t u(x,t) + \mathcal L(u;x,t) = 0& \quad\Omega\times(0,T)\\
 u(x) = u_{ic}(x)& \quad\Omega\\
@@ -304,7 +305,7 @@ are generally preferred.
 
 \begin{figure}
     \centering
-    \includegraphics[width=150mm]{pinn_arch.pdf}
+    \includegraphics[width=\linewidth]{pinn_arch.pdf}
     \caption{}
     \label{fig:pinn_arch}
 \end{figure}
@@ -370,12 +371,12 @@ $$
 %}
 
 The training procedure is almost equavalent to to that of feed-forward neural networks.
-However, here, we do not have any huge labeled dataset to iterate over.
-In PINNs, we usually proceed in a way that blends together both the minibatch and the fullbarch approaches.
+However, here, we do not have a labeled dataset to iterate over.
+In PINNs, we usually proceed in a way that blends together both the minibatch and the fullbatch approaches.
 Instead of passing though the entire dataset in every epoch, we instead pass though a relatively small set of
 callocation points. Those can be either sampled once, before the training, or repeatedly sampled at each epoch.
 Hence the terms collocation points and batch can be used interchangebly.
-Instead of \emph{epochs}, we talk of \emph{steps}.
+As a result, instead of \emph{epochs}, we talk of \emph{steps}.
 
 %Let us save the training data $\{(x_i,t_i)\}_{i=1}^{N_{pde}}$ as a tensor $\mathbf X_{pde}$ of size $(N_r,d+1)$
 
@@ -415,25 +416,25 @@ Instead of \emph{epochs}, we talk of \emph{steps}.
 
 
 \section{Automatic differentiation (AD)}
-{\color{red}
-\begin{itemize}
-\item number of operations, number of tensors to store
-\item as many graphs as there are derivatives?
-\item graph (grad) in a graph (2nd grad) in a graph (backprop to \theta)??
-\item how do they stack?
-\item - foward and reverse torch jac vec and vec jac products
-
-\item Diagrams:
-\item - decompose the network into elem units
-\item - forward vs reverse mode grad comp
-\item - graph for each der order? graph for first order der, graph for second order der
-
-\item Cost:
-\item - linear with batch size
-\item - forward pass same cost as one way auto diff
-\item - $2d$ for laplace, $d^2$ for hess
-\end{itemize}
-}
+%{\color{red}
+%\begin{itemize}
+%\item number of operations, number of tensors to store
+%\item as many graphs as there are derivatives?
+%\item graph (grad) in a graph (2nd grad) in a graph (backprop to \theta)??
+%\item how do they stack?
+%\item - foward and reverse torch jac vec and vec jac products
+%
+%\item Diagrams:
+%\item - decompose the network into elem units
+%\item - forward vs reverse mode grad comp
+%\item - graph for each der order? graph for first order der, graph for second order der
+%
+%\item Cost:
+%\item - linear with batch size
+%\item - forward pass same cost as one way auto diff
+%\item - $2d$ for laplace, $d^2$ for hess
+%\end{itemize}
+%}
 
 %So far, we haven't specified how the individual spatial and temporal derivatives
 %making up the PDE residuum are to be computed. Let us adress this now.
@@ -463,8 +464,9 @@ thus obtaining the derivatives $\partial_t u$ and $\nabla_x u$.
 We can repeat this procedure to obtain higher order derivatives, like $\Delta_x u$.
 
 Since its central nature in the of PINNs, lets us devote more time to understanding
-what exactly is going on under the hood, as this knowledge will prove to be
-crutial when scaling PINNs to high dimensional domains.
+what exactly is going on under the hood.
+%as this knowledge will prove to be
+%crutial when scaling PINNs to high dimensional domains.
 % memory estimates?
 
 \subsection{Fundamentals}
@@ -494,10 +496,62 @@ h = \sigma(z).
 $$
 
 We can interpret this calculation as a \emph{directed acyclic graph} (DAG),
-also called a \emph{computational graph} (see fig TBA). 
+also called a \emph{computational graph} (see the diagram below).
 The input variables $x$, $w$, and $b$ are the input nodes of the graph,
-while $h$ is the final ouput node.
+and $h$ is the final ouput node.
 The intermediate quantities $y$ and $z$ are stored as additional nodes.
+
+\vspace{1em}
+\begin{center}
+\usetikzlibrary{positioning, arrows.meta}
+\begin{tikzpicture}[
+  node/.style={
+    circle,
+    draw,
+    minimum width=0.8cm,
+    minimum height=0.8cm,
+    align=center,
+    fill=gray!20
+  },
+  leaf/.style={
+    node,
+    fill=white!20
+  },
+  every node/.style={font=\footnotesize},
+  arrow/.style={-Stealth, thick}
+]
+% ------------------------------------------------------------
+% Leaf nodes
+% ------------------------------------------------------------
+\node[leaf] (x) {$x$};
+\node[leaf, below=0.7cm of x] (w) {$w$};
+\node[leaf, below=0.7cm of w] (b) {$b$};
+% ------------------------------------------------------------
+% Intermediate and output nodes
+% ------------------------------------------------------------
+\node[node, right=1.6cm of w] (y) {$y$};
+\node[node, right=1.6cm of y] (z) {$z$};
+\node[node, right=1.6cm of z] (h) {$h$};
+% ------------------------------------------------------------
+% Computational dependencies
+% ------------------------------------------------------------
+\draw[arrow] (x) -- node[above] {$*$} (y);
+\draw[arrow] (w) -- node[below] {$*$} (y);
+
+\draw[arrow] (y) -- node[above] {$+$} (z);
+\draw[arrow] (b) to[bend right=12] node[below] {$+$} (z);
+
+\draw[arrow] (z) -- node[above] {$\sigma$} (h);
+% ------------------------------------------------------------
+% Optional equations under the graph
+% ------------------------------------------------------------
+%\node[align=center, below=1.0cm of z] {
+%$y=xw,\qquad z=y+b,\qquad h=\sigma(z)$
+%};
+\end{tikzpicture}
+
+\end{center}
+\vspace{1em}
 
 The derivative of $h$ w.r.t. $x$ is obtained by recursively applying the chain rule along the graph
 $$
@@ -536,29 +590,36 @@ and applying the chain rule to compute the requested derivative.
 %\]
 %Such approximations introduce a discretization error and depend on the choice of the step size $\varepsilon$. Automatic differentiation, on the other hand, differentiates the exact sequence of elementary operations used to compute the function. Therefore, the resulting derivatives are exact up to floating-point round-off error.
 
-\subsection{TBA: Higher order derivatives}
-
-Back to the graph picure.
-Higher order = track operations in chain rule = new graph
-
 However, in the context of PINNs, we also require a second-order derivatives.
+To compute higher derivatives, we need to track the operations in the in the application of the chain rule itself.
+Hence, this leads to a new computational graph
+
 And here is where the memory cost can become problematic.
 
-In this case,
-a forward-over-reverse-mode differentiation is often advantageous.
-In this case, we first compute the gradient using forward-mode and then 
-get the full hessian using reverse AD.
-
+The computation of the gradient
 However, materializing the full hessian is 
 $O(d^2)$
 
-Hessian-vector-product?
-
-In the case of laplacian, the memory only scales linearly as $O(d)$.
-
-one needs the diagonal entries of the Hessian matrix with respect to the spatial variables.
-Computing these terms usually requires repeated differentiation of the first-order derivatives.
-Therefore, the cost of evaluating second-order operators grows with the dimension $d$.
+%Back to the graph picure.
+%Higher order = track operations in chain rule = new graph
+%
+%And here is where the memory cost can become problematic.
+%
+%In this case,
+%a forward-over-reverse-mode differentiation is often advantageous.
+%In this case, we first compute the gradient using forward-mode and then 
+%get the full hessian using reverse AD.
+%
+%However, materializing the full hessian is 
+%$O(d^2)$
+%
+%Hessian-vector-product?
+%
+%In the case of laplacian, the memory only scales linearly as $O(d)$.
+%
+%one needs the diagonal entries of the Hessian matrix with respect to the spatial variables.
+%Computing these terms usually requires repeated differentiation of the first-order derivatives.
+%Therefore, the cost of evaluating second-order operators grows with the dimension $d$.
 
 
 \subsection{Forward and Reverse Mode}
@@ -574,9 +635,9 @@ Forward-mode automatic differentiation propagates derivatives from the inputs to
 reverse-mode AD operated from output back to the inputs.
 
 The cost of each mode reflects this as well,
-as the forward-mode AD scales proportianally to $n$ (n-dimensional input),
+as the forward-mode AD scales proportianally to $n$, 
 whereas
-the reverse-mode AD scales proportianally to $m$ (m-dimensional output)
+the reverse-mode AD scales proportianally to $m$.
 
 For cases where the number of inputs is much greater than the number of outputs, it is generally
 advantagous to use reverse-mode AD. This is the case for majority of cases, hence
@@ -592,7 +653,7 @@ from inputs to outputs. This makes forward-mode AD easier to implement and more 
 \item Reverse-mode differentiation proceeds in the opposite direction to ordinary computation.
 As we evaluate the function from inputs to outputs,
 we store the intermediate steps of the computation.
-Then, you run the computation in reverse via chain rule.
+Then, the computation is run in reverse via chain rule.
 This makes its implemention more complicated, and adds notable storage overhead.
 \end{itemize}
 
@@ -619,85 +680,86 @@ To this effect, we later (chapter X) perform a few experiments to decide on the 
 
 
 
-\subsection{Computational and memory cost of AD}
+%\subsection{Computational and memory cost of AD}
+%
+%{\color{red}
+%linear scaling with $B$
+%backward pass
+%    - needs to store intermediate activations from the forward pass
+%    - approx same cost as forward
+%higher ders
+%    - the comp graph of the derivative computation itself has to be differentiable
+%    - need to retain the graph for the 1st derivative
+%}
+%
+%
+%
+%
+%
+%\subsubsection{TBA: Implementation}
+%leaves and root
+%Function object
+%    - knows how to compute forward and also its der in backprop step
+%DAG - directed acyclic graph consisting of Funciton objects
+%leaves = input tensor
+%roots = output tensor
+%
+%By tracing this graph from roots to leaves,
+%you can automatically compute the gradients using the chain rule.
+%
+%The backward pass kicks off when `'.backward()`' is called on the DAG root. autograd then:
+%- computes the gradients from each $.grad_fn$,
+%- accumulates them in the respective tensor's .grad attribute
+%- using the chain rule, propagates all the way to the leaf tensors.
+%
+%when doing backward propagation,
+%PyTorch accumulates the gradients,
+%i.e. the value of computed gradients is added to the
+%grad property of all leaf nodes of computational graph
+%
+%
+%\subsubsection{TBA: Automatic differentiation vs. Finite differences}
+%
+%\cite{ad_fd}
+%
+%Training error the main issue for DF
+%
+%- fd
+%    - mem cheaper
+%for second order diff operator:
+%    - ad and fd almost same training time
+%    - but observe training
+%    - different loss landscape
+%        - that one for ad better
+%    - ad:
+%        - lower residual tarining error
+%        - faster loss convergence
+%
+%gradient-descent training kernel G for two-layer FFNN
+%AD and FD have similar large singular/eigenvalues, as FD approximates AD,
+%but FD produces relatively larger small singular/eigenvalues due to numerical differentiation artifacts
+%These small values matter because training is sensitive to the low end of the spectrum
+%- similar as when Ax=b - condition numer sigma max / sigma min
+%
+%same problem, increase the number of neurons
+%the error rises linaerly
+%- need to increase n of steps
 
-{\color{red}
-linear scaling with $B$
-backward pass
-    - needs to store intermediate activations from the forward pass
-    - approx same cost as forward
-higher ders
-    - the comp graph of the derivative computation itself has to be differentiable
-    - need to retain the graph for the 1st derivative
-}
 
 
-
-
-
-\subsubsection{TBA: Implementation}
-leaves and root
-Function object
-    - knows how to compute forward and also its der in backprop step
-DAG - directed acyclic graph consisting of Funciton objects
-leaves = input tensor
-roots = output tensor
-
-By tracing this graph from roots to leaves,
-you can automatically compute the gradients using the chain rule.
-
-The backward pass kicks off when `'.backward()`' is called on the DAG root. autograd then:
-- computes the gradients from each $.grad_fn$,
-- accumulates them in the respective tensor's .grad attribute
-- using the chain rule, propagates all the way to the leaf tensors.
-
-when doing backward propagation,
-PyTorch accumulates the gradients,
-i.e. the value of computed gradients is added to the
-grad property of all leaf nodes of computational graph
-
-
-\subsubsection{TBA: Automatic differentiation vs. Finite differences}
-
-\cite{ad_fd}
-
-Training error the main issue for DF
-
-- fd
-    - mem cheaper
-for second order diff operator:
-    - ad and fd almost same training time
-    - but observe training
-    - different loss landscape
-        - that one for ad better
-    - ad:
-        - lower residual tarining error
-        - faster loss convergence
-
-gradient-descent training kernel G for two-layer FFNN
-AD and FD have similar large singular/eigenvalues, as FD approximates AD,
-but FD produces relatively larger small singular/eigenvalues due to numerical differentiation artifacts
-These small values matter because training is sensitive to the low end of the spectrum
-- similar as when Ax=b - condition numer sigma max / sigma min
-
-same problem, increase the number of neurons
-the error rises linaerly
-- need to increase n of steps
-
-
-\section{Optimizers}
-PINNs specific in that, apart from the standard gradient-based optimzers, such as Adam,
-also frequently utilize a second order optimizer, specifically the Limited-memory BFGS (L-BFGS).
-
-\subsection{TBA: Adam}
-- super basics info
-- Q what loss lanscape is it fit for?
-
-first-order gradient-based optimization of
-stochastic objective functions
-
-\cite{king_adam}
-%https://docs.pytorch.org/docs/2.12/generated/torch.optim.Adam.html
+%\section{Optimizers}
+%PINNs specific in that, apart from the standard gradient-based optimzers, such as Adam,
+%also frequently utilize a second order optimizer, specifically the Limited-memory BFGS (L-BFGS).
+%
+%\subsection{TBA: Adam}
+%- super basics info
+%- Q what loss lanscape is it fit for?
+%
+%first-order gradient-based optimization of
+%stochastic objective functions
+%
+%\cite{king_adam}
+%%https://docs.pytorch.org/docs/2.12/generated/torch.optim.Adam.html
 
 
 %\subsection{L-BFGS}
@@ -730,245 +792,249 @@ stochastic objective functions
 %L-BFGS, which is a limited-memory version of BFGS that is particularly suited to problems with very large numbers of variable
 
 
-\subsection{Limited-memory BFGS (L-BFGS)}
-Limited-memory BFGS method is
-iterative quasi-Newton method for solving unconstrained minimalization problems
-under tight memory constrains.
-
-It is a second order method whose cost grow only linearly
-with the dimension of the parameter space $n$ -
-unlike the original BFGS, or Newton's methods, 
-which grow as $n^2$ and $n^3$ respectively.
-
-As such, it is well equipped for problmes with large number of variables.
-%preconditioning the gradient with curvature infomation 
-%L-BFGS is a computer memory aware variant of the quisi Newton BFGS mothed
-
-\cite{lbfgs_uw}
-
-\subsubsection{
-Broyden-Fletcher-Goldfarb-Shanno algorithm (BFGS)
-}
-
-Consider the unconstrained minimization problem
-$$
-\min_{x\in R^n} f(x)
-$$
-where $f:\mathbb R^n\to \mathbb R$ is differentiable function.
-
-In Newton's method, we iterate the initial guess, $x_0$, as
-$$
-x_{k+1} = x_k - \left[\nabla^2f(x_k)\right]^{-1}\nabla f(x_k).
-$$
-
-In BFGS, instead of computing the true hessian $\nabla^2 f(x_k)$,
-the method builds an appriximate hessian $B_k$.
-
-The search direction $p_k$ is then given as a soluton to the Newton equation,
-now with the approximated hessian
-$$
-B_k p_k = - \nabla f(x_k)\,.
-$$
-
-A line search in the direction of $p_k$ is then performed to 
-find the next point $x_{k+1}$, by minimizing
-$f(x_k+\alpha\,p_k)$ over $\alpha>0$.
-
-We then define
-$$
-s_k = x_{k+1}-x_k\,, \qquad
-y_k = \nabla f(x_{k+1}) - \nabla f(x_k)
-$$
-and impose the quasi-Newton condition on the update of $B_k$
-$$
-B_{k+1}s_k = y_k \,,
-$$
-which is a secant equation
-expressing the observed change in gradient along the step direction.
-Note, that for $B_{k+1}$ to be positive definite, the condition
-$$
-s_k^T B_{k+1} s_k =
-s_k^T y_k > 0
-$$
-should be satisfied.
-If the functin is non strinly convex, this condition can in some cases be 
-enforced explicitely by the inexact linesearch with wolfre conditions,
-which provide an efficient way to computing an approximate step size $\alpha$
-rather than en exact one.
-%we generally perform a inexact line search according to wolfre conditions -
-
-To maintain symmetry and positive difinitness of $B_k$.
-The hessian update rule is cosntructed as
-$$
-B_{k+1}
-= B_k
-+ \frac{y_k y_k^T}{y_k^T s_k}
-- \frac{B_k s_k s_k^T B_k}{s_k^T B_k s_k}.
-$$
-%As long as the initial matrix is positive definite it is possible to show that all the follow matrices will be as well.
-
-%Note the slighlty counter intuitive notaion
-%by $H_k$ we mean the inverse hessian.
-%by $B_k$ we mean the hessian
-%or equivalently, an approximation $H_k = B_k^{-1}$ of the inverse hessian.
-The first step of the presented algorithm amounts to solving 
-$$
-B_k p_k = - \nabla f(x_k)\,.
-$$
-We can however, avoid this computation by
-approximating the inverse Hessian instead of the hessian itself.
-The corresponding form for the appriximate inverse-hessian $H_{k+1}$ is then
-$$
-H_{k+1}
-= H_k + \frac{
-(s_k^T y_k + y_k^T H_k y_k)(s_k s_k^T)
-}{(s_k^T y_k)^2}
-- \frac{
-H_k y_k s_k^T + s_k y_k^T H_k
-}{s_k^T y_k}
-$$
 
 
-We can summarize the method as so:
-
-\begin{algorithm}[H]
-\caption{BFGS}
-\begin{algorithmic}[1]
-    \State Obtain the search direction from $p_k=-H_k\nabla f(x_k)$
-    \State Perform 1-dimensional line search
-$$
-\alpha_k = \operatorname{argmin}_\alpha f(x_k+\alpha p_k)\,,
-$$
-or inexact line search with Wolfe conditions to obrain $\alpha_k$.
-    \State Update
-$$
-x_{k+1} = x_{k} + \alpha_k p_k
-$$
-    \State Set
-$$
-s_k = \alpha_k p_k
-$$
-$$
-y_k = \nabla f(x_{k+1}) - \nabla f(x_k)
-$$
-    \State Update the inverse hessian approximation
-$$
-H_{k+1}
-= H_k + \frac{
-(s_k^T y_k + y_k^T H_k y_k)(s_k s_k^T)
-}{(s_k^T y_k)^2}
-- \frac{
-H_k y_k s_k^T + s_k y_k^T H_k
-}{s_k^T y_k}
-$$
-\end{algorithmic}
-\end{algorithm}
-
-\cite{lbfgs_num_opt}
-
-
-
-\subsubsection{L-BFGS}
-
-In practice, the matrices $H_k$ constructed by BFGS are often dense,
-(even in situaitons where the true hessian is itself sparse).
-Storing this dense matrix requires $O(n^2)$ memory, which can be out of reach
-for some problems.
-
-Limited-memory BFGS provides an memory efficient alternative.
-The key observation is that the iteration of the solution only requires evaluation of
-the matrix-vector product $H_k \nabla f(x_k)$,
-not the full matrix $H_k$.
-
-%H_k implicitely using vects S_i, y_i from last few iters
+%\subsection{Limited-memory BFGS (L-BFGS)}
+%Limited-memory BFGS method is
+%iterative quasi-Newton method for solving unconstrained minimalization problems
+%under tight memory constrains.
 %
-%H_k+1 = V_k H_k ... + sdfsdf = do ercurively
-%all depends on 
-%H_0 and then v v^T
-%never need to contruct H explicietly
-%only need ot store vectors making up the expression y_k, s_k - based on x_k and gradf f(x_k)
-
-Recall the update step for the inverse hessian
-$$
-H_{k+1}
-= H_k
-+ \frac{
-(s_k^T y_k + y_k^T H_k y_k)(s_k s_k^T)
-}{
-(s_k^T y_k)^2
-}
-- \frac{
-H_k y_k s_k^T
-+
-s_k y_k^T H_k
-}{
-s_k^T y_k
-}
-$$
-We can equivalently rewrite expression as
+%It is a second order method whose cost grow only linearly
+%with the dimension of the parameter space $n$ -
+%unlike the original BFGS, or Newton's methods, 
+%which grow as $n^2$ and $n^3$ respectively.
+%
+%As such, it is well equipped for problmes with large number of variables.
+%%preconditioning the gradient with curvature infomation 
+%%L-BFGS is a computer memory aware variant of the quisi Newton BFGS mothed
+%
+%\cite{lbfgs_uw}
+%
+%\subsubsection{
+%Broyden-Fletcher-Goldfarb-Shanno algorithm (BFGS)
+%}
+%
+%Consider the unconstrained minimization problem
 %$$
-%H_{k+1} = (I-\rho_k s_k y_k^T)H_k(I-\rho_k y_k s_k^T)
-%+ \rho_k s_k s_k^T,
-%\qquad
-%\rho_k = \frac{1}{y_k^T s_k}.
+%\min_{x\in R^n} f(x)
 %$$
-$$
-H_{k+1} =
-V_{k}^T
-H_{k}
-V_{k}
-+
-\rho_{k}s_{k}s_{k}^T
-$$
-where
-$$
-V_k = I - \rho_k y_k s_k^T\,,\quad
-\rho_k = \frac{1}{s_k^T y_k}
-$$
+%where $f:\mathbb R^n\to \mathbb R$ is differentiable function.
+%
+%In Newton's method, we iterate the initial guess, $x_0$, as
+%$$
+%x_{k+1} = x_k - \left[\nabla^2f(x_k)\right]^{-1}\nabla f(x_k).
+%$$
+%
+%In BFGS, instead of computing the true hessian $\nabla^2 f(x_k)$,
+%the method builds an appriximate hessian $B_k$.
+%
+%The search direction $p_k$ is then given as a soluton to the Newton equation,
+%now with the approximated hessian
+%$$
+%B_k p_k = - \nabla f(x_k)\,.
+%$$
+%
+%A line search in the direction of $p_k$ is then performed to 
+%find the next point $x_{k+1}$, by minimizing
+%$f(x_k+\alpha\,p_k)$ over $\alpha>0$.
+%
+%We then define
+%$$
+%s_k = x_{k+1}-x_k\,, \qquad
+%y_k = \nabla f(x_{k+1}) - \nabla f(x_k)
+%$$
+%and impose the quasi-Newton condition on the update of $B_k$
+%$$
+%B_{k+1}s_k = y_k \,,
+%$$
+%which is a secant equation
+%expressing the observed change in gradient along the step direction.
+%Note, that for $B_{k+1}$ to be positive definite, the condition
+%$$
+%s_k^T B_{k+1} s_k =
+%s_k^T y_k > 0
+%$$
+%should be satisfied.
+%If the functin is non strinly convex, this condition can in some cases be 
+%enforced explicitely by the inexact linesearch with wolfre conditions,
+%which provide an efficient way to computing an approximate step size $\alpha$
+%rather than en exact one.
+%%we generally perform a inexact line search according to wolfre conditions -
+%
+%To maintain symmetry and positive difinitness of $B_k$.
+%The hessian update rule is cosntructed as
+%$$
+%B_{k+1}
+%= B_k
+%+ \frac{y_k y_k^T}{y_k^T s_k}
+%- \frac{B_k s_k s_k^T B_k}{s_k^T B_k s_k}.
+%$$
+%%As long as the initial matrix is positive definite it is possible to show that all the follow matrices will be as well.
+%
+%%Note the slighlty counter intuitive notaion
+%%by $H_k$ we mean the inverse hessian.
+%%by $B_k$ we mean the hessian
+%%or equivalently, an approximation $H_k = B_k^{-1}$ of the inverse hessian.
+%The first step of the presented algorithm amounts to solving 
+%$$
+%B_k p_k = - \nabla f(x_k)\,.
+%$$
+%We can however, avoid this computation by
+%approximating the inverse Hessian instead of the hessian itself.
+%The corresponding form for the appriximate inverse-hessian $H_{k+1}$ is then
+%$$
+%H_{k+1}
+%= H_k + \frac{
+%(s_k^T y_k + y_k^T H_k y_k)(s_k s_k^T)
+%}{(s_k^T y_k)^2}
+%- \frac{
+%H_k y_k s_k^T + s_k y_k^T H_k
+%}{s_k^T y_k}
+%$$
+%
+%
+%We can summarize the method as so:
+%
+%\begin{algorithm}[H]
+%\caption{BFGS}
+%\begin{algorithmic}[1]
+%    \State Obtain the search direction from $p_k=-H_k\nabla f(x_k)$
+%    \State Perform 1-dimensional line search
+%$$
+%\alpha_k = \operatorname{argmin}_\alpha f(x_k+\alpha p_k)\,,
+%$$
+%or inexact line search with Wolfe conditions to obrain $\alpha_k$.
+%    \State Update
+%$$
+%x_{k+1} = x_{k} + \alpha_k p_k
+%$$
+%    \State Set
+%$$
+%s_k = \alpha_k p_k
+%$$
+%$$
+%y_k = \nabla f(x_{k+1}) - \nabla f(x_k)
+%$$
+%    \State Update the inverse hessian approximation
+%$$
+%H_{k+1}
+%= H_k + \frac{
+%(s_k^T y_k + y_k^T H_k y_k)(s_k s_k^T)
+%}{(s_k^T y_k)^2}
+%- \frac{
+%H_k y_k s_k^T + s_k y_k^T H_k
+%}{s_k^T y_k}
+%$$
+%\end{algorithmic}
+%\end{algorithm}
+%
+%\cite{lbfgs_num_opt}
 
-By recursively apply this relation for $H_k$ $m$ times,
-we obtain an expression consisitng only of
-matrices of type $v w^T$,
-and an initial matrix $H_{k-m}$,
-which we set as some sparse or diagonal matrix $H^0$.
-Notice also, that apart from the initial matrix $H^0$,
-this recursively decomposed expression consists only of $m$ pairs of
-vectors $y_k, s_k$.
 
-Next, note that the outer-product matrices allow ut to rewrite
-a matrix-vector multiplication
-as a vector-vector multiplication
-$$
-(u v^T) w = (v^T w) u
-$$
 
-Together, we can thus replace the dense matrix-vector multiplication
-$$
-p_k = -H_k \nabla f(x_k)
-$$
-from step 1, and the inverse hessian update at step 5
-in the BFGS algorithm.
+%\subsubsection{L-BFGS}
+%
+%In practice, the matrices $H_k$ constructed by BFGS are often dense,
+%(even in situaitons where the true hessian is itself sparse).
+%Storing this dense matrix requires $O(n^2)$ memory, which can be out of reach
+%for some problems.
+%
+%Limited-memory BFGS provides an memory efficient alternative.
+%The key observation is that the iteration of the solution only requires evaluation of
+%the matrix-vector product $H_k \nabla f(x_k)$,
+%not the full matrix $H_k$.
+%
+%%H_k implicitely using vects S_i, y_i from last few iters
+%%
+%%H_k+1 = V_k H_k ... + sdfsdf = do ercurively
+%%all depends on 
+%%H_0 and then v v^T
+%%never need to contruct H explicietly
+%%only need ot store vectors making up the expression y_k, s_k - based on x_k and gradf f(x_k)
+%
+%Recall the update step for the inverse hessian
+%$$
+%H_{k+1}
+%= H_k
+%+ \frac{
+%(s_k^T y_k + y_k^T H_k y_k)(s_k s_k^T)
+%}{
+%(s_k^T y_k)^2
+%}
+%- \frac{
+%H_k y_k s_k^T
+%+
+%s_k y_k^T H_k
+%}{
+%s_k^T y_k
+%}
+%$$
+%We can equivalently rewrite expression as
+%%$$
+%%H_{k+1} = (I-\rho_k s_k y_k^T)H_k(I-\rho_k y_k s_k^T)
+%%+ \rho_k s_k s_k^T,
+%%\qquad
+%%\rho_k = \frac{1}{y_k^T s_k}.
+%%$$
+%$$
+%H_{k+1} =
+%V_{k}^T
+%H_{k}
+%V_{k}
+%+
+%\rho_{k}s_{k}s_{k}^T
+%$$
+%where
+%$$
+%V_k = I - \rho_k y_k s_k^T\,,\quad
+%\rho_k = \frac{1}{s_k^T y_k}
+%$$
+%
+%By recursively apply this relation for $H_k$ $m$ times,
+%we obtain an expression consisitng only of
+%matrices of type $v w^T$,
+%and an initial matrix $H_{k-m}$,
+%which we set as some sparse or diagonal matrix $H^0$.
+%Notice also, that apart from the initial matrix $H^0$,
+%this recursively decomposed expression consists only of $m$ pairs of
+%vectors $y_k, s_k$.
+%
+%Next, note that the outer-product matrices allow ut to rewrite
+%a matrix-vector multiplication
+%as a vector-vector multiplication
+%$$
+%(u v^T) w = (v^T w) u
+%$$
+%
+%Together, we can thus replace the dense matrix-vector multiplication
+%$$
+%p_k = -H_k \nabla f(x_k)
+%$$
+%from step 1, and the inverse hessian update at step 5
+%in the BFGS algorithm.
+%
+%Instead, due to the recursice decoposition of $H_k$ given above, at iteration $k$, L-BFGS computes
+%$$
+%p_k = -H_k \nabla f(x_k)
+%$$
+%using only vector-vector multiplications and one sparse-matrix-vector multiplication.
+%Algorihtmically, this computation is
+%implemented as a the two-loop recursion, 
+%requiring on the order of $O(mn)$ vector-vector multiplications
+%
+%Together, L-BFGS replaces
+%the $O(n^2)$ storage of BFGS and a dense matrix-vector multiplication
+%by storing only $m$ pairs of $n$-dimensional vectors, and $O(mn)$
+%vector-vector multiplications.
+%
+%When $m \ll n$, and especially when $m$ is treated as a small constant
+%(recommended values range from 10 to 100),
+%the memory requirement becomes $O(mn)$ - 
+%linear in the number of variables.
+%
+%\cite{lbfgs_uw}
 
-Instead, due to the recursice decoposition of $H_k$ given above, at iteration $k$, L-BFGS computes
-$$
-p_k = -H_k \nabla f(x_k)
-$$
-using only vector-vector multiplications and one sparse-matrix-vector multiplication.
-Algorihtmically, this computation is
-implemented as a the two-loop recursion, 
-requiring on the order of $O(mn)$ vector-vector multiplications
 
-Together, L-BFGS replaces
-the $O(n^2)$ storage of BFGS and a dense matrix-vector multiplication
-by storing only $m$ pairs of $n$-dimensional vectors, and $O(mn)$
-vector-vector multiplications.
-
-When $m \ll n$, and especially when $m$ is treated as a small constant
-(recommended values range from 10 to 100),
-the memory requirement becomes $O(mn)$ - 
-linear in the number of variables.
-
-\cite{lbfgs_uw}
 
 %\subsubsection{UWM: L-BFGS}
 %
@@ -991,34 +1057,34 @@ linear in the number of variables.
 %mem and comp to O(d)
 
 
-\subsection{Adam vs L-BFGS}
-% line search steps ~ 10
-% 
-
-pinns: adam good initial explorer
-lbfgs: good final one in convex landscape
-\cite{loss_landscape}
-
-
-
-\section{TBE: Network size and training hyperparameters}
-
-{\color{red}
-system dependent - linear, nonlinear, stiff, ode, pde, timedependent, 
-- netowrk size
-- sampling
-- bs
-- optimizer
-}
-
-The choice of neural network architecture and training hyperparameters plays a
-crutial role in the performance of physics-informed neural networks.
-However, there is not definitive theory linking the differential equation at hand
-to an optimal network architecture.
-
-Various different strategies.
-Here, we present an overview of a few publicaitons and the utilized neural nework and hyperparameter choices.
-overview of commonly utilized 
+%\subsection{Adam vs L-BFGS}
+%% line search steps ~ 10
+%% 
+%
+%pinns: adam good initial explorer
+%lbfgs: good final one in convex landscape
+%\cite{loss_landscape}
+%
+%
+%
+%\section{TBE: Network size and training hyperparameters}
+%
+%{\color{red}
+%system dependent - linear, nonlinear, stiff, ode, pde, timedependent, 
+%- netowrk size
+%- sampling
+%- bs
+%- optimizer
+%}
+%
+%The choice of neural network architecture and training hyperparameters plays a
+%crutial role in the performance of physics-informed neural networks.
+%However, there is not definitive theory linking the differential equation at hand
+%to an optimal network architecture.
+%
+%Various different strategies.
+%Here, we present an overview of a few publicaitons and the utilized neural nework and hyperparameter choices.
+%overview of commonly utilized 
 
 
 %1d / 2d smaller
@@ -1249,16 +1315,16 @@ trainsient problems. sensitivity to ic
 
 Thus a few competing strategies have emerged as a viable alternatives to the original formulation.
 
-\subsection{Time marching}
-One simple approach is to divide the time interval into multiple segments
-and train a separete neural network for each one.
-The networks have to be trained in series,
-as the terminal state of the $k$-th network is taken as the
-initial condition for the $(k+1)$-th network.
-\cite{time_adaptive_pinns}
+%\subsection{Time marching}
+%One simple approach is to divide the time interval into multiple segments
+%and train a separete neural network for each one.
+%The networks have to be trained in series,
+%as the terminal state of the $k$-th network is taken as the
+%initial condition for the $(k+1)$-th network.
+%\cite{time_adaptive_pinns}
 
 \subsection{Time-adaptive sampling}
-Alternatively, we might simply address the problem on the sampling side,
+We might simply address the problem on the sampling side,
 by training the network on a temporal domain that progressively increases during training.
 Concretely, we train the network on the time interval
 $[0,\tau]$, where $\tau$ depends on the current training state simply as
@@ -1274,7 +1340,7 @@ $\tau\sim \frac{e}{E}\,T$, where $E$ is the total number of epochs and $e$ is th
 % - compute grad desc. on all
 % - average model param update
 
-A completely different perspective was offered by Wang et al.
+A completely different perspective was offered by Wang et al.\cite{experts_guide}
 They propose to adress this issue by modifyiing the loss funtion itself:
 by partitioning the time domain $[0,T]$ into $M$ ordered segments
 $[t_{m-1}, t_m),\:m=1,\dots,M\,,\:
@@ -1308,66 +1374,73 @@ Note that the weights $w_m$ are detached from the computational graph, that is, 
 
 \section{Other}
 activations - tanh / silu (smooth)
+Tanh problem with vanishing gradient, 
+tanh standartly used
+
+Silu better for deeper nets.
+silu a smooth version fo the frequently used relu activation
 $$
 silu(x) = x \cdot \sigma(x)
 $$
-NNs learn low freq sol first
 
 
-\subsection{TBA: Random Fourier features}
-As reported by , neural networks are biased for learning low frequency signals first
-before proceeding to learn high freq ones.
-\cite{experts_guide}
 
-In 2019, Rahaman et al.
-consider uniform distributio of training data
-learn low freq smooth patterns before high freq ones
-learn low freq first even when high freq have large amplitudes
-low freq stable when perturbing netwrork params
-consider nns with relu activations trained via gradient descent
-use fourier analysis
-call this phenomena spectral bias
-\cite{spectral_bias_relu}
-
-More interesting for our case:
-extends to non-uniform data - in the context of pinns - one region sampled more than other
-use NTK (Neural Tanget Kernel) theory
-- looks at $K(x_i,x_j)=
-<\frac{\partial NN_\theta(x_i)}{\partial \theta},
-<\frac{\partial NN_\theta(x_j)}{\partial \theta}>$
-consider training for harmonic target function with freq $\kappa$
-speed of training convergence at a points $x$ is proportial to
-$O(\frac{\kappa^d}{p(x)})$ where $p(x)$ is a local data density
-$d$ - input dimension of the NN
-\cite{freq_bias_NTK}
-
-solution coming from computer vision
-$$
-\gamma(x) =
-\begin{pmatrix}
-    \cos(2\pi B x)\\
-    \sin(2\pi B x)
-\end{pmatrix}
-$$
-$B\in\mathbb R^{m\times d}$ sampled from Gaussian distribution $\mathcal N(0,\sigma^2)$
-spatial / tempotal
-\cite{fourfeat}
+%\subsection{TBA: Random Fourier features}
+%As reported by , neural networks are biased for learning low frequency signals first
+%before proceeding to learn high freq ones.
+%\cite{experts_guide}
+%
+%In 2019, Rahaman et al.
+%consider uniform distributio of training data
+%learn low freq smooth patterns before high freq ones
+%learn low freq first even when high freq have large amplitudes
+%low freq stable when perturbing netwrork params
+%consider nns with relu activations trained via gradient descent
+%use fourier analysis
+%call this phenomena spectral bias
+%\cite{spectral_bias_relu}
+%
+%More interesting for our case:
+%extends to non-uniform data - in the context of pinns - one region sampled more than other
+%use NTK (Neural Tanget Kernel) theory
+%- looks at $K(x_i,x_j)=
+%<\frac{\partial NN_\theta(x_i)}{\partial \theta},
+%<\frac{\partial NN_\theta(x_j)}{\partial \theta}>$
+%consider training for harmonic target function with freq $\kappa$
+%speed of training convergence at a points $x$ is proportial to
+%$O(\frac{\kappa^d}{p(x)})$ where $p(x)$ is a local data density
+%$d$ - input dimension of the NN
+%\cite{freq_bias_NTK}
+%
+%solution coming from computer vision
+%$$
+%\gamma(x) =
+%\begin{pmatrix}
+%    \cos(2\pi B x)\\
+%    \sin(2\pi B x)
+%\end{pmatrix}
+%$$
+%$B\in\mathbb R^{m\times d}$ sampled from Gaussian distribution $\mathcal N(0,\sigma^2)$
+%spatial / tempotal
+%\cite{fourfeat}
 
 
 \section{Loss landscape}
 TD:
 Summarize the most important influencers of the loss landacape
 
+bs, weight before losses, 
+
 short - give just a table or smthg
 
-\subsection{BS theory}
-The deciding factor between using a single large batch or set of smaller ones is not just the size of the dataset.
-For exmaple, small batch sizes are more noisy and can thus offer a regulizing effect for the network - enabling it to escape local miniam. On the other hand, large batch sizes give a more accurrate estimate of the gradient.
-The choice also depends on the hardware, espetially when using GPUs - as they are quite limited by VRAM, and their architecture makes them prefer a power of 2 batchsize. 
-\cite{goodfellow}
-\subsection{AD vs FD}
-\subsection{Adam vs LBFGS}
-\subsection{loss terms - weights}
+%\subsection{BS theory}
+%The deciding factor between using a single large batch or set of smaller ones is not just the size of the dataset.
+%For exmaple, small batch sizes are more noisy and can thus offer a regulizing effect for the network - enabling it to escape local miniam. On the other hand, large batch sizes give a more accurrate estimate of the gradient.
+%The choice also depends on the hardware, espetially when using GPUs - as they are quite limited by VRAM, and their architecture makes them prefer a power of 2 batchsize. 
+%\cite{goodfellow}
+%\subsection{AD vs FD}
+%\subsection{Adam vs LBFGS}
+%\subsection{loss terms - weights}
 
 
 %\subsubsection{Random Weight Factorization}
@@ -1447,12 +1520,12 @@ The network must be expressive enough (enough params) to represent the solution,
 but then the optimization landscape can be very rough.
 
 \subsection{Adressing CoD}
-a) sampling - sample adaptively, random walks - Feynman-Kac
-b) approx the laplace SDGD, Hutchinson
+a) sampling - sample adaptively, %random walks - Feynman-Kac
+b) approx the laplace SDGD, %Hutchinson
 c) adapting weighting schemes for residual weights $\lambda$
 d) other
 
-
+IN the next section, we give a few ideas for handling the curse of dimensionality
 
 \subsection{Domain sampling strategies}
 
@@ -1469,16 +1542,15 @@ In one dimension, LHC divides a segment into M equally probable intervals and sa
 In multi dimensional domains, 1-dimensional samples are generated independently and then paired to form d-dimensinoal points.
 % pg 11 system rev
 
+
+%\textbf{a) RAR-G (Redisual-based adaptive resampling with greed)}
+%We simply sample a large pools of candidate points $X_{cand}$, and then pick a subset with the smallest residuum.
+
 \subsubsection{Residual-based adaptive resampling (RAR)}
+%\textbf{b) RAR-D (Redisual-based adaptive resampling with distribution)}
 The sampling can be made more effective by concentrating the samples on regions where the network struggles the most.
 Concretely, we can sample the domain proportianally to the value of the residual.
-Following Lulu etc. \cite{deepxde}\cite{rar}, we consider two such approaches:
-
-\textbf{a) RAR-G (Redisual-based adaptive resampling with greed)}
-
-We simply sample a large pools of candidate points $X_{cand}$, and then pick a subset with the smallest residuum.
-
-\textbf{b) RAR-D (Redisual-based adaptive resampling with distribution)}
+Following Lulu etc. \cite{deepxde}\cite{rar}, the method proceeds as follows
 
 We sample a large pools of candidate points $X_{cand}$, calculate the residuum at each point $\epsilon(X):=\mathcal R(x,u_\theta)$,
 and pick a subset of points with probability proportial to
@@ -1493,7 +1565,7 @@ where $k,c\ge0$ are hyperparameters.
 % rar-d
 \begin{figure}
     \centering
-    \includegraphics[width=150mm]{figures/sampling_kc.png}
+    \includegraphics[width=\linewidth]{figures/sampling_kc.png}
     \caption{RAR-D}
     \label{fig:rar-d}
 \end{figure}
@@ -1516,9 +1588,8 @@ where $k,c\ge0$ are hyperparameters.
 %    - keep top 30percent of highest-residual points, resample the rest with RAD weights.
 %
 
-\subsubsection{SDE sampling}
-Euler Maruyama
-
+%\subsubsection{SDE sampling}
+%Euler Maruyama
 
 
 \subsection{Appoximating the spatial derivatives}
@@ -1531,7 +1602,7 @@ This dramatically decreases the memory requirements of AD and theoretically unlo
 
 Consider a linear PDE of the form:
 $$
-\mathcal{L}u(x) = f(x)
+\mathcal{L}u(x) = 0
 $$
 where, $\mathcal{L}$ is a differential operator, for example,
 
@@ -1559,7 +1630,7 @@ $$
 
 We can therefore write
 $$
-\sum_{i=1}^n\mathcal{L}_i u(x) = f(x)
+\sum_{i=1}^n\mathcal{L}_i u(x) = 0
 $$
 
 Now consider a PINN approximation $u_\theta \approx u$. 
@@ -1567,15 +1638,15 @@ The pde loss at a point $x\in\mathbb{R}^d$ can then be written in the form
 
 $$
 \ell_{pde}(\theta;x)
-= \big( \mathcal{L} u_\theta(x) - f(x) \big)^2
-= \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(x) - f(x) \right)^2
+= \big( \mathcal{L} u_\theta(x) \big)^2
+= \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(x) \right)^2
 $$
 
 And the corresponding gradient w.r.t. the model weights is then
 
 $$
-\nabla_\theta \ell_{pde}(\theta;x) = \nabla_\theta \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(x) - f(x) \right)^2
-= 2 \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(x) - f(x) \right) \left( \sum_{i=1}^n \nabla_\theta \mathcal{L}_i u_\theta(x) \right)
+\nabla_\theta \ell_{pde}(\theta;x) = \nabla_\theta \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(x) \right)^2
+= 2 \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(x) \right) \left( \sum_{i=1}^n \nabla_\theta \mathcal{L}_i u_\theta(x) \right)
 $$
 
 Finally, we consider a subset $I \subset \{1, \dots, n\}$ with $|I| \ll n$, and approximate the last term from the equation above,
@@ -1597,7 +1668,7 @@ In the context of the training loop, SDGD is implemented as follows:
 \item Compute $\mathcal{L}_i u_\theta(X)$ for all $i=1,\dots,n$ and detach the computational graph behind the terms $i\notin I$ from memory
 \item Backpropagate w.r.t the model parameters $\nabla_\theta$
 $$
-\nabla_\theta \ell_{pde}^I(\theta;X) = 2\,\frac{n}{|I|} \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(X) - R \right) \nabla_\theta \left( \sum_{i \in I} \mathcal{L}_i u_\theta(X) \right)
+\nabla_\theta \ell_{pde}^I(\theta;X) = 2\,\frac{n}{|I|} \left( \sum_{i=1}^n \mathcal{L}_i u_\theta(X) \right) \nabla_\theta \left( \sum_{i \in I} \mathcal{L}_i u_\theta(X) \right)
 $$
 \end{enumerate}
 The backpropagation will only reach the model weights though the terms $i \in I$,
@@ -1683,74 +1754,6 @@ and are thus treated as scalars by the backpropagation algorithm.
 \item float32 / float64
 \end{itemize}
 
-\section{Numerical experiments notes}
-
-\subsection{training and accuracy metrics}
-
-As dimensionality $d$ increases, the geometry of the space changes drastically,
-and the volume shifts aggressively toward the boundaries.
-- the notorious peak of the orange has more volume that its core (see Appendix)
-
-
-A. Relative l2 error, for:
-IC,TC pred vs true, if analytical known: PDE pred vs true
-$$
-\frac{
-\sum_{i=1}^n(\hat y_i - y_i)^2
-}{
-\sum_{i=1}^n(y_i)^2
-}
-$$
-where $\hat y_i$ are the predictions and $y_i$ is the ground truth value.
-use LHS
-
-B. $L^\infty$ err, for:
-IC,TC pred vs true, if analytic known: PDE pred vs true
-$$
-E_\infty = \max_\Omega\|\hat{y}_i - y_i\|
-$$
-need to look at the section of the domain where the solution is to have the max value
-sample the center via gaussian?
-
-select a few important time slides and compute the errs there
-- IC
-- in between
-- TC
-
-we report total $L^\infty$ error, we mean the max
-$$
-max(
-L^\infty_{pde},\,
-L^\infty_{bc},\,
-L^\infty_{ic}
-)
-$$
-by relative $L^2$, we mean the average
-$$
-\frac{
-L^2{pde}+
-L^2{bc}+
-L^2{ic}
-}{3}
-$$
-in this construction the 'relative' keeps its meaning.
-Since comparing a zero prediciton with a nonzero solution gives 1.
-
-
-%For PINNS during training, we also use:
-%- MSE - loss - really needed? - gives same info as normal loss computed during calc...
-%- just do rell2 w.r.t IC / TC / analytic
-
-
-\begin{itemize}
-\item run 5 times with diff random seeds
-\item sample a large set of points and each loggin step, do:
-\item - compute the residual MSE - effective a loss on this set
-\item - compute the rel2 err for IC
-\item early stopping
-\item - when some loss val reached
-\end{itemize}
-
 
 % \subsection{Grid search}
 % importance of weights of losses
@@ -1802,6 +1805,109 @@ Since comparing a zero prediciton with a nonzero solution gives 1.
 % \subsection{Results}
 % use Heat eq. does loss follow rel l2?
 
+
+
+\section{Implementation}
+\label{sec:implementation}
+
+The Physics-informed neural netowrk was implemented in Python using PyTorch.
+
+PyTorch supports multiple optins for computing the gradinet w.r.t. the model inputs.
+One such opitons is forward over revere and reverse over forward and hessian and then reduce.
+- functinal, efficient.
+The network output and its required derivatives are computed with
+
+All construct the hessian in some way which reguires $O(d^2)$ storage.
+
+Also suppose \texttt{torch.autograd.grad}
+can be computed in a for loop
+
+Snipper of the gradient and laplce calculation using AD in torch.
+\begin{lstlisting}[language=Python]
+def compute_derivatives(model, X, compute_laplace=True):
+    """
+    Compute u, grad u, and laplace u
+    X: (batch_size, D) where D = d + 1 (spatial dims + time)
+    """
+    u = model(X)
+    bs, D = X.shape
+
+    with record_function("grad_u"):
+        # Gradient - spatial & temporatal
+        grad_u = torch.autograd.grad(
+            inputs=X,
+            outputs=u,
+            grad_outputs=torch.ones_like(u),
+            create_graph=True,
+            retain_graph=True,
+        )[0]
+
+    if compute_laplace: 
+        with record_function("laplace_u"):
+            # Laplacian - spatial only
+            spatial_laplace_u = []
+            for i in range(D-1):
+                hess_row = torch.autograd.grad(
+                    inputs=X,
+                    outputs=grad_u[:,i].sum(),
+                    grad_outputs=torch.ones((), device=X.device, dtype=X.dtype),
+                    create_graph=True,
+                    retain_graph=True
+                )[0]
+                spatial_laplace_u.append(hess_row[:,i:i+1])
+        spatial_laplace_u = torch.cat(spatial_laplace_u, dim=1)
+    else:
+        spatial_laplace_u = None
+
+    # shapes: bs x 1, bs x D, bs x D-1
+    return u, grad_u, spatial_laplace_u
+\end{lstlisting}
+
+This yields the time derivative and spatial gradient directly,
+while the Laplacian is obtained by differentiating the spatial gradient once more and extracting only the diagonal second derivatives.
+In this way, the implementation evaluates the strong-form residual without forming the full Hessian matrix.
+
+As for code optimizaiton, torch profiler in conjuction with the
+perfetto visualization software were utilized.
+
+In particular, perfetto allowed the discovery of a serious 
+performace issue of the native torches Dataloader class.
+
+As a result, the pipepile was altered to preparet the required
+data manually shuffle and prepare instead of relying on the default
+dataloader batch iteration which is optimized for handling 
+much larger and more complex deep learning datasets.
+
+https://perfetto.dev/
+
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\linewidth]{figures/perfetto.png}
+    \caption{Screenshot from Perfetto, which enables visual inspection of elementary Torch operations.
+    Note the \texttt{grad\_u} and \texttt{laplace\_u} labels at the bottom, corresponding to the \texttt{record} marking in the provided code snippet.}
+    \label{fig:perfetto}
+\end{figure}
+
+
+
+%\subsection{Optional L-BFGS refinement}
+%
+%Besides Adam, the implementation also supports L-BFGS through
+%\texttt{torch.optim.LBFGS}.
+%In the present codebase, this optimizer is mainly intended as a refinement stage
+%after an Adam pretraining phase, or for smaller experiments where the collocation
+%set is kept fixed and the optimization is effectively close to full-batch.
+%Since L-BFGS evaluates the closure repeatedly within one optimization step, it is
+%considerably less natural for aggressively resampled stochastic training, but it
+%can still be useful when the loss is already in a reasonably good basin and a
+%more deterministic local improvement is desired.
+
+
+
+
+
+
 \chapter{to state in Conclusion}
 
 speed and precision still on the side of sparse grids?
@@ -1820,7 +1926,3 @@ $$ x^T A\,x \ge 0, \quad \forall x\in\mathbb{R}^n, \: x\neq 0 $$
 
 \cite{experts_guide}
 \cite{systematic_review}
-
-
-
-

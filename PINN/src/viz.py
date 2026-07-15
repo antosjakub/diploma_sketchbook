@@ -442,7 +442,7 @@ def plot_score_pde():
         #a = 0.7 + 0.5*torch.rand(d)
         #gamma = 0.1*torch.rand(d) - 0.05
         a = 0.7 + 0.3*torch.ones(d)
-        gamma = 0.03 * (2*((torch.rand(d)-0.5)>0.0).int()-1).float() # +- 0.03
+        gamma = 0.03 * ( 2*( torch.rand(d)-0.5 > 0.0 ).int() - 1 ).float() # +- 0.03
         print(a)
         print(gamma)
         print(a[:2])

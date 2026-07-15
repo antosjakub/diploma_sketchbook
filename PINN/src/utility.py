@@ -202,11 +202,13 @@ class Profiler():
 
 
 def layers_from_string(layers_string):
-    return list(map(lambda x: int(x.strip()), layers_string.split(",")))
+    return ints_from_string_list(layers_string)
 
+def ints_from_string_list(s):
+    return list(map(lambda x: int(x.strip()), s.split(",")))
 
-def floats_from_string_list(string):
-    return list(map(lambda x: float(x.strip()), string.split(",")))
+def floats_from_string_list(s):
+    return list(map(lambda x: float(x.strip()), s.split(",")))
 
 
 import inspect
@@ -357,6 +359,7 @@ class TestingSuiteHeatEq:
         self.test_file_exists = False
         self.test_file_path = None
         self.keep_in_cache = True
+        self.analytic_terms = ("pde", "ic")
     
     def connect_test_data(self, file_path: str):
         import os
@@ -369,7 +372,7 @@ class TestingSuiteHeatEq:
             )
         data = payload["data"]
 
-        for term in ("pde", "ic"):
+        for term in self.analytic_terms:
             X_key = f"X_{term}"
             analytic_key = f"analytic_{term}"
             if X_key not in data:
@@ -406,7 +409,7 @@ class TestingSuiteHeatEq:
             )
 
         data = {}
-        for term in ("pde", "ic"):
+        for term in self.analytic_terms:
             loader = bundle[term]
             data[f"X_{term}"] = _to_cpu(loader.dataset.X)
             with torch.no_grad():
@@ -452,7 +455,7 @@ class TestingSuiteHeatEq:
         model.eval()
         eps = 1e-12
 
-        for term in ("pde", "ic"):
+        for term in self.analytic_terms:
             X = data[f"X_{term}"]
             analytic = data[f"analytic_{term}"]
             err_sq = 0.0

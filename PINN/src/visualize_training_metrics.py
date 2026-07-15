@@ -32,7 +32,7 @@ def plot_time_adapt_sampling(Ts, file_name):
 
 
 def plot_hist_data_dict(hist_data_dict, file_name, label_fn, line_width_fn, color_fn, y_label, title, x=None,
-                        figsize=(10,4), color_prop=None):
+                        figsize=(10,4), color_prop=None, use_ylog=True):
     """
     hist_data_dict: ex. {'pde': [], 'bc': []}
     color_prop = None, "plasma", ...
@@ -41,6 +41,10 @@ def plot_hist_data_dict(hist_data_dict, file_name, label_fn, line_width_fn, colo
 
 
     plt.figure(figsize=figsize)
+    if use_ylog:
+        plt_fn=plt.semilogy
+    else:
+        plt_fn=plt.plot
     
     if isinstance(hist_data_dict, dict):
         # plasma good for causal weights w_m
@@ -64,19 +68,19 @@ def plot_hist_data_dict(hist_data_dict, file_name, label_fn, line_width_fn, colo
             }
             if color_fn(name) != None:
                 if x is not None:
-                    plt.semilogy(x, series, **params, color=color_fn(name))
+                    plt_fn(x, series, **params, color=color_fn(name))
                 else:
-                    plt.semilogy(series, **params, color=color_fn(name))
+                    plt_fn(series, **params, color=color_fn(name))
             else:
                 if x is not None:
-                    plt.semilogy(x, series, **params)
+                    plt_fn(x, series, **params)
                 else:
-                    plt.semilogy(series, **params)
+                    plt_fn(series, **params)
         
         # Increased legend font size
         plt.legend(fontsize=14)
     else:
-        plt.semilogy(_to_plot_series(hist_data_dict))
+        plt_fn(_to_plot_series(hist_data_dict))
     
     # Increased label and title font sizes
     plt.xlabel('steps', fontsize=14)
@@ -122,6 +126,8 @@ def plot_test_rel_l2(test_data_dict, file_name, x):
     plot_hist_data_dict(test_data_dict, file_name, lambda name: rf"rel $L^2_{{{name}}}$", lambda name: 1.0, lambda name: 'black' if name == 'total' else None, r'rel $L^2$ error', r"Testing: Relative $L^2$ error", x=x)
 def plot_test_linf(test_data_dict, file_name, x):
     plot_hist_data_dict(test_data_dict, file_name, lambda name: rf"$L^\infty_{{{name}}}$", lambda name: 1.0, lambda name: 'black' if name == 'total' else None, r'$L^\infty$ error', r"Testing: $L^\infty$ error", x=x)
+def plot_test_norm(test_data_dict, file_name, x):
+    plot_hist_data_dict(test_data_dict, file_name, lambda name: rf"$t={{{name}}}$", lambda name: 1.0, lambda name: None, r'Normalization error', r"Testing: normalization error", x=x, use_ylog=False)
 
 
 

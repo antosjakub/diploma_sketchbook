@@ -85,23 +85,41 @@ class PINN_Trainer:
         for _ in range(n_batches):
             yield {k: self._next_batch_fast(k) for k in self.active_losses}
 
-    def normalization_loss(self, x, model, precomputed, n_time_slices=4):
-        """Importance-sampled estimate of (∫p(x,t) dx - 1)^2, averaged over K random
-        time slices. `batch` is (x, {"p_inf": p_inf_x}) from the norm DataLoader;
-        Z is read from pde_model (cached at bundle-build time)."""
-        p_inf_x = precomputed["p_inf"]
-        Z = self.pde_model.Z
-        T = self.sampling_settings.get("T", 1.0)
-        n_batch = x.shape[0]
+    def normalization_loss(self, X, model, precomputed):
+        """Estimate (∫_Omega p(x,t) dx - 1)^2 on random time slices.
 
+        `X` is a batch of spatial points only, shape (N, d). The same spatial
+        points are reused across all sampled time slices within the step.
+        """
+        n_time_slices = self.sampling_settings.get("n_loss_norm_slices", 8)
+        spatial_domain = self.sampling_settings.get("spatial_domain")
+
+
+        T = min( (self.si+self.resampling_frequency)/self.n_steps, 1.0 ) * self.T_max
+
+        n_batch = X.shape[0]
         t = T * torch.rand(n_time_slices, 1, device=self.device)
-        X_rep = x.unsqueeze(0).expand(n_time_slices, n_batch, self.d).reshape(-1, self.d)
+        X_rep = X.unsqueeze(0).expand(n_time_slices, n_batch, self.d).reshape(-1, self.d)
         t_rep = t.unsqueeze(1).expand(n_time_slices, n_batch, 1).reshape(-1, 1)
-        X = torch.cat([X_rep, t_rep], dim=1)
-        p = model(X).reshape(n_time_slices, n_batch)
-        p_inf = p_inf_x.squeeze(-1).unsqueeze(0)
-        integral_est = Z * (p / p_inf).mean(dim=1)
+        X_eval = torch.cat([X_rep, t_rep], dim=1)
+
+        p = model(X_eval).reshape(n_time_slices, n_batch)
+        volume = (spatial_domain[:, 1] - spatial_domain[:, 0]).prod()
+        integral_est = volume * p.mean(dim=1)
         return ((integral_est - 1.0) ** 2).mean()
+
+        #p_inf_x = precomputed["p_inf"]
+        #Z = self.pde_model.Z
+        #T = self.sampling_settings.get("T", 1.0)
+        #n_batch = x.shape[0]
+        #t = T * torch.rand(n_time_slices, 1, device=self.device)
+        #X_rep = x.unsqueeze(0).expand(n_time_slices, n_batch, self.d).reshape(-1, self.d)
+        #t_rep = t.unsqueeze(1).expand(n_time_slices, n_batch, 1).reshape(-1, 1)
+        #X = torch.cat([X_rep, t_rep], dim=1)
+        #p = model(X).reshape(n_time_slices, n_batch)
+        #p_inf = p_inf_x.squeeze(-1).unsqueeze(0)
+        #integral_est = Z * (p / p_inf).mean(dim=1)
+        #return ((integral_est - 1.0) ** 2).mean()
 
     def _loss_term(self, k, batch_term_objs, use_sdgd=False, sdgd_num_dims=None, use_causal_loss_weighting=False, t_discr=None, eps=1.0):
         if k == "pde":
@@ -172,7 +190,7 @@ class PINN_Trainer:
 
     def _build_bundle(self, si, n_steps, resampling_frequency, use_time_adapt_sampling):
         if use_time_adapt_sampling:
-            T = min( (si+resampling_frequency)/n_steps, 1.0 ) * self.T_max
+            T = min( 9.0/8.0 * si/n_steps + 0.1, 1.0 ) * self.T_max
             print(f"si={si}, T={T:.4f}")
             self.sampling_settings["T"] = T
             self.time_adapt_sampl_hist.append(T)
@@ -221,11 +239,14 @@ class PINN_Trainer:
                 self.causal_losses_hist_bc = []
         if use_time_adapt_sampling:
             self.time_adapt_sampl_hist = []
-            self.T_max = self.sampling_settings["T"]
+        self.T_max = self.sampling_settings["T"]
+        self.resampling_frequency = resampling_frequency
+        self.n_steps = n_steps
 
         losses_hist_dict = {"total": [], **{k: [] for k in self.active_losses}}
-        test_rel_l2 = {"pde": [], "ic": []}
-        test_linf = {"pde": [], "ic": []}
+        test_rel_l2 = {term: [] for term in self.testing_suite.analytic_terms}
+        test_linf = {term: [] for term in self.testing_suite.analytic_terms}
+        test_norm = {str(term): [] for term in self.testing_suite.test_norm_slices}
         self.log_steps = []
 
         if self.profiler: self.profiler.make()
@@ -235,6 +256,7 @@ class PINN_Trainer:
         #allow_first_save = True
         #allow_first_save_RAR = True
         for si in range(n_steps):
+            self.si = si
             memory_sample = None
             if self.memory_tracker is not None:
                 memory_sample = self.memory_tracker.sample(si + 1)
@@ -298,14 +320,14 @@ class PINN_Trainer:
 
             if (si + 1) % logging_frequency == 0:
                 self.log_steps.append(si+1)
-                parts = [f"Step {si+1}/{n_steps}", f"Loss: {loss_value.item()}"]
+                parts = [f"Step {si+1}/{n_steps}", f"Loss: {loss_value.item():.8f}"]
                 for k in self.active_losses:
-                    parts.append(f"{k}: {last_losses_dict[k]}")
+                    parts.append(f"{k}: {last_losses_dict[k]:.8f}")
                 parts.append(f"lr: {self.optimizer.param_groups[0]['lr']:.6f}")
                 log = ", ".join(parts)
                 print(log)
                 if self.testing_suite is not None:
-                    test_dict_rel_l2, test_dict_linf = self.testing_suite.test_model(self.model, self.pde_model, device=self.device) #,test_bs=self.sampling_settings["bs"])
+                    test_dict_rel_l2, test_dict_linf, test_dict_norm = self.testing_suite.test_model(self.model, self.pde_model, device=self.device) #,test_bs=self.sampling_settings["bs"])
                     test_log_rel_l2 = " - Testing: rel L2  | "
                     for k,v in test_dict_rel_l2.items():
                         test_rel_l2[k].append(v)
@@ -316,6 +338,11 @@ class PINN_Trainer:
                         test_linf[k].append(v)
                         test_log_linf += f"{k}: {v:.6f}, "
                     print(test_log_linf[:-2]) # no ', '
+                    test_log_norm = " - Testing: Norm  | "
+                    for k,v in test_dict_norm.items():
+                        test_norm[k].append(v)
+                        test_log_norm += f"t={k}: {v:.6f}, "
+                    print(test_log_norm[:-2]) # no ', '
                 if memory_sample is not None:
                     mem_log = f" - {self.memory_tracker.format_sample(memory_sample)}"
                     print(mem_log)
@@ -349,11 +376,11 @@ class PINN_Trainer:
 
 
             if (crit_loss_val is not None) and loss_value < crit_loss_val:
-                return losses_hist_dict, test_rel_l2, test_linf
+                return losses_hist_dict, test_rel_l2, test_linf, test_norm
 
         #X = self._fast_batch_sources['pde']['X']
         #torch.save({f"X_last": X}, f"RAR_X_last.pth")
-        return losses_hist_dict, test_rel_l2, test_linf
+        return losses_hist_dict, test_rel_l2, test_linf, test_norm
 
 
     def train_lbfgs(self,
@@ -380,13 +407,17 @@ class PINN_Trainer:
                 self.causal_losses_hist_bc = []
         if use_time_adapt_sampling:
             self.time_adapt_sampl_hist = []
-            self.T_max = self.sampling_settings["T"]
 
         if self.profiler: self.profiler.make()
 
+        self.T_max = self.sampling_settings["T"]
+        self.resampling_frequency = resampling_frequency
+        self.n_steps = n_steps
+
         losses_hist_dict = {"total": [], **{k: [] for k in self.active_losses}}
-        test_rel_l2 = []
-        test_linf = []
+        test_rel_l2 = {term: [] for term in self.testing_suite.analytic_terms}
+        test_linf = {term: [] for term in self.testing_suite.analytic_terms}
+        test_norm = {str(term): [] for term in self.testing_suite.test_norm_slices}
         self.log_steps = []
 
         self.last_losses = None
@@ -423,6 +454,7 @@ class PINN_Trainer:
         self._build_bundle(0, n_steps, resampling_frequency, use_time_adapt_sampling)
 
         for si in range(n_steps):
+            self.si = si
             memory_sample = None
             if self.memory_tracker is not None:
                 memory_sample = self.memory_tracker.sample(si + 1)
@@ -509,15 +541,22 @@ class PINN_Trainer:
                 log = ", ".join(parts)
                 print(log)
                 if self.testing_suite is not None:
-                    test_dict_rel_l2, test_dict_linf = self.testing_suite.test_model(self.model, self.pde_model, device=self.device) #,test_bs=self.sampling_settings["bs"])
-                    test_log_rel_l2 = " - Testing: rel L2  | " + \
-                        ", ".join([f"{k}: {v:.6f}" for k,v in test_dict_rel_l2.items()])
-                    test_rel_l2.append(test_dict_rel_l2)
-                    print(test_log_rel_l2)
-                    test_log_linf = " - Testing: Linf  | " + \
-                        ", ".join([f"{k}: {v:.6f}" for k,v in test_dict_linf.items()])
-                    test_linf.append(test_dict_linf)
-                    print(test_log_linf)
+                    test_dict_rel_l2, test_dict_linf, test_dict_norm = self.testing_suite.test_model(self.model, self.pde_model, device=self.device) #,test_bs=self.sampling_settings["bs"])
+                    test_log_rel_l2 = " - Testing: rel L2  | "
+                    for k,v in test_dict_rel_l2.items():
+                        test_rel_l2[k].append(v)
+                        test_log_rel_l2 += f"{k}: {v:.6f}, "
+                    print(test_log_rel_l2[:-2]) # no ', '
+                    test_log_linf = " - Testing: Linf  | "
+                    for k,v in test_dict_linf.items():
+                        test_linf[k].append(v)
+                        test_log_linf += f"{k}: {v:.6f}, "
+                    print(test_log_linf[:-2]) # no ', '
+                    test_log_norm = " - Testing: Norm  | "
+                    for k,v in test_dict_norm.items():
+                        test_norm[k].append(v)
+                        test_log_norm += f"t={k}: {v:.6f}, "
+                    print(test_log_norm[:-2]) # no ', '
                 if memory_sample is not None:
                     mem_log = f" - {self.memory_tracker.format_sample(memory_sample)}"
                     print(mem_log)
@@ -528,9 +567,9 @@ class PINN_Trainer:
                 print(f" - {next(self.model.parameters()).device}, {loss_value.device}, {batch_term_objs['pde'][0].device.type}")
 
             if (crit_loss_val is not None) and loss_value < crit_loss_val:
-                return losses_hist_dict, test_rel_l2, test_linf
+                return losses_hist_dict, test_rel_l2, test_linf, test_norm
 
-        return losses_hist_dict, test_rel_l2, test_linf
+        return losses_hist_dict, test_rel_l2, test_linf, test_norm
 
 
 

@@ -47,6 +47,10 @@ def add_common_args(parser):
     parser.add_argument("--lambda_strategy", default="fixed", choices=["fixed","gradnorm_adapt","max_adapt"], help="pde,bc,ic loss weighting")
     parser.add_argument("--gradnorm_update_freq", default=50, help="how many steps until we update the weights")
     parser.add_argument("--active_losses", default="pde,ic", type=str, help="Comma-separated subset of {pde,bc,ic,norm}. 'pde' is required.")
+    parser.add_argument("--bc_type", default="dir", type=str, help=["dir", "neu"])
+    # normalization
+    parser.add_argument("--bs_norm", default=1000, type=int, help="")
+    parser.add_argument("--n_norm_slices", default=4, type=int, help="")
     # sampling
     parser.add_argument("--n_res_points", default=10_000, type=int, help="")
     parser.add_argument("--n_trajs", default=1_000, type=int, help="")
@@ -128,6 +132,8 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
         act_fn = torch.nn.Tanh
     elif args.act_fn == 'silu':
         act_fn = torch.nn.SiLU
+    elif args.act_fn == 'softplus':
+        act_fn = torch.nn.Softplus
     elif args.act_fn == 'relu':
         act_fn = torch.nn.ReLU
     else:
@@ -298,18 +304,17 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
         #linf_data = {k: [d[k] for d in test_log_linf] for k in test_log_linf[0]}
         file_name = f'{dir_name}/training_test'
         # tot
-        rel_l2_data['total'] = ( torch.tensor(rel_l2_data['pde']) + torch.tensor(rel_l2_data['ic']) ) / 2.0
-        linf_data['total'] = torch.tensor([
-            linf_data['pde'],
-            linf_data['ic'],
-        ]).max(dim=0).values
+        rel_l2_data['total'] = torch.mean(torch.tensor([ rel_l2_data[term] for term in testing_suite.analytic_terms ]), dim=0)
+        linf_data['total'] = torch.tensor(
+            [ linf_data[term] for term in testing_suite.analytic_terms ]
+        ).max(dim=0).values
         visualize_training_metrics.plot_test_rel_l2(rel_l2_data, file_name+'_rel_l2', x=trainer.log_steps)
         visualize_training_metrics.plot_test_linf(linf_data, file_name+'_linf', x=trainer.log_steps)
         torch.save(rel_l2_data, f'{file_name}_rel_l2.pth')
         torch.save(linf_data, f'{file_name}_linf.pth')
         report["test_rel_l2"] = {}
         report["test_linf"] = {}
-        for term in list(active_losses)+['total']:
+        for term in list(testing_suite.analytic_terms)+['total']:
             for test_metric, test_data in zip(('test_rel_l2', 'test_linf'), (rel_l2_data, linf_data)):
                 last_100 = test_data[term][-100:] if (term == 'total') else torch.tensor(test_data[term])[-100:] 
                 report[test_metric][f"{term}_last"] = last_100[-1].item()
