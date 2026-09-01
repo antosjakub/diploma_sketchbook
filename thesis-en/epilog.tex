@@ -1,19 +1,55 @@
 \chapter*{Conclusion}
 \addcontentsline{toc}{chapter}{Conclusion}
 
+%compared to our supposition taht memory is main bottleneck,
+%runtime is a major issue
+%
+%in case of sg, need to increse the ram or decrase the number of workers
+%
+%in case of pinn, need to run longer, and larger arch need even longer
+%
+%
+%PINNS
+%
+%time hungry
+%non aparent what arch to use
+%
+%SG
+%spatial adaptivity while retaining combi tech - still a an active fielf of reerach.
+%\cite{discoadapt}
+%
+%
+%DOG similar?
+%when who better?
+%low dim sg faster?
+\begin{figure}
+    \centering
+    \includegraphics[width=\linewidth]{figures/threshold_cost_comparison_rel_l2.png}
+    \caption{PINN vs combination technique performance in higher dimensions.
+    In the context of PINNs, the degrees of freedom denote the number of trainable parameters.
+    For the combination technique, it counts the total number of grid points in all component grids.}
+    \label{fig:comparison_epilog}
+\end{figure}
 
-compared to our supposition taht memory is main bottleneck,
-runtime is a major issue
 
-in case of sg, need to increse the ram or decrase the number of workers
+Both the combination technique and physics-informed neural networks are clearly influenced by the curse of dimensionality.
+However, the effect is quite different for each method.
+For sparse grids, the bottleneck is mainly combinatorial growth in the number of component grids and the corresponding memory cost.
+For PINNs, the bottleneck is less abrupt, but it appears through the steadily growing need for larger networks, and longer training horizons.
 
-in case of pinn, need to run longer, and larger arch need even longer
+The sparse-grid combination technique provides a strong method in low to moderate dimensions,
+but its computational and memory cost rises quickly with the dimension and the level required to maintain an acceptable error tolerance.
+Crucially, as the level or dimension increases, the memory needs of each worker rise as well.
+Thus, in higher dimensions, somewhat contrary to the parallel advantage offered by the combination technique,
+one must either dramatically increase the available memory or reduce the number of workers to fit the
+growing number of component grids and grid points in memory.
 
+Lastly, in \ref{fig:comparison_epilog} we compare the degrees of freedom needed by the combination technique and physics-informed neural networks to achieve a given accuracy.
+In lower dimensions, sparse grids offer much larger transparency, accuracy, and speed.
+As the dimension grows, however, the PINN approach appears to degrade more slowly,
+even though this comes at the cost of longer training windows and larger models.
+%One important difference, however, is that the sparse-grid solver can be treated as a relatively direct numerical method once its discretization is fixed.
+%By contrast, the PINN approach requires substantially more tuning, especially in the first few iterations.
 
-PINNS
-
-time hungry
-non aparent what arch to use
-
-SG
-spatial adaptivity while retaining combi tech - still a an active fielf of reerach.
+In future work, an interesting avenue for further study would be to explore is a spatially adaptive version of the combiantion technique.
+Though harder on implementation, it promises to offer an even better compromise between approximation accuracy and degrees of freedom.

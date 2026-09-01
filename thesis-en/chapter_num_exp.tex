@@ -51,6 +51,7 @@ $$
 in this construction the 'relative' keeps its meaning.
 Since comparing a zero prediciton with a nonzero solution gives 1.
 
+Together, $L^\infty$ tells us about point error, rel. $L^2$ more about domain error.
 
 %For PINNS during training, we also use:
 %- MSE - loss - really needed? - gives same info as normal loss computed during calc...
@@ -65,3 +66,7 @@ Since comparing a zero prediciton with a nonzero solution gives 1.
 %\item early stopping
 %\item - when some loss val reached
 %\end{itemize}
+
+
+In pinns - care more about rel l2 since it is closer to the MSE that pinns are trained to satisfy
+some tool tend to minimize l2 more than l inf etc.

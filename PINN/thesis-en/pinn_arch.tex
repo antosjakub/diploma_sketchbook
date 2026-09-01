@@ -16,10 +16,10 @@
 ]
 
 % Inputs
-\node[input] (input1) {$t$};
-\node[input, below=0.1cm of input1] (input2) {$x_1$};
-\node[input, below=0.1cm of input2] (input3) {...};
-\node[input, below=0.1cm of input3] (input4) {$x_d$};
+\node[input] (input1) {$x_1$};
+\node[input, below=0.1cm of input1] (input2) {...};
+\node[input, below=0.1cm of input2] (input3) {$x_d$};
+\node[input, below=0.1cm of input3] (input4) {$t$};
 
 % Hidden layers
 \node[hidden, above right=0.3cm and 1.2cm of input1] (h1) {};
@@ -36,7 +36,7 @@
 \node[hidden, below=0.4cm of g4] (g5) {};
 
 % Output
-\node[output, right=0.8cm of g3] (output) {$u_\theta(t,x)$};
+\node[output, right=0.8cm of g3] (output) {$u_\theta(x,t)$};
 
 % Arrows for NN
 \draw[arrow] (input1) -- (h1);
@@ -99,8 +99,8 @@
 % Data points
 \node[align=center, below=1cm of output] (data) {
   Sample domains:\\[0.0cm]
-  $X_{pde}\sim(0,T)\times\Omega$\\[0.0cm]
-  $X_{bc}\sim(0,T)\times\partial\Omega$\\[0.0cm]
+  $X_{pde}\sim\Omega\times(0,T)$\\[0.0cm]
+  $X_{bc}\sim\partial\Omega\times(0,T)$\\[0.0cm]
   $X_{ic}\sim\Omega$
   %$\Omega$
 };
@@ -133,9 +133,9 @@ $u = u_{ic}$\\[0.0cm]
 $u = u_{bc}$
 };
 \node[align=left, above right=1.5cm and 0.0cm of ad, minimum width=3cm] (pde_domains) {
-$(0,T)\times\Omega$\\[0.0cm]
+$\Omega\times(0,T)$\\[0.0cm]
 $\Omega$\\[0.0cm]
-$(0,T)\times\partial\Omega$
+$\partial\Omega\times(0,T)$
 };
 
 \end{tikzpicture}

@@ -1,115 +1,91 @@
 \chapter*{Introduction}
 \addcontentsline{toc}{chapter}{Introduction}
 
-for high-dimensional problems (e.g., $d > 5$), the exponential growth in storage
-and computational complexity severely limits classical finite element and finite
-difference methods
 
+%Partial differential equations (PDEs) are essential mathematical 
+%tools for describing complex natural phenomena and engineering systems
+%Traditional numerical methods, such as the finite element method (FEM)
+%and the finite difference method (FDM), rely on spatial and temporal discretization to ap-proximate solutions by
+%constructing fine computational meshe
+%\cite{systematic_review}
+%
+%increasingly used for modeling and simulating physical systems
+%despite some empirical success, PINNs are still facing many challenges
+%that define open areas for research and
+%further methodological advancements.
+%In recent years, there have been numerous studies focusing on improving the
+%performance of PINNs, mostly by
+%- neural network architectures
+%\cite{experts_guide}
+%fPINNS, XPINNS, varPINNS, ...
+%
+%
+%\cite{systematic_review}
+%
+%In the past few years, solving PDEs using machine and deep learning methods has emerged as a new and rapidly growing field of scientific machine learning.
+%Leveraging the universal approximation theorem \cite{uni_approx} and high expressivity of neural networks, the 
+%
+%first by Lagaris et. at. \cite{lagaris}
+%
+%Karniadakis in 2019 changes the game \cite{comprehensive_analysis}
+%
+%climate modelling etc.
+%
+%
+%data + physs loss
+%solve inverse problems - value of a fucntion or a coefficient from the data
+%
+%In combine machine learning with partial differential equation is a unique and simple way that was intuitive to both the machine learning and pde solving communities.
+%https://www.sciencedirect.com/science/article/abs/pii/S0021999118307125
+%
+%flexibility of the arch
+%
+%
+%We focues on semi large dims
+%
+%very large dims possible with
+%- 100s 1000s but sol at a point:
+%
+%for very high dims
+%- multilevel picard method
+%- deep backward storchastic eq?
+%- deep galerkin
+%on the machine learning side
+%
+%and feynman-kac monte carlo formulation
+%
+%
+%no systematic or even mention of existing sparse grids approach
+%
+%here: diffusin eq. - spread - fokker planck, etc.
+%commonly probabilistic setting.
+%high-dimensionality naturally arrises in FP
+%
+%Sparse grids
+%- basically FD but on carfully chosed low discret points meshes
+%- by on bounded seconds ders able to make tradeoff tham make it possible to scale to higher dims
+%
+%
+%This thesis is structured as follows.
+%First, backgroung on diffusion pdes and stochasic differential equations
+%Issues we encounter when naively scaling to higher dimensions
+%Sparse grids
+%feed-forward neural networks
+%PINNs - specifics etc and simple experiments demostraining they scaling to higher dims
+%Results:
+%simple heat eq
+%more challenging smoluchowski
+%initial conditions uhlenbeck processes.
+%
+%
+%curse of dim - term coined by bellman in 1961
 
-we first demonstrate the curse of dimensionality by using the finite differentce method on an ever-dimensionally-increasing pde system.
-
-pde intro
-showcase the curse
-sdes
-sparse grids
-
-
-
-show on relatiely simple pde where sparse grids can sparse grids can be competitive
-
-
-PDEs for modelling physical phenomena
-
-curse of dimensionality
-
-Machine learning in Scientific computing
-
-Partial differential equations (PDEs) are essential mathematical 
-tools for describing complex natural phenomena and engineering sys-tems
-Traditional numerical meth-ods, such as the finite element method (FEM)
-and the finite difference method (FDM), rely on spatial and temporal discretization to ap-proximate solutions by
-constructing fine computational meshe
-\cite{systematic_review}
-
-increasingly used for modeling and simulating physical systems
-despite some empirical success, PINNs are still facing many challenges
-that define open areas for research and
-further methodological advancements.
-In recent years, there have been numerous studies focusing on improving the
-performance of PINNs, mostly by
-- neural network architectures
-\cite{experts_guide}
-fPINNS, XPINNS, varPINNS, ...
-
-
-\cite{systematic_review}
-
-In the past few years, solving PDEs using machine and deep learning methods has emerged as a new and rapidly growing field of scientific machine learning.
-Leveraging the universal approximation theorem \cite{uni_approx} and high expressivity of neural networks, the 
-
-first by Lagaris et. at. \cite{lagaris}
-
-Karniadakis in 2019 changes the game \cite{comprehensive_analysis}
-
-climate modelling etc.
-
-
-data + physs loss
-solve inverse problems - value of a fucntion or a coefficient from the data
-
-In combine machine learning with partial differential equation is a unique and simple way that was intuitive to both the machine learning and pde solving communities.
-https://www.sciencedirect.com/science/article/abs/pii/S0021999118307125
-
-flexibility of the arch
-
-
-We focues on semi large dims
-
-very large dims possible with
-- 100s 1000s but sol at a point:
-
-for very high dims
-- multilevel picard method
-- deep backward storchastic eq?
-- deep galerkin
-on the machine learning side
-
-and feynman-kac monte carlo formulation
-
-
-no systematic or even mention of existing sparse grids approach
-
-here: diffusin eq. - spread - fokker planck, etc.
-commonly probabilistic setting.
-high-dimensionality naturally arrises in FP
-
-Sparse grids
-- basically FD but on carfully chosed low discret points meshes
-- by on bounded seconds ders able to make tradeoff tham make it possible to scale to higher dims
-
-
-This thesis is structured as follows.
-First, backgroung on diffusion pdes and stochasic differential equations
-Issues we encounter when naively scaling to higher dimensions
-Sparse grids
-feed-forward neural networks
-PINNs - specifics etc and simple experiments demostraining they scaling to higher dims
-Results:
-simple heat eq
-more challenging smoluchowski
-initial conditions uhlenbeck processes.
-
-
-
-curse of dim - term coined by bellman in 1961
-
-\chapter{Introduction}
 
 %% PDEs and diffusion pdes
 Partial differential equations are one of the core tools in mathematical physics,
 modelling wide range of physical and engineering phenomena.
 %including heat transfer, diffusion, fluid flow, wave propagation, biological systems, etc.
-An important subclass form diffusion-type equations, describing the evolution of quantities
+An important subclass is formed by diffusion-type equations, describing the evolution of quantities
 that spread over time, such as temperature, concentration,
 probability density, or chemical particles in a medium.
 Specific examples include the heat equation, the diffusion equation, and the Fokker-Planck equation.
@@ -124,7 +100,7 @@ those methods are a de facto standard.
 However, their applicability is in practice limited to relatively
 low-dimensional problems,
 as scaling them up to higher dimensions 
-leads to an exponentially rise
+leads to an exponential rise
 in the number of discretization points.
 Thus quickly approaching the memory limitation of existing hardware.
 %lead to the so called the curse of dimensionality,
@@ -133,27 +109,28 @@ Thus quickly approaching the memory limitation of existing hardware.
 %% SG
 Several approaches have been developed to combat this challenge.
 One of which are so called sparse grids and notably,
-the sparse grid combination technique.
+the sparse grid combination technique.\cite{smolyak,combitech}
 Sparse grids combination technique circumvents the curse of dimensionality
-by constructing a combinations of lower-dimensional anisotropic grids,
-thus avoiding the full tensor-product construction of the standard approach.
+by constructing a combination of lower-dimensional anisotropic grids,
+thus avoiding the full tensor-product construction of the standard approach.\cite{sg_123}
 Under suitable smoothness assumptions on the solution, they provide
-a optimal compromise between approximation accuracy and computational cost,
+an optimal compromise between approximation accuracy and computational cost,
 making them attractive for moderately high-dimensional problems.
 Sparse grids retain a strong connection to classical methods,
-and the formulation of the combiantion technique
+and the formulation of the combination technique
 allows directly reusing existing solvers.
 In addition, the special construction of the combination technique
 allows it to be run in parallel.
 
 %% Scientific machine learnaing
-From the other directiion, scientific machine learning active research field.
+From the other direction, scientific machine learning has recently
+become a very active research field.
 The universal approximation theorem \cite{uni_approx} guarantees that,
 under mild assumptions on the network architecture,
 a sufficiently wide feed-forward network can
 approximate any continuous function on a compact domain to arbitrary precision.
-As such, neural networks
-have beel applied on problems ranging from climate modelling, biological system, to fusion simulations.
+Because of this universality, neural networks
+have been applied to problems ranging from climate modelling and biological systems to fusion simulations.
 \cite{hal_hands_on_pinns}
 %Apart from their empirical success, recent work has
 %given rise to many theoretical developments.
@@ -163,7 +140,7 @@ Early neural-network approaches to differential
 equations were first proposed by Lagaris et al. \cite{lagaris} in 1999.
 However, it was not until 2019, when
 the introduction of physics-informed neural networks
-by of Raissi, Perdikaris, and Karniadakis \cite{pinns_original}
+by Raissi, Perdikaris, and Karniadakis \cite{pinns_original}
 caused a revolution in the field.
 
 %% PINNS basic
@@ -181,13 +158,13 @@ increasing memory requirements.
 Nevertheless, PINNs also have important limitations.
 As is the case with standard neural networks,
 their performance % mention runtime
-significanlly depends on the choice of network architecture,
+significantly depends on the choice of network architecture,
 and hyperparameters.
-Although many new model architercutal variants and extensions have been proposed,
+Although many new architectural variants and extensions have been proposed,
 including architectures such as fPINNs, XPINNs, Score PINN, and variational PINNs, 
 just to name a few,
 a reliable and efficient use of PINNs in higher-dimensional
-settings still remains an active area of research.
+settings still remains an active area of research.\cite{comprehensive_analysis}
 
 %very large dims possible with
 %- 100s 1000s but sol at a point:
@@ -200,29 +177,34 @@ settings still remains an active area of research.
 %
 %and feynman-kac monte carlo formulation
 
-
 %% This thesis goal:
-This thesis investigates the use of physical-informed nural netowrks for solving
-diffusion-type partial differential equations in moderate high-dimensional setting.
+This thesis investigates the use of physics-informed neural networks for solving
+diffusion-type partial differential equations in moderately high-dimensional settings.
 These problems are especially relevant
-because a large subclass of problems, especially those involving 
-probability density functions, often live in high-dimensional state spaces.
+because a large subclass of problems often live in high-dimensional state spaces.
+%especially those involving 
+%probability density functions, 
 
 %% This thesis struct:
-The first chapters descibe the
-mathematical background of diffusion equations, stochastic differential equations,
-and Fokker-Planck equations.
-We follow with introducing the
-sparse grid combination technique.
-After that, feed-forward neural networks and physics-
-informed neural networks are presented.
+The first chapter presents the
+%mathematical background of diffusion equations, stochastic differential equations,
+%and Fokker-Planck equations.
+sparse grid combination technique and a few details regarding its implementation.
+We then follow by introducing the feed-forward neural networks, before proceeding
+to the slightly more involved physics-informed neural networks.
 
-The numerical part of the thesis considers selected diffusion-type problems
-including the force free diffusion, the Smoluchowski equation, and Ornstein-Uhlenbeck processes.
-These results are used to evaluate the
+The numerical part of the thesis considers the
+diffusion equation formulated in general dimension.
+The results presented here are used to evaluate the
 accuracy, computational cost, scalability,
 and limitations of the considered methods
-in higher dimensional setting.
+in a higher-dimensional setting.
 
+%The numerical part of the thesis considers selected diffusion-type problems
+%including the force free diffusion, the Smoluchowski equation, and Ornstein-Uhlenbeck processes.
+%These results are used to evaluate the
+%accuracy, computational cost, scalability,
+%and limitations of the considered methods
+%in higher dimensional setting.
 
 

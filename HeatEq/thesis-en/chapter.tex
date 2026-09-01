@@ -1,10 +1,12 @@
 
-\chapter{Force free diffusion}
-We consider a diffusion void of any drift term, also called the heat equaiton.
+\chapter{Free diffusion}
 
 \section{Formulation}
+
+Let us consider a pure diffusion equation void of any drift term, also called the heat equation.
+
 \begin{align*}
-\partial_t u - \alpha \Delta u &= 0 \\
+\partial_t u - D \Delta u &= 0 \\
 u(x) &= u_0(x) \\
 u(x,t) &= 0
 \end{align*}
@@ -12,16 +14,17 @@ where
 \begin{align*}
 \Omega &= [0,1]^d\\
 T&=5.0 \\ 
-\alpha &= \frac{\bar{\alpha}}{d}, \quad \bar\alpha=0.01 \\ 
+D &= \frac{\bar{D}}{d}, \quad \bar{D}=0.01 \\ 
 u_0(x) &=
 \prod_{i=1}^d \sin(\pi x_i)
 +
 \frac{0.67}{\sqrt{d}}
-\sum_{i=1}^d \sin(2\pi x_i) \left(\prod_{k=1,k\neq i}^d \sin(\pi x_k)\right) \\
+\sum_{i=1}^d \sin(2\pi x_i) \left(\prod_{k=1,k\neq i}^d \sin(\pi x_k)\right).\\
 \end{align*}
 
 
-The corresponding analytical solution in then (see the Appendix for detailed derivation)
+The corresponding analytical solution is then given by
+%(see the Appendix for the derivation)
 
 $$
 u(t,x) =
@@ -34,26 +37,32 @@ e^{-\delta t}
 $$
 with
 \begin{itemize}
-\item $\gamma = \alpha d \pi^2 = \bar\alpha \pi^2$
-\item $\delta = \alpha (d+3) \pi^2 = \bar\alpha (1+\frac{3}{d}) \pi^2$
+\item $\gamma = D d \pi^2 = \bar{D} \pi^2$
+\item $\delta = D (d+3) \pi^2 = \bar{D} (1+\frac{3}{d}) \pi^2\:$.
 \end{itemize}
 
-This system was chosen so the term with higher frequency slighly increase complexity compare to the simple case of a product of sines.
+
+Apart from the simple product of isotropic sines,
+the solution also contains a sum of higher-frequency terms,
+which slightly increases its spatial and temporal complexity.
 
 
 \section{Behavior in general dimension}
 
-%$$
-%u((0.5,\dots,0.5), t) = e^{-\gamma t} = e^{-\bar\alpha \pi^2}
-%$$
-\textbf{decay rate in general dimension}
+In general dimension, the solution has a peak in the positive quadrant near the origin,
+which later shifts towards the center of the hypercube, since $\gamma$ decays more slowly than $\delta$.
 
-The decay rate, $\gamma$, of the heading term is independent of dimension.
-If $\alpha$ did not depend on $d$, the solution would decay exponentially with dimension,
-leading to negligile values even for relatively modest values of $d$.
-Hence, we consider $\alpha=\frac{\bar\alpha}{d}$.
+%$$
+%u((0.5,\dots,0.5), t) = e^{-\gamma t} = e^{-\bar{D} \pi^2}
+%$$
+\textbf{Decay rate $\gamma$}
 
-\textbf{L2 norm} (see Appendix)
+The decay rate $\gamma$ of the leading term is independent of dimension.
+If $D$ were just a constant independent of $d$, the solution would decay exponentially with dimension,
+leading to negligible values even for relatively modest values of $d$.
+%Hence, we consider $D=\frac{\bar{D}}{d}$.
+
+\textbf{$L^2$ norm}
 $$
 ||u(t,\cdot)||_{L^2(\Omega)}^2 =
 \frac{1}{2^d}
@@ -65,39 +74,108 @@ e^{-\delta t}
 \right)
 $$
 
-We see that the 
+We see that the $L^2$ norm decreases exponentially with dimension.
+If we were to consider the $L^2$ error as a measure of accuracy,
+then a trivial prediction $u=0$ would appear better and better with higher dimensions.
+%then for a trivial case where the predicted solution were 0,
+%this would make the trivial solution appear artificially good in higher dimensions.
+Instead, we shall prefer the relative $L^2$ error as a metric, see below.
 
-In the experiments below, we proceeed by every 2nd dimension.
+%Note, that the above exponential dependend on $d$
+%could be modified by multiplying the initial condition by $2^{d/2}$, but that would
+%inevitably lead to an exponential concentration of mass, so we keep the norm as it is.
+
+
+
+
+%- the notorious peak of the orange has more volume that its core (see Appendix)
+
+\section{Metrics in higher dimensions}
+
+As dimensionality $d$ increases, the geometry of the space changes drastically,
+and the volume shifts aggressively toward the boundaries.
+
+
+\textbf{A. Relative $L^2$ error}
+%IC,TC pred vs true, if analytical known: PDE pred vs true
+$$
+\frac{
+\sum_{i=1}^n(\hat y_i - y_i)^2
+}{
+\sum_{i=1}^n(y_i)^2
+}
+$$
+where $\hat y_i$ are the predictions and $y_i$ is the ground truth value.
+use LHS
+
+\textbf{B. $L^\infty$ error}
+%IC,TC pred vs true, if analytic known: PDE pred vs true
+$$
+E_\infty = \max_\Omega\|\hat{y}_i - y_i\|
+$$
+%need to look at the section of the domain where the solution is to have the max value
+%sample the center via gaussian?
+
+%we report total $L^\infty$ error, we mean the max
+%$$
+%max(
+%L^\infty_{pde},\,
+%L^\infty_{bc},\,
+%L^\infty_{ic}
+%)
+%$$
+%by relative $L^2$, we mean the average
+%$$
+%\frac{
+%L^2{pde}+
+%L^2{bc}+
+%L^2{ic}
+%}{3}
+%$$
+%in this construction the 'relative' keeps its meaning.
+%Since comparing a zero prediciton with a nonzero solution gives 1.
+
+Together, $L^\infty$ tells us about point error, rel. $L^2$ more about domain error.
+
+
+In the experiments below,
+to enter the curse of dimensionality regime more quickly,
+we proceed by 2 dimensions at a time.
+
+In addition, for both methods, our goal will be to reach the $L^\infty$ and relative $L^2$ errors of order $1e-3$.
+
 
 \section{Sparse grid combination technique}
 
-As a classical baseline, we next consider the sparse grid combination technique.
+As a classical baseline, we consider the sparse grid combination technique.
 For the time discretization, we use the Crank--Nicolson scheme.
 On each component grid, this yields a sparse linear system, which we solve by GMRES without preconditioning.
-We also tested CG with ILU preconditioning, but in our experiments, GMRES consistently reached the same accuracy faster, and will be therefe employed throughout this section.
+We also tested CG with ILU preconditioning, but in our experiments GMRES consistently reached the same accuracy faster,
+and will therefore be employed throughout this section.
+Since the analytical solution is available, we evaluate the approximation error directly at randomly sampled points using Latin hypercube sampling,
+and report both the relative $L^2$ error and the $L^\infty$ error.
+Due to the parallel nature of the algorithm, the sampled points cannot be scattered uniformly at random
+in the temporal domain, as that would require frequent interruption of the parallel solvers, thus significantly
+hindering the main advantage of the method. Instead, we select a set of time slices $\{1.25, 2.5, 3.75, 5\}$
+and compute the error metrics cumulatively.
+The error at the initial condition is computed separately.
 
-Since the analytical solution is available, we evaluate the approximation error directly at randomly sampled points using latin hypercube sampling.
-annd report both the relative $L^2$ error and the $L^\infty$ error.
-Due to the parallel nature of the algorithm, we the sampled points cannot be uniformly randomly scattered
-in the temporal domain, as that would require a frequent composition of the parallel solvers, thus signigicanlty
-hindering its main advantage. To this effect, we select a set of time slices $t \in \{1.25, 2.5, 3.75, 5\}$
-and cumulatively compute the errror metrics in this way.
-The error of the initial is computed separately.
 
 \subsection{2-dimensional calibration case}
 
-We begin with the two-dimensional setting, where the method can be calibrated against the analytical solution at still negligible computational cost.
+We begin with the two-dimensional setting, where the method can be calibrated against the analytical solution at low computational cost.
 We set $\Delta t=0.01$ and benchmark several sparse-grid levels $n$.
 We also tested a smaller time step, $\Delta t=0.001$, but observed only a negligible change in the reported errors,
 which is consistent with the good stability property of the implicit Crank--Nicolson scheme.
 
 All runs in this subsection use 8 parallel workers.
-In the 2 dimentioinal setting, even at larger levels, the number of component grids is still small, and both runtime and memory footprint remain nearly constant across tested the values of $n$:
+In the 2-dimensional setting, even at larger levels, the number of component grids is still small,
+and both runtime and memory footprint remain nearly constant across the tested values of $n$:
 the runs finish in about $0.2$\,s and require about $100$\,MB of RAM.
 The approximation accuracy provided by increasing levels is not therefore
-hindered by compurational cost.
+hindered by computational cost.
 
-Below, we report the levels that achieved either relative $L^2$ error or $L^\infty$ error of approximately $10^{-2}$ or smaller.
+Below, we report the levels $n$ that achieved either relative $L^2$ error or $L^\infty$ error of approximately $10^{-2}$ or smaller.
 
 \begin{table}[ht]
 \centering
@@ -107,13 +185,13 @@ level $n$ & rel $L^2$ & $L^\infty$ & \# grids & \# grid points \\
 %\hline
 %4 & 0.0241626 & 0.0506153 & 7 & 113 \\
 \hline
-5 & 0.0072504 & 0.0155873 & 9 & 257 \\
+5 & 0.00725 & 0.01559 & 9 & 257 \\
 \hline
-6 & 0.00209899 & 0.00464856 & 11 & 577 \\
+6 & 0.00210 & 0.00465 & 11 & 577 \\
 \hline
-7 & 0.00060241 & 0.00131465 & 13 & 1281 \\
+7 & 0.00060 & 0.00131 & 13 & 1,281 \\
 \hline
-8 & 0.000170055 & 0.000358433 & 15 & 2817 \\
+8 & 0.00017 & 0.00036 & 15 & 2,817 \\
 \hline
 \end{tabular}
 \caption{Accuracy of the sparse grid combination technique in the two-dimensional case.}
@@ -121,17 +199,17 @@ level $n$ & rel $L^2$ & $L^\infty$ & \# grids & \# grid points \\
 \end{table}
 
 %The pattern is clear: increasing the sparse-grid level leads to a rapid reduction in both error metrics.
-To our initial surprisse, the largest error was attained at the initial condition, while decreasing as $t \to T$.
-However, due to the smoothening effeect of the heat equation, this behavior is not that unexpected.
+To our initial surprise, the largest error was achieved at the initial condition, and then decreased as $t \to T$.
+However, due to the smoothing effect of the heat equation, this behavior is to be expected.
 
-As mentioned in the chapter on teh sparse grids method,
+As mentioned in the chapter on the sparse-grid method,
 the theoretical estimate for the approximation error is given as
 $$
 \|u-\widehat u_n\|_{L^\infty(\Omega)}
 =
 O(h_n^2\:n^{d-1}).
 $$
-in fact, our experiments support this estimate quire well in the asymptotic case.
+In fact, our experiments support this estimate quite well in the asymptotic regime.
 In particular, the observed decay of the $L^\infty$ error for larger values of $n$ follows the theoretical prediction closely, see Figure~\ref{fig:sg_linf_matches_theor_err}.
 
 
@@ -149,34 +227,35 @@ In particular, the observed decay of the $L^\infty$ error for larger values of $
     \centering
     % see combination technique repo: gs_heat_eq__2026-07-13--01-28-36__d=4_gmres_levels=2:8
     \includegraphics[width=\linewidth]{figures/sg_linf_matches_theor_err.png}
-    \caption{Asymptotical approach of the error measures in our experimental setup vs the theoretical result.}
+    \caption{Asymptotic behavior of the $L^\infty$ error in our experimental setup compared with the theoretical result ($d=4$).}
     \label{fig:sg_linf_matches_theor_err}
 \end{figure}
 
 
 
 \subsection{4 dimensions}
-In four dimensions, the sparse-grid approximation remains computationally manageable on modest hardware, but the growth in complexity is already visible.
+In four dimensions, the sparse-grid approximation remains computationally manageable on modest hardware,
+but the growth in computational complexity is already visible.
 The number of component grids and the total number of grid points increase substantially with the level, and runtime rises from a few seconds to about a minute.
 At the same time, the accuracy degrades relative to the two-dimensional case, and an error below $10^{-2}$ is only first achieved at $n=7$.
 
-For this experiment, we increase the test set to $10^5$ sampled space-time points.
-The results are summarized as so
+For this experiment, we increased the test set 10-fold, to $10^5$ sampled space-time points.
+The results are summarized below.
 \begin{table}[ht]
 \centering
 \begin{tabular}{ |c|c|c|c|c|c|c| } 
 \hline
-level $n$ & rel $L^2$ & $L^\infty$ & \# grids & \# grid points & peak RAM [MB] & runtime \\
+level $n$ & rel $L^2$ & $L^\infty$ & \# grids & \# grid points & peak RAM & runtime \\
 %\hline
 %4 & 0.0776054 & 0.152767 & 35 & 2769 & 113.605 & 1.30406 \\
 %\hline
 %5 & 0.0301881 & 0.0628298 & 69 & 7681 & 121.98 & 2.56963 \\
 \hline
-6 & 0.0110807 & 0.0238831 & 121 & 20481 & 150.711 & 5.96036 \\
+6 & 0.01108 & 0.02388 & 121 & 20,481 & 151 MB & 5.96 s\\
 \hline
-7 & 0.00389236 & 0.00863072 & 195 & 52993 & 241.293 & 18.4484 \\
+7 & 0.00389 & 0.00863 & 195 & 52,993 & 242 MB & 18.45 s\\
 \hline
-8 & 0.00132089 & 0.00297608 & 295 & 133889 & 527.609 & 71.1404 \\
+8 & 0.00132 & 0.00298 & 295 & 133,889 & 528 MB & 71.14 s \\
 \hline
 \end{tabular}
 \caption{Accuracy and computational cost of the sparse grid combination technique in 4 dimensions.}
@@ -196,23 +275,23 @@ where both runtime and memory consumption grow rapidly.
 
 The computations still use 8 workers, but the runtime is now on the order of minutes rather than seconds.
 The obtained results are shown in Table~\ref{tab:sg-6d}.
-Note, that the test set to was again increased 10 fold, to $10^6$ sampled space-time points.
+Note that the test set was again increased 10-fold, to $10^6$ sampled space-time points.
 
 \begin{table}[ht]
 \centering
 \begin{tabular}{ |c|c|c|c|c|c|c| } 
 \hline
-level $n$ & rel $L^2$ & $L^\infty$ & \# grids & number of grid points & peak RAM [MB] & runtime \\
+level $n$ & rel $L^2$ & $L^\infty$ & \# grids & \# grid points & peak RAM & runtime \\
+%\hline
+%2 & 0.537902 & 0.762118 & 7 & 3645 & 220.648 & 6.66377 \\
+%\hline
+%3 & 0.30475 & 0.472944 & 28 & 14337 & 250.809 & 25.8216 \\
+%\hline
+%4 & 0.154217 & 0.258022 & 84 & 49761 & 361.441 & 85.0774 \\
 \hline
-2 & 0.537902 & 0.762118 & 7 & 3645 & 220.648 & 6.66377 \\
+5 & 0.0668 & 0.1276 & 210 & 159,489 & 745 MB & 4 min 43 s \\
 \hline
-3 & 0.30475 & 0.472944 & 28 & 14337 & 250.809 & 25.8216 \\
-\hline
-4 & 0.154217 & 0.258022 & 84 & 49761 & 361.441 & 85.0774 \\
-\hline
-5 & 0.0715752 & 0.12763 & 210 & 159489 & 745.379 & 283.596 \\
-\hline
-6 & 0.0310339 & 0.0578681 & 462 & 483201 & 2186.69 & 1113.44 \\
+6 & 0.0287 & 0.0579 & 462 & 483,201 & 2.19 GB & 18 min 31s \\
 \hline
 \end{tabular}
 \caption{Accuracy and computational cost of the sparse grid combination technique in six dimensions.}
@@ -220,171 +299,207 @@ level $n$ & rel $L^2$ & $L^\infty$ & \# grids & number of grid points & peak RAM
 \end{table}
 
 Here, the cost of each level increment is substantial.
-Going from $n=2$ to $n=6$ increases the number of component grids from $7$ to $462$,
-the number of grid points from $3645$ to $483201$,
-and the runtime from several seconds to more than $18$ minutes.
+Going from $d=4$ to $d=6$ on level $n=6$ increases the number of component grids from $121$ to $462$,
+the number of grid points from $20481$ to $483201$,
+and the runtime from a few seconds to more than $18$ minutes.
 At the same time, the peak memory usage grows beyond $2$\,GB.
 
-To push the method to higher level, we increase the number of workers from 8 to 48 and and 16GB to 72GB of RAM and run our experimetns on compute cluster.
+To push the method to higher levels, we run the next experiments on a cluster,
+this enables us to increase the number of workers from 8 to 48,
+and the available RAM from 16\,GB to 72\,GB.
 %rather than on a amd laptop as was done up to this point.
-In addition, to achieve higher efficiently, we
+In addition, to achieve higher efficiency, we
 avoid forming the full sparse matrix explicitly and instead represent the discretized operator via SciPy's \texttt{LinearOperator} class,
-which substantially reduced the memory footprint.
+which significantly reduced the memory footprint.
 
-ram memory nonreliable and broken and gibberish so ignore it before i remove it pls
+The reported RAM measurements in this part should be taken only as rough indicative values, as the logging on the cluster side here was not fully reliable.
 
 \begin{table}[ht]
 \centering
 \begin{tabular}{ |c|c|c|c|c|c|c| } 
 \hline
-level $n$ & rel $L^2$ & $L^\infty$ & \# grids & number of grid points & peak RAM [MB] & runtime \\
+level $n$ & rel $L^2$ & $L^\infty$ & \# grids & \# grid points & peak RAM & runtime \\
 \hline
-6 & 0.031 & 0.058 & 462 & 500k & 350MB & 6m \\
+6 & 0.0287 & 0.0579 & 462 & 5e05 & 350 MB & 6 min \\
 \hline
-7 & 0.012 & 0.024 & 900 & 1.4M & 600MB & 10m \\ % 32 workers
+7 & 0.0117 & 0.0245 & 923 & 1.4e06 & 600 MB & 10 min \\ % 32 workers
 \hline
-8 & 0.0046 & 0.0098 & 1700 & 4M & 1.5GB & 25m \\ % 48
+8 & 0.0046 & 0.0098 & 1,709 & 4e06 & 1.5 GB & 25 min \\ % 48
 \hline
-9 & 0.0017 & 0.0037 & 3000 & 10M & 4GM & 45m \\
+9 & 0.0017 & 0.0037 & 2,975 & 1e07 & 4 GB & 45 min \\
 \hline
 \end{tabular}
 \caption{Accuracy and computational cost of the sparse grid combination technique in six dimensions.}
 \label{tab:sg-6d}
 \end{table}
 
-
-
-\subsection{8 Dimensions}
-
-
-Here, ridiculous, the number
-
-cannot really fit into memory, cluster gives OOM even for 256 GB on 32 workers
+We see that levels 8 and 9 offer a good enough accuracy.
 
 
 
+\subsection{8 dimensions}
+
+Here, the growth becomes already rather extreme.
+The resulting number of component grids and total grid points can no longer be handled comfortably in memory,
+and on the cluster we observed out-of-memory failures even with 256\,GB of RAM on 16 workers.
+
+To perform the computation, each worker has to be able to hold its compoent grid in memory.
+And, on a fixed RAM budget, spawning many workers in parallel leads to large RAM consumption.
+Hence, in order to obtain some results in this space,
+one must either dramatically increase the available RAM,
+or somewhat contrary to the parallel advantagecombination technique offers,
+reduce the number of workers to fit the growing number of component grids and grid points in RAM.
+
+As the cluster prohibits us from reserve more than 256 GB of RAM, the combination technnique
+here becomes computationally prohibitive.
 
 
-
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
 \section{PINNs}
 
-%\subsection{Curse of dim}
-%
-%two plots?
+Next, we turn to physics-informed neural networks.
 
-%\subsection{Experiments}
+%When trainig neural network we frequency have to decide a the values of multiple parameters 
+%In the sections below, we shall frequency use the term \emph{grid search}.
+%This concept is frequently used in the machine learning community
+%and it refers to theevaluating all combinations of the selected hyperparameter values.
 
-In all the experiments below, we consider:
+As in the sparse-grid experiments, some of the lower-dimensional runs are carried out on a local CPU machine,
+while the heavier computations are moved to the cluster and run on GPU hardware.
+
+Every $k$-th step during training, we compute a)
+the $L^\infty_{pde}$ and relative $L^2_{pde}$ errors based on a fixed, pre-sampled
+set of points obtained by LHS over the whole space-time domain, and b) the $L^\infty_{ic}$ and relative $L^2_{ic}$ errors
+of the initial condition based on a similar, albeit slightly smaller, fixed dataset.
+Total $L^\infty$ error is computed as $\max(L^\infty_{pde}, L^\infty_{ic})$,
+while the relative $L^2$ error is the average of the PDE and IC relative $L^2$ errors.
+
+In addition, due to the significant oscillations in network performance,
+and hence in the loss and error metrics computed during training,
+instead of reporting the errors obtained at the very last training step, we
+average the error metrics over the last 100 collected values and report that number.
+This significantly reduces the effect of random oscillation and makes comparisons between runs more stable.
+
+In addition, we will frequently use the compact notation '10k' to mean 10,000 and '1M' to mean 1,000,000.
+
+In all the experiments below, we use the following setup unless stated otherwise:
 
 \begin{itemize}
-\item latin hypercube sampling (LHS)
-\item learning rate (lr) of 1e-3
-\item hard constrains for the boundary:
-\item tanh activation functions
+\item Latin hypercube sampling (LHS)
+\item Learning rate (lr) of $10^{-3}$ with an exponential decay factor of $\gamma=0.9$
+\item $tanh$ activation functions
+\item Hard constraints for the boundary condition:
 $$
 u_\theta(t,x) = \hat{u}_\theta(t,x) \cdot \prod_{i=1}^d \sin(\pi x_i)
 $$
 \end{itemize}
 
-\section{2-dimensional calibration case}
+Also, during training, we periodically sample the dataset so that in each step the network receives a never-before-seen set
+of points. In addition, in accordance with the PINN literature, the batch for the boundary condiiton is set to 1/8 the size of the
+batch for the PDE.\cite{experts_guide}
 
-Guided by the base PINN architecture mentioned in <chaper of pinns>, we set the following hyperparametrs:
+
+\subsection{2-dimensional calibration case}
+
+Guided by the base PINN architecture introduced in the PINN chapter, we begin with the following hyperparameters:
 \begin{center}
-\begin{tabular}{ |c|c|c|c } 
+\begin{tabular}{ |c|c|c|c|c } 
 \hline
-NN size & steps & number of collation points, or batch size (bs)\\
+NN size & steps & batch size (bs) & number of test points & lr decay frequency\\
 \hline
-4x64  & 10,000 & 2048 \\
+4x64  & 10k & 2048 & 10k & 10\\
 \hline
 \end{tabular}
 \end{center}
-where by '4x64' mean a neutral network with 4 hidden layers, each consisting of 64 neurons.
+Here, `4x64` denotes a neural network with 4 hidden layers, each consisting of 64 neurons.
 
-Expomential lr decay, with a frequncy of 10 times during the training.
+We also use exponential learning-rate decay, applied 10 times during training.
 
-We also fix sample the dataset once, at the begging of training.
 
-Also, the collations points for the initial conditon is 8 times less than that for pde.
-
-For the comparison test, if not stated otherwise we perform 3 runs with separete seed and report the average of the runs.
-
-The reported $L^\infty$ and relative $L^2$ erros are both computed form a collection of
-100,000 points sampled using the LHS throughout the entire spatial-temporal domain.
-If not stated otherwise, the $L^\infty$ is given as $\max(L^\infty_{pde}, L^\infty_{ic})$, and
-the relative $L^2$ error as the average of the corresponding PDE and IC relative $L^2$ errors.
-
-\subsection{Grid search}
-In the machine learing community, many parameters to tune...
-This is called a grid search.
 
 
 \subsubsection{Loss weights: $\lambda_{pde}, \lambda_{ic}$}
-As discussed in <chapter of pinns>, the loss landacape is perticularly sensitive
-to the weight above the individual loss terms. in our case just $\lambda_{pde}, \lambda_{ic}$.
-To determine an optimal, or at least close to optimal value of those weights, we first perform
-a grid search over various differnt values. To this extend, we fix $\lambda_{pde}=1.0$, and carry out
-the grid search over different values of $\lambda_{ic}$,
+As discussed in the PINN chapter, the loss landscape is particularly sensitive
+to the weights assigned to the individual loss terms, in our case $\lambda_{pde}$ and $\lambda_{ic}$.
+To determine a reasonable choice, we first perform
+a parameter sweep over several values. In particular, we fix $\lambda_{pde}=1.0$ and vary $\lambda_{ic}$,
 spanning 5 orders of magnitude.
-%(with 3 random seeds).
-As seen in \ref{fig:lambda_ic__GS}, the value $\lambda_{ic}=0.1$ gives the best results.
-Hence we fix this value for the following runs.
+
+Since we expect this ration to be important, we repeat the experiment for 3 random seeds and report the averaged results.
+
+As seen in Figure~\ref{fig:lambda_ic__GS}, the value $\lambda_{ic}=0.1$ gives the best results.
+Hence we set this value for the following runs. We are not conrned with finetuning this value further, since the
+optimal values is dependent on the other hyperparameter choices which we have not yet performed, and such a holistic
+optimizaiton is computationally very demanding.
+Thus we are content with finding a reasonable values of $\lambda_{ic}$ and set this as our base network.
 
 \begin{figure}
     \centering
     \includegraphics[width=\linewidth]{figures/lambda_ic__GS.png}
-    \caption{Plot of lambda 0.1 loss and linf run}
-    \label{fig:resampling}
+    \caption{Influence of $\lambda_{ic}$ on the final loss and $L^\infty$ error.}
+    \label{fig:lambda_ic__GS}
 \end{figure}
 
 
-\subsection{Loss landscape}
+\subsubsection{Loss landscape}
 %bs: 1024 2048 4096
 
 \begin{figure}
     \centering
-    \includegraphics[width=\linewidth]{figures/bs_gs_training_loss.png}
-
+    \IfFileExists{figures/pinn_2d_oscills_losses.png}{
+        \includegraphics[width=\linewidth]{figures/pinn_2d_oscills_losses.png}
+    }{
+        \fbox{\parbox[c][0.3\textheight][c]{0.95\linewidth}{\centering Missing figure: \texttt{figures/pinn\_2d\_oscills\_losses.png}}}
+    }
     \medskip
-    \includegraphics[width=\linewidth]{figures/bs_gs_test_rel_l2.png}
-    \caption{Loss and bs, and rel l2}
-    \label{fig:bs_gs}
+    \IfFileExists{figures/pinn_2d_oscills_rel_l2.png}{
+        \includegraphics[width=\linewidth]{figures/pinn_2d_oscills_rel_l2.png}
+    }{
+        \fbox{\parbox[c][0.3\textheight][c]{0.95\linewidth}{\centering Missing figure: \texttt{figures/pinn\_2d\_oscills\_rel\_l2.png}}}
+    }
+    \caption{Oscillating behavior of the base network with batch size $=2048$ and learning-rate decay frequency $=10\times$.}
+    \label{fig:pinn_2d_oscills}
 \end{figure}
 
-We observe that the loss is oscillaring widely messy \ref{fig:bs_gs}.
-And, in our expeirmens, this is irrespective of the value of $\lambda_{ic}$
-As we consider a fixed dataset, 2048 points spanning the entire spatial temporal domain,
-the insufficeint number of collacation points point be the cause.
-TO this effect, we compare our previous run with that of batch size 1024, and 4096.
+After plotting the resulting metrics obtained from the preceding run, see Figure~\ref{fig:pinn_2d_oscills},
+we observe both the loss and, more importantly, the error metrics oscillate quite strongly.
+In our experiments, this behavior appears largely irrespective of the choice of $\lambda_{ic}$.
+Since the batch contains only 2048 points sampled over the full space-time domain,
+we speculate whether the batch size itself is contributing to this instability.
+To test this, we compare the base run with corresponding runs using batch sizes 1024 and 4096.
 
-To our surprise, 
-the final errors and the oscillations do seem to be much correlated with the bs,
-which is suprising given that we a small, fixed number of points from the domain.
+To our surprise,
+the errors and the oscillation patterns are not strongly correlated with the batch size,
+which is somewhat surprising given that the gradient updates are usually quite sensitive
+to the noise level in the batches.\cite{goodfellow}
 
-What we notice, however, is that the smaller batchsizes run much faster on CPU,
-which is not that suprising given the sequential nature of the hardware.
-On GPU, the situation is very different. Since the model and the dataset are both quite small,
-all the size of the batch size does not have significant effect on the runtime.
+What we do notice, however, is that smaller batch sizes run much faster on CPU,
+which is not too surprising given the more sequential character of the hardware.
+On GPU, the situation is different. Since both the model and the dataset are still relatively small,
+changing the batch size has only a minor effect on runtime on this parallel hardware.
 
-\begin{center}
-\begin{tabular}{ |c|c|c|c|c| } 
-\hline
-batch size & time [cpu run] & time[gpu run] & rel $L^2$ & $L^\infty$ \\
-\hline
-1024 & 108s & ?s & 0.617e-3 & 1.27e-3 \\
-\hline 
-2048 & 168s & ?s & 0.684e-3 & 1.44e-3 \\
-\hline 
-4096 & 292s & ?s & 0.7e-3 & 1.3e-3 \\
-\hline
-\end{tabular}
-\end{center}
+%\begin{center}
+%\begin{tabular}{ |c|c|c|c|c| } 
+%\hline
+%batch size & time [cpu run] & time[gpu run] & rel $L^2$ & $L^\infty$ \\
+%\hline
+%1024 & 108s & ?s & 0.617e-3 & 1.27e-3 \\
+%\hline 
+%2048 & 168s & ?s & 0.684e-3 & 1.44e-3 \\
+%\hline 
+%4096 & 292s & ?s & 0.7e-3 & 1.3e-3 \\
+%\hline
+%\end{tabular}
+%\end{center}
 
-As we perform some of our experiments on a cpu only,
-to use the rousources most efficiently,
-we select batch size of 1024 for the preceeding experiment.
+Since some of our experiments are performed on CPU only,
+we select a batch size of 1024 as the most efficient setting for the subsequent experiments.
 
+We also observe that further decreases in batch size tend to slightly hinder the training performance.
 
 %
 %and the difference between the resampling and fixed datset regimes.
@@ -422,73 +537,44 @@ we select batch size of 1024 for the preceeding experiment.
 %does not matter that much, 1024 seem like a good compromise
 
 
-Now, we seek to further adress the oscialltiong loss landscape.
-We explore a diffeent strategy to managing the
-oscialltions. (and note the effect on the $L^2$ and $L^\infty$ errors.)
 
-In our base architecture, we exponentially decrease the learning rate every 1000 setps, meaning 10 times during the training.
-We now change this rate to 20. We observe tha the learning rate does indeed have and effect on
-the magnitude and frequency of oscillations, however, the general dynamics of the loss - the platou followed by a huge spike - stay the same.
-We will return to this issue in the next section, here, we just seek to improve the error by
-increasing the trainign horizoon to 20k steps.
-The loss and erorr metrics platou, and hence they decline quite negligily.
 
-The results are as follows:
+We next try to further mitigate the oscillatory loss and error landscape.
+The simplest way to do so is to adjust the learning-rate schedule and observe the resulting effect on both the $L^2$ and $L^\infty$ errors.
+
+In the base architecture, the learning rate is decreased every 1000 steps, that is, 10 times during training.
+We now increase this frequency to 20. We observe that the learning-rate schedule does indeed affect
+the magnitude and distribution of the oscillations.
+
+As expected, this noticeably changes the loss dynamics and reduces the infrequent high spikes.
+
+To improve the final accuracy further, we next
+increase the number of steps to 20,000 and retune the decay frequency for this longer run.
+The longer training horizon then yields more than two times better results compared to the same network trained for 10k steps.
+
+We report a good middle ground at 25, meaning that the network ends the training
+at a learning rate of approximately 7\% of its starting value.
+
+
+All these runs still finish within a a few minutes, so this tuning remains relatively inexpensive in 2 dimensions.
+
+The obtained loss and error metrics are given below.
+
 \begin{center}
-\begin{tabular}{ |c|c|c|c|c| } 
+\begin{tabular}{ |c|c|c|c|c|c| } 
 \hline
-number of steps & $\ell_{total}$ & rel $L^2$ & $L^\infty$ \\
-%10k & 1.815e-7 & 6.17e-4 & 1.27e-3 \\
-10k & 3.258e-7 & 8.27e-4 & 1.8e-3 \\ % 25x
+batch size & steps & lr decay frequency & $\ell_{\mathrm{total}}$ & rel $L^2$ & $L^\infty$ \\
 \hline
-20k & 5.487e-8 & 4.12e-4 & 1.21e-3 \\ % 25x
+2048 & 10k & 10x & 1.898e-06 & 0.00344 & 0.00572 \\
+\hline
+1024 & 10k & 25x & 0.635e-06 & 0.00243 & 0.00411 \\
+\hline
+1024 & 20k & 25x & 0.125e-06 & 0.00102 & 0.00174 \\
 \hline
 \end{tabular}
 \end{center}
+% a_heat_2d_oscills/
 
-
-\subsection{Stochasticity}
-Now, we introduce stochasticity.
-Instead of a fixed set of callocation points,
-we resample the dataset every epoch.
-\footnote{Actually, to avoid unnecessary overhead such frequent samplng would introduce into the training pipeline,
-we sample every 100 steps a dataset of size $100\cdot$bs, and then give a batch of sampled point to the model every step}.
-
-\begin{figure}
-    \centering
-    \includegraphics[width=\linewidth]{figures/training_losses_fixed_vs_resample.png}
-    \caption{Loss dynamics: lr decay frequency and resampling}
-    \label{fig:lambda_ic__GS}
-\end{figure}
-
-As expected, this dramatically changes the loss dynamics and decrease the infrequent high spikes in the loss,
-allbeit for introducing more randomness into the training prodecure.
-We observe that, again, the batch sizes do not have much effect on the the accuracy of the model, and the
-leraning rate decay frequency influences the model equivalently as in the case of fixed dataset.
-
-In accordance with the fixed dataset above, to impore the accuracy of the model, we next
-increase the number of steps to 20,000 and further tune the learning rate decay to match this new paradigm run.
-
-We report a good middle ground at 25 - which is approximatly 7\% of the starting learning rate.
-
-
-The obtained loss and error metrics are given below:
-
-\begin{center}
-\begin{tabular}{ |c|c|c|c| } 
-\hline
-number of steps & $\ell_{total}$ & rel $L^2$ & $L^\infty$ \\
-\hline
-10k & 5.21e-7 & 1.10e-3 & 2.12-3 \\ %20x resample
-\hline
-20k & 1.42e-7 & 4.8e-4 & 1.1e-3 \\ % 30x resample
-\hline
-\end{tabular}
-\end{center}
-% gridsearch__26-07-08--10:11:39__GS_6_bs_and_resample
-
-We have more control over the loss landacape her - RAR, causal, ...
-Lets use it for now.
 
 % /home/antos_j/diploma_sketchbook/PINN/case0_HeatEq/gridsearch__2026-07-09--11-27-08_resampl_decay750_20k/seed=42__prevent_resampling=False__bs=1024__n_res_points=102400/report.json
 
@@ -581,7 +667,7 @@ Lets use it for now.
 
 
 
-\subsection{4 Dimensions}
+\subsection{4 dimensions}
 %Here, we reuse the same optimal net architecutre and hyperparameter choices
 %decay 25
 %n steps, NN, bs
@@ -592,282 +678,434 @@ Lets use it for now.
 
 %/storage/praha1/home/simulant_antos/diploma_sketchbook/PINN/case0_HeatEq/gridsearch__26-07-09--20:01:51__GS_d4/
 
-Here, we reuse the optimal set of hyperparameters we arrived at in the previous case, namely
-$\lambda_{ic}=0.1$, decay frequency 25.
+We increase the number of space-time test points to $10^5$.
 
-We also test try to increase the network size, from 4x64 to 4x128,
-effectively quadrupelling its capacity. To account for this large network,
-we consider a case where we entend the training horizon from 20k to 40k.
-The results are shown in \ref{fig:models_d4}. Of the 4 combinaitons,
-it is apparent that the incresed training horizon leads to better results
+Here, we reuse the best hyperparameters found in the previous case, namely
+$\lambda_{ic}=0.1$, batch size of 1024, and learning-rate decay frequency of 25.
+To address the more complex space, we try to increase the network size, from 4x64 to 4x128,
+effectively quadrupling its capacity. To account for this larger network,
+we also consider extending the training horizon from 20k to 40k steps.
+
+The results are shown in Figure~\ref{fig:models_d4}. Of the four tested combinations,
+it is apparent that the longer training horizon leads to better results
 irrespective of the model capacity. %and leads to approximately 2x lower errors.
-As for the model capacity, it was a surprise to see the smaller model
-perform near the larger network.
-Larger network struggle on 40k, suggesting that increasing network size necessitates
-an extend training horizon.
-In addition, we observe that loss correlates with the error quite well.
-Below we report the two best runs, the two network sizes, each run for 40k steps.
-We also report the used GPU memory (VRAM). The runtime - for both about 540s.
-Compared to the 2-dimensional case, we report the error as so (averaged over the random seeds):
+As for the model capacity, it was somewhat surprising to see the smaller model
+perform nearly as well as the larger one.
+The larger network still benefits from the longer run, which suggests that increasing model size typically requires
+a correspondingly longer training horizon.
+We also observe that the loss correlates with the final error reasonably well, which is useful when comparing runs during training.
+Below we report the two best runs, both corresponding to 40k training steps.
+We also report the peak allocated GPU memory (VRAM). In both cases, the runtime is about 540\,s.
+Compared with the 2-dimensional case, the error remains only moderately larger, which is a good outcome given the increased dimensionality.
 
+For the two best-performing networks (40k):
 \begin{center}
-\begin{tabular}{ |c|c|c|c|c| } 
+\begin{tabular}{ |c|c|c|c|c|c| } 
 \hline
-network size & $\ell_{total}$ & rel $L^2$ & $L^\infty$ & allocated/reserved VRAM\\
+network size & $\ell_{\mathrm{total}}$ & rel $L^2$ & $L^\infty$ & peak allocated VRAM & runtime\\
 \hline
-4x128 & 3.88e-8 & 1.62e-3 & 2.55e-3 & 120/200 MB\\ 
+4x128 & 3.88e-8 & 0.00162 & 0.00255 & 120 MB & 9 min\\
 \hline
-4x64 & 1.126-7 & 1.89e-3 & 3.04e-3 & 71/124 MB\\ 
+4x64 & 1.126e-7 & 0.00189 & 0.00304 & 71 MB & 9 min\\
 \hline
 \end{tabular}
 \end{center}
+% cluster_4d/
 
 \begin{figure}
     \centering
-    \includegraphics[width=\linewidth]{figures/model_comparison_for_d=4.png}
-    \caption{Error and loss for various hyperparameter choices}
+    \IfFileExists{figures/nn_scaling_comparison_d=4.png}{
+        \includegraphics[width=\linewidth]{figures/nn_scaling_comparison_d=4.png}
+    }{
+        \fbox{\parbox[c][0.3\textheight][c]{0.95\linewidth}{\centering Missing figure: \texttt{figures/nn\_scaling\_comparison\_d=4.png}}}
+    }
+    \caption{Error and loss for various network sizes and training durations.}
     \label{fig:models_d4}
 \end{figure}
 
+Compared to our initial expectation, the GPU memory footprint remains quite low for both models.
 
 
+\subsection{6 dimensions}
+% exaclty same as in d=4, but also
+%causal weights and causal sampling
+%RAR
+%SDGD
 
-\subsection{6 Dimensions}
+Here, we proceed similarly as in $d=4$.
+First, we increase the number of space-time test points to 1M.
 
-bs diff,
-sample ic more if looking like it
+We then probe the effect of increasing both the network size and the number of training steps.
 
-increase network size, number of steps, and number of testing points again?
+We observe a similar qualitative pattern as in four dimensions.
+Both increasing the model size and extending the training duration improve the final error,
+but the effect of longer training is much more pronounced.
 
-10M testing pnts
+The best obtained errors are only slightly larger than in the previous case,
+which indicates that the PINN still scales reasonably well up to this dimension.
 
-VRAM memory needs
+For the two best-performing networks (80k):
+\begin{center}
+\begin{tabular}{ |c|c|c|c|c|c| } 
+\hline
+network size & $\ell_{\mathrm{total}}$ & rel $L^2$ & $L^\infty$ & peak allocated VRAM & runtime\\
+\hline
+4x256 & 1.126e-7 & 0.00215 & 0.00349 & 564 MB & 30 min\\
+\hline
+4x128 & 3.88e-8 & 0.00231 & 0.00376 & 464 MB & 27 min\\
+\hline
+\end{tabular}
+\end{center}
+% cluster_4d/
+
+Before moving to even higher dimensions, we also test whether the training can be made more efficient.
+In particular, we consider residual-based adaptive resampling (RAR) to focus on high-importance regions,
+and stochastic-dimension gradient descent as a possible ways to reduce computational cost.
+
+For these tests, we use the smaller 4x128 network trained for 80k steps and try to improve its performance without increasing its capacity.
+
+First,
+we consider stochastic-dimension gradient descent (SDGD) as a possible speedup.
+Sampling only 2 dimensions gives at most a few percent runtime improvement, while noticeably worsening the loss landscape.
+In this setup, this does not offer a beneficial tradeoff.
+
+Next, we seek to optimize the training by focusing the network on the regions where it struggles.
+In the RAR setting, we sample 4 times as many collocation points and then keep the top quarter with the highest residual according to the RAR formula.
+We perform a parameter sweep over the corresponding values of $k$ and $c$.
+
+Among the tested RAR settings, $k=2.0$ and $c=0.0$ gave the most promising behavior.
+
+\begin{figure}
+    \centering
+    \IfFileExists{figures/nn_scaling_comparison_d=6.png}{
+        \includegraphics[width=\linewidth]{figures/nn_scaling_comparison_d=6.png}
+    }{
+        \fbox{\parbox[c][0.3\textheight][c]{0.95\linewidth}{\centering Missing figure: \texttt{figures/nn\_scaling\_comparison\_d=6.png}}}
+    }
+    \caption{$d=6$: Error and loss for various hyperparameter choices of $k$ and $c$ in residual-based adaptive resampling (RAR).}
+    \label{fig:models_d6}
+\end{figure}
+
+RAR has a relatively small effect on the model performance,
+
+
+but it is biased towards minimizing the $L^\infty$ error.
+which is sensible since it explicitly biases the point selection toward difficult regions.
+The effect on the relative $L^2$ error is smaller, but still consistent with a modest gain in overall accuracy.
+
+
 
 % mistake in running..., very good - same 1024 bs, new data every 100 steps
 % what bout periodically giving the nn new data?
 
 
-larger net = more expressive power
-
-4x256 ?
 %\subsection{8th dimension}
-so far linear / exp. increase in training steps
-exp increase in model size
-scale gets us far - the equavalent of the scaling laws hold
-but long training....
-
-Q: Whether we can me the training more efficiet (smller model size, shorter training time)?
-
-We consider the smaller 4x128 network with 40\,000 steps and try to match the 80k-steps one.
-
-causal weights and causal sampling
-RAR
-SDGD
-
-Network to focus on the important regions.
-RAR - we sample 4 times as many points callocation points and then pick to top 1/4 with the highest residuum based on the RAR forulama.
-We perform a grid search over the various levels of k,r.
-
-128 and 80k - RAR and grid search over $k,r$
-[show gs results]
-
-keep d=6
 
 
-\subsection{8 Dimensions}
-base: 4x256 x 100k
-base + what we learned in 6 dims
+\subsection{8 dimensions}
+
+%If we continued with the patterns from the previous two dimentisions, we would next
+%explore the networks of size 
+
+As we saw in the previous two sections discussing $d=6$ and $d=4$, increasing the number of steps
+improves the accuracy of the model.
+However, such a change inevitably leads to a longer training run.
+
+On the other hand, it is also apparent from Figures \ref{fig:models_d4} and \ref{fig:models_d6}
+that, under a fixed number of steps, a larger network generally performs better,
+while, crucially, finishing the simulation at comparable runtime.
+
+In addition, in the most resource intensive run we have performed so far,
+the VRAM peaked at only about 500 MB.
+
+From this we conclude that the GPU is being underutilized.
+Hence, there is still room to increase the network and batch size
+while increasing the training time to a manageable degree.
+
+In summary, 
+we seek to map the problem of a long training run to one that we can address
+by exploiting the advantages of the available hardware.
+
+To this end, we consider two neural networks of size 4x512.
+One with the batch size of 4096, the other of 8192.
+Crucially, the training runs only for the same 80k steps as in the previous case, $d=6$.
+
+\begin{center}
+\begin{tabular}{ |c|c|c|c|c|c| } 
+\hline
+batch size & $\ell_{\mathrm{total}}$ & rel $L^2$ & $L^\infty$ & peak allocated VRAM & runtime\\
+\hline
+4096 & 1.565e-9 & 0.00188 & 0.0030 & 2.2 GB & 56 min\\
+\hline
+8192 & 2.392e-9 & 0.00198 & 0.0026 & 3.8 GB & 1h 40 min\\
+\hline
+\end{tabular}
+\end{center}
+
+Interestingly enough, if we had proceeded here as we did in the previous chapter, that is,
+double the network width and the training domain, we would actually achive a singlificanly worse result, and a much slower one as well:
+\begin{center}
+\begin{tabular}{ |c|c|c|c|c|c| } 
+\hline
+batch size & $\ell_{\mathrm{total}}$ & rel $L^2$ & $L^\infty$ & peak allocated VRAM & runtime\\
+\hline
+4x256 & 4.110e-9 & 0.00440 & 0.01040 & 661 MB & 1h 48 min\\
+\hline
+4x512 & 4.274e-9 & 0.00521 & 0.01227 & 8.2 GB & 2h 44 min\\
+\hline
+\end{tabular}
+\end{center}
+
+
+At this point though, the training time still remains a burden.
+When trianing PINNs, one usually has to do a few parameters sweeps to arrive at a satisfactory results,
+and the cost of those sweeps rises with dimension.
+
+%Training time remains the major bottleneck.
+%At the same number of steps, a network with higher capacity performs better, as seen already in the scaling figures for $d=4$ and $d=6$.
+%This suggests a natural next direction: using a larger network while reducing the total number of training steps.
+%
+%So far, the increase in required training steps is roughly linear to exponential,
+%and the same is true for the model size.
+%Scaling alone gets us surprisingly far, in a way quite similiar of scaling-law behavior,
+%but the price is very long training.
+%
+%As a base configuration, we consider the 4x256 network and training horizons of 80k, 100k, and 160k steps.
+%We then augment this setup with the lessons learned in 6 dimensions.
+%
+%At this point, however, the training cost becomes the dominant issue, and each additional gain in accuracy requires a visibly larger compute budget.
+
+
+%As we can see from the previous 
+%Exploit the advantages of GPU, parallel computation.
+%Since we are still considerting relatively small networks and batch sizes,
+%we can increse both and still achive a reasonable runtime.
+%batches, we can increase the batch size and model capacity and
+%relatively mild
+
+%\begin{center}
+%\begin{tabular}{ |c|c|c|c|c|c| } 
+%\hline
+%network size & $\ell_{\mathrm{total}}$ & rel $L^2$ & $L^\infty$ & peak allocated VRAM & runtime\\
+%\hline
+%4x256 & 4.110e-9 & 0.00440 & 0.01040 & 661 MB & 1h 48 min\\
+%\hline
+%4x512 & 4.274e-9 & 0.00521 & 0.01227 & 8.2 GB & 2h 44 min\\
+%\hline
+%\end{tabular}
+%\end{center}
+
+
+%\begin{center}
+%\begin{tabular}{ |c|c|c|c|c|c| } 
+%\hline
+%network size & $\ell_{\mathrm{total}}$ & rel $L^2$ & $L^\infty$ & peak allocated VRAM & runtime\\
+%\hline
+%4x256 & 4.110e-9 & 0.00440 & 0.01040 & 661 MB & 1h 48 min\\
+%\hline
+%4x512 & 4.274e-9 & 0.00521 & 0.01227 & 8.2 GB & 2h 44 min\\
+%\hline
+%\end{tabular}
+%\end{center}
+%4096 & 1.565e-9 & 0.00188 & 0.0030 & 2.2 GB & 56 min\\
+%8192 & 2.392e-9 & 0.00198 & 0.0026 & 3.8 GB & 1h 40 min\\
 
 
 
 
-\subsection{Curse of dimensionality}
+
+
+%\section{Curse of dimensionality}
+%
+%Both approaches clearly feel the curse of dimensionality, but in different ways.
+%For sparse grids, the bottleneck is mainly combinatorial growth in the number of component grids and the associated memory cost.
+%For PINNs, the bottleneck is less abrupt, but it appears through the steadily growing need for larger networks, longer training horizons, and more careful sampling strategies.
+%
+%The sparse-grid combination technique provides a strong method in low to moderate dimensions,
+%but its computational cost rises quickly with the dimension and the level required to maintain an acceptable error tolerance.
+%As the level or dimension increases, the memory needs of each worker rise as well.
+%In higher dimensions, somewhat contrary to the parallel advantage that the combination technique offers,
+%one must either dramatically increase the available memory or reduce the number of workers to fit the
+%growing number of component grids and grid points in memory.
+%
+%
+%It is also instructive to compare the degrees of freedom needed by the different approaches to achieve a given accuracy.
+%In lower dimensions, sparse grids are highly competitive and often more direct to interpret.
+%As the dimension grows, however, the PINN approach appears to degrade more gracefully, even though this comes at the cost of considerably longer and less predictable training.
+%One important difference, however, is that the sparse-grid solver can be treated as a relatively direct numerical method once its discretization is fixed.
+%By contrast, the PINN approach requires substantially more tuning, and therefore a fair comparison is not simply one sparse-grid run against one PINN run, but rather a sparse-grid run against a whole PINN model-selection process.
+%
+%
+%\begin{figure}
+%    \centering
+%    \includegraphics[width=\linewidth]{figures/threshold_cost_comparison_rel_l2.png}
+%    \caption{PINN vs combination technique perforamance in higher dimensions.
+%    In the context of PINNs, the degrees of freedom denote the number of trainable parameters.
+%    For the combination technique, it counts the total number of grid points in all component grids.}
+%    \label{fig:comparison}
+%\end{figure}
 
 
 
 
-The sparse grid combination technique provides a strong method in low to moderate dimensions,
-but its computational cost rises quickly with the dimension and the level required to maintain an acceptable error tolerance.
-
-As the level or dimension increases, the memory needs of each worker rise as well.
-So in higher dims, somewhat contrary to the advantage the combiantion technique offers,
-one needs to either dramatically increase the available memroy, or reduce the number of workers to fit the
-increased number of compoennt grids and the grid points in memory.
-
-
-
-\section{Conclusion}
-
-Show the degrees of freedom needed to achieve some accuracy
-
-
-\begin{figure}
-    \centering
-    \includegraphics[width=\linewidth]{figures/model_comparison_for_d=4.png}
-    \caption{Error and loss for various hyperparameter choices}
-    \label{fig:models_d4_repeat}
-\end{figure}
-
-
-
-
-\chapter{Appendix}
-% https://chatgpt.com/share/6a481b37-c04c-83eb-a0e8-b34c1d0ac08c
-
-\section{Heat equation: Derivation of the $L^2$ norm of the analytic solution}
-Consider the analytical solution
-\begin{align*}
-u(t,x)
-&=
-e^{-\gamma t}
-\prod_{i=1}^d \sin(\pi x_i)
-+
-e^{-\delta t}
-\frac{0.67}{\sqrt d}
-\sum_{i=1}^d
-\sin(2\pi x_i)
-\left(
-\prod_{\substack{k=1 \\ k\neq i}}^d \sin(\pi x_k)
-\right)
-\end{align*}
-where
-\[
-\Omega = [0,1]^d
-\qquad
-\gamma = \alpha\pi^2
-\qquad
-\delta = \alpha\left(1+\frac 3d\right)\pi^2
-\]
-Here, we derive an explicit expression for the $L^2$ norm
-\[
-\|u(t,\cdot)\|_{L^2(\Omega)}^2
-=
-\int_{[0,1]^d} |u(t,x)|^2\,dx
-\]
-Define
-\[
-\phi_0(x)
-=
-\prod_{i=1}^d \sin(\pi x_i)
-\]
-and
-\[
-\phi_i(x)
-=
-\sin(2\pi x_i)
-\prod_{\substack{k=1 \\ k\neq i}}^d \sin(\pi x_k)
-\]
-Then the solution can be written compactly as
-\[
-u(t,x)
-=
-e^{-\gamma t}\phi_0(x)
-+
-\frac{0.67}{\sqrt d}e^{-\delta t}
-\sum_{i=1}^d \phi_i(x)
-\]
-Therefore
-\begin{align*}
-\|u(t,\cdot)\|_{L^2}^2
-&=
-\left\|
- e^{-\gamma t}\phi_0
- +
- \frac{0.67}{\sqrt d}e^{-\delta t}
- \sum_{i=1}^d \phi_i
-\right\|_{L^2}^2
-\end{align*}
-Expanding the expression gives
-\begin{align*}
-\|u(t,\cdot)\|_{L^2}^2
-&=
-e^{-2\gamma t}\|\phi_0\|_{L^2}^2
-+
-2e^{-\gamma t}e^{-\delta t}\frac{0.67}{\sqrt d}
-\sum_{i=1}^d \langle \phi_0,\phi_i\rangle_{L^2}
-\notag \\
-&\quad+
-\frac{0.67^2}{d}e^{-2\delta t}
-\sum_{i=1}^d\sum_{j=1}^d
-\langle \phi_i,\phi_j\rangle_{L^2}
-\end{align*}
-We now use the orthogonality relation
-\[
-\int_0^1 \sin(m\pi x)\sin(n\pi x)\,dx
-=
-\begin{cases}
-0, & m\neq n \\
-\dfrac12, & m=n
-\end{cases}
-\]
-Hence
-\begin{align*}
-\langle \phi_0,\phi_i\rangle_{L^2}&=0
-\qquad \text{for all } i=1,\dots,d \\
-\langle \phi_i,\phi_j\rangle_{L^2}&=0
-\qquad \text{for } i\neq j
-\end{align*}
-The remaining terms give
-\begin{equation*}
-\|\phi_0\|_{L^2}^2
-=
-\int_{[0,1]^d}
-\prod_{i=1}^d \sin^2(\pi x_i)\,dx
-=
-\prod_{i=1}^d
-\int_0^1 \sin^2(\pi x_i)\,dx_i
-=
-\frac{1}{2^d}
-\end{equation*}
-
-\begin{equation*}
-\|\phi_i\|_{L^2}^2
-=
-\left(
-\int_0^1 \sin^2(2\pi x_i)\,dx_i
-\right)
-\prod_{\substack{k=1 \\ k\neq i}}^d
-\left(
-\int_0^1 \sin^2(\pi x_k)\,dx_k
-\right)
-=
-\frac{1}{2^d}
-\end{equation*}
-
-\begin{equation*}
-\sum_{i=1}^d\sum_{j=1}^d
-\langle \phi_i,\phi_j\rangle_{L^2}
-=
-\sum_{i=1}^d \|\phi_i\|_{L^2}^2
-=
-d\frac{1}{2^d}
-\end{equation*}
-Substituting into the orignal expression, we obtain
-\begin{align*}
-\|u(t,\cdot)\|_{L^2}^2
-&=
-e^{-2\gamma t}\frac{1}{2^d}
-+
-\frac{0.67^2}{d}e^{-2\delta t}
-\,
-d\frac{1}{2^d}
-\end{align*}
-Thanks to the normalization $1/\sqrt d$, the factor $d$ cancels.
-Therefore
-\[
-\|u(t,\cdot)\|_{L^2}^2
-=
-\frac{1}{2^d}
-\left(
- e^{-2\gamma t}
- +
- 0.67^2 e^{-2\delta t}
-\right)
-\]
-At $t=0$, this simplifies to
-\[
-\|u_0\|_{L^2}^2
-=
-\frac{1}{2^d}
-(1+0.67^2)
-\]
+%\chapter{Appendix}
+%% https://chatgpt.com/share/6a481b37-c04c-83eb-a0e8-b34c1d0ac08c
+%
+%\section{Heat equation: Derivation of the \texorpdfstring{$L^2$}{L2} norm of the analytic solution}
+%Consider the analytical solution
+%\begin{align*}
+%u(t,x)
+%&=
+%e^{-\gamma t}
+%\prod_{i=1}^d \sin(\pi x_i)
+%+
+%e^{-\delta t}
+%\frac{0.67}{\sqrt d}
+%\sum_{i=1}^d
+%\sin(2\pi x_i)
+%\left(
+%\prod_{\substack{k=1 \\ k\neq i}}^d \sin(\pi x_k)
+%\right)
+%\end{align*}
+%where
+%\[
+%\Omega = [0,1]^d
+%\qquad
+%\gamma = D\pi^2
+%\qquad
+%\delta = D\left(1+\frac 3d\right)\pi^2
+%\]
+%Here, we derive an explicit expression for the $L^2$ norm
+%\[
+%\|u(t,\cdot)\|_{L^2(\Omega)}^2
+%=
+%\int_{[0,1]^d} |u(t,x)|^2\,dx
+%\]
+%Define
+%\[
+%\phi_0(x)
+%=
+%\prod_{i=1}^d \sin(\pi x_i)
+%\]
+%and
+%\[
+%\phi_i(x)
+%=
+%\sin(2\pi x_i)
+%\prod_{\substack{k=1 \\ k\neq i}}^d \sin(\pi x_k)
+%\]
+%Then the solution can be written compactly as
+%\[
+%u(t,x)
+%=
+%e^{-\gamma t}\phi_0(x)
+%+
+%\frac{0.67}{\sqrt d}e^{-\delta t}
+%\sum_{i=1}^d \phi_i(x)
+%\]
+%Therefore
+%\begin{align*}
+%\|u(t,\cdot)\|_{L^2}^2
+%&=
+%\left\|
+% e^{-\gamma t}\phi_0
+% +
+% \frac{0.67}{\sqrt d}e^{-\delta t}
+% \sum_{i=1}^d \phi_i
+%\right\|_{L^2}^2
+%\end{align*}
+%Expanding the expression gives
+%\begin{align*}
+%\|u(t,\cdot)\|_{L^2}^2
+%&=
+%e^{-2\gamma t}\|\phi_0\|_{L^2}^2
+%+
+%2e^{-\gamma t}e^{-\delta t}\frac{0.67}{\sqrt d}
+%\sum_{i=1}^d \langle \phi_0,\phi_i\rangle_{L^2}
+%\notag \\
+%&\quad+
+%\frac{0.67^2}{d}e^{-2\delta t}
+%\sum_{i=1}^d\sum_{j=1}^d
+%\langle \phi_i,\phi_j\rangle_{L^2}
+%\end{align*}
+%We now use the orthogonality relation
+%\[
+%\int_0^1 \sin(m\pi x)\sin(n\pi x)\,dx
+%=
+%\begin{cases}
+%0, & m\neq n \\
+%\dfrac12, & m=n
+%\end{cases}
+%\]
+%Hence
+%\begin{align*}
+%\langle \phi_0,\phi_i\rangle_{L^2}&=0
+%\qquad \text{for all } i=1,\dots,d \\
+%\langle \phi_i,\phi_j\rangle_{L^2}&=0
+%\qquad \text{for } i\neq j
+%\end{align*}
+%The remaining terms give
+%\begin{equation*}
+%\|\phi_0\|_{L^2}^2
+%=
+%\int_{[0,1]^d}
+%\prod_{i=1}^d \sin^2(\pi x_i)\,dx
+%=
+%\prod_{i=1}^d
+%\int_0^1 \sin^2(\pi x_i)\,dx_i
+%=
+%\frac{1}{2^d}
+%\end{equation*}
+%
+%\begin{equation*}
+%\|\phi_i\|_{L^2}^2
+%=
+%\left(
+%\int_0^1 \sin^2(2\pi x_i)\,dx_i
+%\right)
+%\prod_{\substack{k=1 \\ k\neq i}}^d
+%\left(
+%\int_0^1 \sin^2(\pi x_k)\,dx_k
+%\right)
+%=
+%\frac{1}{2^d}
+%\end{equation*}
+%
+%\begin{equation*}
+%\sum_{i=1}^d\sum_{j=1}^d
+%\langle \phi_i,\phi_j\rangle_{L^2}
+%=
+%\sum_{i=1}^d \|\phi_i\|_{L^2}^2
+%=
+%d\frac{1}{2^d}
+%\end{equation*}
+%Substituting into the orignal expression, we obtain
+%\begin{align*}
+%\|u(t,\cdot)\|_{L^2}^2
+%&=
+%e^{-2\gamma t}\frac{1}{2^d}
+%+
+%\frac{0.67^2}{d}e^{-2\delta t}
+%\,
+%d\frac{1}{2^d}
+%\end{align*}
+%Thanks to the normalization $1/\sqrt d$, the factor $d$ cancels.
+%Therefore
+%\[
+%\|u(t,\cdot)\|_{L^2}^2
+%=
+%\frac{1}{2^d}
+%\left(
+% e^{-2\gamma t}
+% +
+% 0.67^2 e^{-2\delta t}
+%\right)
+%\]
+%At $t=0$, this simplifies to
+%\[
+%\|u_0\|_{L^2}^2
+%=
+%\frac{1}{2^d}
+%(1+0.67^2)
+%\]
+%

@@ -44,24 +44,32 @@
 % An optional dedication: you can thank whomever you wish (your supervisor,
 % consultant, who provided you with tea and pizza, etc.)
 \def\Dedication{
-My brother for his technical expertise,
+I would like to thank Metacentrum for their computational resources,
+my brother for his technical expertise,
 MRK-consulting for their useful
-advice regarding computer hardware.
+advice regarding computer hardware,
+and mr.framework for his patience and dedication even under
+sometimes very heated conditions.
 }
 
 % Abstract (recommended length around 80-200 words; this is not a copy of your thesis assignment!)
 \def\Abstract{%
-Use the most precise, shortest sentences that state what problem the
-thesis addresses, how it is approached, pinpoint the exact result achieved, and
-describe the applications and significance of the results. Highlight anything
-novel that was discovered or improved by the thesis. Maximum length is 200
-words, but try to fit into 120. Abstracts are often used for deciding if
-a reviewer will be suitable for the thesis; a well-written abstract thus
-increases the probability of getting a reviewer who will like the thesis.
-Partial differential equations are ...
-Solving the diffusion equation using machine learning in higher dimension
-PINNs offer 
-Explore such posibilities 
+This thesis explores the application of machine learning,
+namely the Physics-Informed Neural Networks (PINNs),
+for solving the diffusion equation in moderate to high dimensional setting.
+Traditional full-grid-based approaches, such as Finite Element or Finite Difference methods,
+face significant challanges in higher dimensions due to the exponential growth of computational
+and memory requirements - an effect known as the curse of dimensionality.
+As existing line of work adressing this is offered by
+the sparse grid combination technique, which
+approximates the full grid by a combination of lower-dimensional anisotropic grids
+while preserving strong connection to classical solvers.
+As an alternative, we explore PINNs, a reletively novel scientific machine learning paradigm
+that leverages the universal approximation power of neural networks and automatic differentiation.
+PINNs are mesh free methods, hence they bypass the grid construction entirely by sampling points dynamically,
+offering a highly flexible alternative.
+Through the numerical simulation of the general $d$-dimensional diffusion equation,
+this work analyze the accuracy, computational cost, scalability, and practical limitations of both approaches.
 }
 
 
@@ -69,14 +77,10 @@ Explore such posibilities
 % Keywords are useful for indexing and searching for the theses by topic.
 \def\ThesisKeywords{%
 %\xxx{keyword\sep key phrase}
-partial differential equations,
-diffusion equations,
-curse of dimensionality,
-machine learning,
-PINNS,
-numerical methods,
-Fokker-Planck,
-sparse grids combination technique,
+diffusion equations\sep
+curse of dimensionality\sep
+machine learning\sep
+numerical methods
 }
 
 % If any of your metadata strings contains TeX macros, you need to provide
@@ -89,7 +93,7 @@ sparse grids combination technique,
 
 % If your abstracts are long and do not fit in the infopage, you can make the
 % fonts a bit smaller by this setting. (Also, you should try to compress your abstract more.)
-\def\InfoPageFont{}
+\def\InfoPageFont{\small}
 %\def\InfoPageFont{\small}  % uncomment to decrease font size
 
 % If you are studing in a Czech programme, you also need to provide metadata in Czech:
@@ -97,14 +101,33 @@ sparse grids combination technique,
 
 \def\ThesisTitleCS{Řešení difuzní rovnice ve vyšších dimenzích pomocí strojového učení}
 \def\DepartmentCS{Ústav teoretické fyziky}
-\def\DeptTypeCS{Ústav }
+\def\DeptTypeCS{Ústav}
 \def\SupervisorsDepartmentCS{Matematický ústav UK}
 \def\StudyProgrammeCS{Matematické a počítačové modelování ve fyzice}
 
-\def\ThesisKeywordsCS{%
-\xxx{klíčová slova\sep klíčové fráze}
+\def\ThesisKeywordsCS{
+difuzní rovnice\sep
+prokletí dimenzionality\sep
+strojové učení\sep
+numerické metody
 }
 
-\def\AbstractCS{%
-\xxx{Abstrakt práce přeložte také do češtiny.}
+\def\AbstractCS{
+Tato práce zkoumá využití strojového učení,
+konkrétně fyzikálně informovaných neuronových sítí (PINN),
+pro řešení difuzní rovnice ve středně až vysokorozměrných prostorech.
+Tradiční přístupy založené na mřížkové diskretizaci,
+jako je metoda konečných prvků nebo metoda konečných diferencí,
+čelí ve vyšších dimenzích významným problémů kvůli exponenciálnímu nárůstu výpočetních a
+paměťových nároků - jev známémý jako prokletí dimenzionality.
+Jedno z existujících řešení
+nabízí metoda řídkých mřížek, neboli \emph{sparse grids},
+která aproximuje plnou mřížku pomocí kolekce nízkodimenzionálních anizotropních mřížek,
+přičemž si zachovává silnou vazbu na klasickým numetickým metodám.
+Jako alternativu k tomuto přístupu zkoumáme v této práci metody PINN, relativně nový směr ve vědeckém strojovém učení,
+které využívá univerzální aproximační schopnosti neuronových sítí a automatické derivování.
+Metody PINN jsou bezsíťové, což znamená, že obcházejí konstrukci mřížky díky dynamickému vzorkování bodů,
+a nabízejí tak vysoce flexibilní alternativu.
+Pomocí numerických simulací obecné $d$-rozměrné rovnice difúze tato práce analyzuje přesnost,
+výpočetní náročnost, škálovatelnost, a praktická omezení obou těchto přístupů.
 }
