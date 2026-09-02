@@ -1,0 +1,42 @@
+
+lambda 1.0 better
+
+
+====== lambda_ic=1p0__n_res_points=204800__bs=2048__starting_model=run_latest__adam1e-5-model.pth =======
+runtime=54.2284  |  linf[pde]=0.0010  |  rel_l2[pde]=0.0005  |  linf[ic]=0.0008  |  rel_l2[ic]=0.0005
+====== lambda_ic=1p0__n_res_points=204800__bs=2048__starting_model=run_latest__adam1e-6-model.pth =======
+runtime=46.4582  |  linf[pde]=0.0010  |  rel_l2[pde]=0.0004  |  linf[ic]=0.0008  |  rel_l2[ic]=0.0004
+====== lambda_ic=1p0__n_res_points=409600__bs=4096__starting_model=run_latest__adam1e-5-model.pth =======
+runtime=72.3209  |  linf[pde]=0.0010  |  rel_l2[pde]=0.0005  |  linf[ic]=0.0009  |  rel_l2[ic]=0.0005
+====== lambda_ic=1p0__n_res_points=409600__bs=4096__starting_model=run_latest__adam1e-6-model.pth =======
+runtime=67.0311  |  linf[pde]=0.0010  |  rel_l2[pde]=0.0005  |  linf[ic]=0.0008  |  rel_l2[ic]=0.0005
+
+====== lambda_ic=1p0__n_res_points=204800__bs=2048__starting_model=run_latest__adam1e-5-model.pth =======
+runtime=52.7374  |  linf[pde]=0.0011  |  rel_l2[pde]=0.0005  |  linf[ic]=0.0008  |  rel_l2[ic]=0.0005
+====== lambda_ic=1p0__n_res_points=204800__bs=2048__starting_model=run_latest__adam1e-6-model.pth =======
+runtime=42.2719  |  linf[pde]=0.0009  |  rel_l2[pde]=0.0004  |  linf[ic]=0.0009  |  rel_l2[ic]=0.0004
+====== lambda_ic=1p0__n_res_points=409600__bs=4096__starting_model=run_latest__adam1e-5-model.pth =======
+runtime=71.5155  |  linf[pde]=0.0009  |  rel_l2[pde]=0.0005  |  linf[ic]=0.0009  |  rel_l2[ic]=0.0005
+====== lambda_ic=1p0__n_res_points=409600__bs=4096__starting_model=run_latest__adam1e-6-model.pth =======
+runtime=67.1813  |  linf[pde]=0.0010  |  rel_l2[pde]=0.0005  |  linf[ic]=0.0010  |  rel_l2[ic]=0.0005
+
+
+---------------------------------------------------------------------------------------------------------
+
+====== lambda_ic=0p1__n_res_points=204800__bs=2048__starting_model=run_latest__adam1e-5-model.pth =======
+runtime=34.8809  |  linf[pde]=0.0014  |  rel_l2[pde]=0.0005  |  linf[ic]=0.0014  |  rel_l2[ic]=0.0007
+====== lambda_ic=0p1__n_res_points=204800__bs=2048__starting_model=run_latest__adam1e-6-model.pth =======
+runtime=31.1525  |  linf[pde]=0.0012  |  rel_l2[pde]=0.0005  |  linf[ic]=0.0011  |  rel_l2[ic]=0.0007
+====== lambda_ic=0p1__n_res_points=409600__bs=4096__starting_model=run_latest__adam1e-5-model.pth =======
+runtime=51.0373  |  linf[pde]=0.0013  |  rel_l2[pde]=0.0005  |  linf[ic]=0.0013  |  rel_l2[ic]=0.0008
+====== lambda_ic=0p1__n_res_points=409600__bs=4096__starting_model=run_latest__adam1e-6-model.pth =======
+runtime=35.7483  |  linf[pde]=0.0016  |  rel_l2[pde]=0.0007  |  linf[ic]=0.0015  |  rel_l2[ic]=0.0008
+
+====== lambda_ic=0p1__n_res_points=204800__bs=2048__starting_model=run_latest__adam1e-5-model.pth =======
+runtime=38.9827  |  linf[pde]=0.0013  |  rel_l2[pde]=0.0005  |  linf[ic]=0.0013  |  rel_l2[ic]=0.0007
+====== lambda_ic=0p1__n_res_points=204800__bs=2048__starting_model=run_latest__adam1e-6-model.pth =======
+runtime=32.9432  |  linf[pde]=0.0014  |  rel_l2[pde]=0.0005  |  linf[ic]=0.0011  |  rel_l2[ic]=0.0006
+====== lambda_ic=0p1__n_res_points=409600__bs=4096__starting_model=run_latest__adam1e-5-model.pth =======
+runtime=51.4279  |  linf[pde]=0.0013  |  rel_l2[pde]=0.0005  |  linf[ic]=0.0014  |  rel_l2[ic]=0.0007
+====== lambda_ic=0p1__n_res_points=409600__bs=4096__starting_model=run_latest__adam1e-6-model.pth =======
+runtime=44.6797  |  linf[pde]=0.0017  |  rel_l2[pde]=0.0006  |  linf[ic]=0.0016  |  rel_l2[ic]=0.0007

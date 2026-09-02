@@ -1,5 +1,7 @@
 # General nots
 
+https://github.com/SGpp/DisCoTec
+
 newest notes:
     - spatial adaptibility approaches
         - one full grid

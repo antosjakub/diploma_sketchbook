@@ -71,7 +71,7 @@ FIXED_PARAMS = {
 # - scalars, which set one parameter with the axis name
 # - dicts, for grouped parameters such as trajectory sampling settings
 SEARCH_AXES = {
-    "n_steps_decay": [100, 500, 1000]
+    #"n_steps_decay": [100, 500, 1000]
     #"ic_type": ["cauchy", "gauss"],
     #"lambda_pde": [0.1, 1.0, 10.0],
     #"lambda_ic": [0.1, 1.0, 10.0],

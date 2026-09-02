@@ -1,0 +1,172 @@
+
+
+
+
+In PINNs, the cost of automatic differentiation is one of the main practical limitations, especially for high-dimensional PDEs and for differential operators involving second or higher derivatives.
+
+Let $B$ denote the number of collocation points in a batch, let $d$ be the spatial dimension, and let
+\[
+    D = d+1
+\]
+be the input dimension of a time-dependent PINN. Furthermore, let $P$ denote the number of trainable parameters of the neural network. For a fully connected network, $P$ is determined by the input dimension, the number of hidden layers, and the width of each hidden layer.
+
+A forward pass through the network builds a computational graph consisting of all elementary operations needed to evaluate $u_\theta(t,x)$ at the batch points. In a fully connected network, the dominant operations are matrix multiplications. If the batch size is $B$, then each layer is evaluated simultaneously on $B$ input points. Therefore, the cost of one forward pass scales approximately linearly with $B$ and with the number of network parameters,
+\[
+    \mathrm{cost}_{\mathrm{forward}}
+    \sim
+    \mathcal{O}(BP),
+\]
+up to constants depending on the architecture and implementation.
+
+During standard neural network training, reverse-mode automatic differentiation is then used to compute the gradient of the loss with respect to the parameters $\theta$. For a feed-forward network, the backward pass has the same order of computational cost as the forward pass, since it essentially propagates sensitivities backward through the same layers. Thus, for ordinary supervised training,
+\[
+    \mathrm{cost}_{\mathrm{backward}}
+    \sim
+    \mathcal{O}(BP).
+\]
+The main memory cost comes from storing intermediate activations from the forward pass, because these values are needed later when the graph is traversed backward.
+
+In PINNs, however, automatic differentiation is not used only to differentiate the loss with respect to the parameters. It is also used to differentiate the network output with respect to the input variables. For a scalar PINN,
+\[
+    u_\theta : \mathbb{R}^{d+1} \to \mathbb{R},
+\]
+we need derivatives such as
+\[
+    \partial_t u_\theta,
+    \qquad
+    \partial_{x_i} u_\theta,
+    \qquad
+    \partial_{x_i x_i} u_\theta.
+\]
+The first derivative with respect to all input variables is
+\[
+    \nabla_{(t,x)} u_\theta
+    \in \mathbb{R}^{d+1}.
+\]
+For a batch of $B$ collocation points, this object has size
+\[
+    B(d+1).
+\]
+Thus, even before considering second derivatives, the tensors containing input gradients grow linearly both in the batch size and in the dimension.
+
+For diffusion equations, the Laplacian requires the diagonal second derivatives
+\[
+    \Delta_x u_\theta
+    =
+    \sum_{i=1}^{d}
+    \partial_{x_i x_i} u_\theta.
+\]
+Therefore, one needs $d$ second-order derivative terms at every collocation point. The corresponding derivative values again scale like
+\[
+    \mathcal{O}(Bd).
+\]
+However, the cost of obtaining these values is larger than their storage size suggests. Each second derivative is obtained by differentiating a first derivative. Consequently, the graph used to compute the first derivative must itself remain differentiable. In practice, this means that additional computational graphs must be retained or constructed for the derivative computations.
+
+A useful way to summarize the scaling is the following. Let $C_{\mathrm{net}}(B,d)$ denote the cost of evaluating the neural network and its graph on a batch of $B$ points in dimension $d$. Since the input layer has size $d+1$, the number of parameters in the first layer grows linearly with $d$. If the first hidden layer has width $m_1$, then the number of parameters in the first layer is
+\[
+    (d+1)m_1 + m_1.
+\]
+Thus, even if all other layers are fixed, increasing $d$ increases $P$ through the first layer. This gives a direct dimension-dependent increase in the cost of every forward and backward pass.
+
+For a first-order operator, one reverse-mode differentiation can provide the full input gradient
+\[
+    \nabla_{(t,x)}u_\theta.
+\]
+The cost is therefore comparable to a small multiple of the cost of a forward-backward pass through the network. For a second-order operator such as the Laplacian, the diagonal second derivatives are typically computed by differentiating each first derivative component with respect to the corresponding input coordinate. This introduces a factor proportional to $d$, since there are $d$ spatial second derivatives:
+\[
+    \mathrm{cost}_{\Delta}
+    \approx
+    \mathcal{O}
+    \left(
+        d \, C_{\mathrm{AD}}
+    \right),
+\]
+where $C_{\mathrm{AD}}$ denotes the cost of one derivative computation through the network graph. Consequently, for a standard PINN implementation of a diffusion equation, the cost of evaluating the residual grows at least linearly with the spatial dimension due to the number of second derivative terms.
+
+If the full Hessian is required, the situation is more expensive. The Hessian of a scalar function
+\[
+    u_\theta : \mathbb{R}^{d+1} \to \mathbb{R}
+\]
+has size
+\[
+    (d+1)\times(d+1).
+\]
+For a batch of $B$ points, explicitly storing the Hessian would require
+\[
+    \mathcal{O}\left(B(d+1)^2\right)
+\]
+memory. Thus, full Hessian-based operators scale quadratically in dimension. This is why PINN implementations usually avoid constructing the full Hessian unless it is absolutely necessary. For the Laplacian, only the diagonal spatial entries are needed, so the storage of the final derivative values scales like $\mathcal{O}(Bd)$ rather than $\mathcal{O}(Bd^2)$. Nevertheless, the computation still requires repeated differentiation through the network.
+
+The batch size $B$ has a particularly direct effect. Since PINNs evaluate the PDE residual at collocation points, every derivative tensor is formed for every point in the batch. Doubling the batch size approximately doubles the memory required to store activations, first derivatives, second derivatives, and intermediate derivative graphs. Thus,
+\[
+    \mathrm{memory}
+    \propto B.
+\]
+This is why high-dimensional PINNs can run out of memory even for moderate network sizes: increasing $B$ improves the statistical quality of the residual approximation, but it also increases the size of all intermediate tensors used by automatic differentiation.
+
+The number of network parameters $P$ affects the cost in two ways. First, it determines the cost of evaluating the network itself. Larger networks require more matrix multiplications and therefore increase both forward and backward computational cost. Second, during training, the final loss must still be differentiated with respect to all parameters. Thus, after the PDE residual has been constructed using input derivatives, the training step differentiates this residual-based loss with respect to $\theta$. This creates an additional backward pass through a graph that already contains derivative operations. Therefore, in PINNs, the parameter gradient is not computed from a simple data loss, but from a loss involving derivatives of the network output.
+
+This distinction is important. In a standard supervised neural network, the computational graph has the form
+\[
+    \theta \longmapsto u_\theta(x) \longmapsto \mathcal{L}(\theta).
+\]
+In a PINN for a second-order PDE, the graph has the form
+\[
+    \theta
+    \longmapsto
+    u_\theta(t,x)
+    \longmapsto
+    \nabla u_\theta(t,x)
+    \longmapsto
+    \nabla^2 u_\theta(t,x)
+    \longmapsto
+    \mathcal{R}_\theta(t,x)
+    \longmapsto
+    \mathcal{L}(\theta),
+\]
+where $\mathcal{R}_\theta$ denotes the PDE residual. Computing
+\[
+    \nabla_\theta \mathcal{L}(\theta)
+\]
+therefore requires differentiating through all derivative computations used to form the residual. This is one of the main reasons why PINNs for second-order PDEs are significantly more expensive than ordinary neural network regression.
+
+There is also a trade-off between memory and recomputation. Automatic differentiation avoids repeated subexpressions by storing intermediate values from the forward pass and reusing them during the backward pass. This reduces runtime, but increases memory consumption. Alternatively, some intermediate values can be recomputed instead of stored. This reduces memory usage at the price of additional computation. Such checkpointing or recomputation strategies can be useful when the available memory is the limiting factor.
+
+For the diffusion-type equations considered in this thesis, the most relevant scalings can be summarized as follows:
+\[
+\begin{array}{c|c|c}
+\text{Quantity} & \text{Typical scaling} & \text{Comment} \\
+\hline
+\text{Network evaluation} & \mathcal{O}(BP) & \text{forward pass on } B \text{ points} \\
+\text{Activation memory} & \mathcal{O}\left(B\sum_{\ell=1}^{L}m_\ell\right) & \text{stored for backpropagation} \\
+\text{First input derivatives} & \mathcal{O}(B(d+1)) & \text{gradient w.r.t. } (t,x) \\
+\text{Laplacian terms} & \mathcal{O}(Bd) & \text{diagonal second derivatives only} \\
+\text{Full Hessian storage} & \mathcal{O}(B(d+1)^2) & \text{usually avoided} \\
+\text{Parameter gradients} & \mathcal{O}(P) \text{ storage} & \text{one gradient per parameter}
+\end{array}
+\]
+These expressions should be interpreted as qualitative scaling laws rather than exact runtime estimates, since the constants depend strongly on the implementation, hardware, activation functions, and automatic differentiation backend.
+
+The important conclusion is that automatic differentiation removes the need to manually discretize derivatives, but it does not remove the computational cost of the differential operator. In high-dimensional diffusion equations, the Laplacian contains one second derivative per spatial coordinate. Therefore, both the number of derivative terms and the size of the input layer increase with dimension. Together with the batch size and network size, this determines the memory and computational cost of the PINN implementation.
+
+\subsection{Computational Graphs and Higher-Order Derivatives}
+
+When evaluating a neural network, modern automatic differentiation libraries build a computational graph representing all operations performed during the forward pass. To compute derivatives, the graph is traversed using the chain rule. For higher-order derivatives, the derivative computation itself must also be recorded as a differentiable operation.
+
+This means that, when second derivatives are needed, the computational graph for the first derivative must be retained. In practice, this creates a graph of derivative operations on top of the original forward graph. Therefore, computing higher-order derivatives is more memory-intensive than computing only first-order derivatives.
+
+This has two important consequences for PINNs. First, the memory requirements increase because intermediate values from the forward pass must be stored. Second, if higher-order derivatives are required, additional intermediate derivative quantities must also be stored. This can become a serious limitation for high-dimensional PDEs, large neural networks, or large numbers of collocation points.
+
+
+\subsection{Relevance for High-Dimensional Problems}
+
+For the differentail equations, this issue is particularly important.
+The Laplacian contains one second derivative for each spatial dimension.
+Thus, even though the network itself provides a mesh-free representation of the solution,
+evaluating the PDE operator becomes more expensive as the dimension increases.
+This computational cost is one of the practical limitations that must be considered when applying PINNs to higher-dimensional diffusion equations.
+
+In summary, automatic differentiation provides the mechanism by which PINNs connect neural networks with differential equations.
+It allows derivatives of the network output with respect to the input variables to be computed accurately and automatically.
+At the same time, the need for higher-order derivatives, introduces additional computational and memory costs.
+Understanding this trade-off is essential for the implementation and scaling of PINNs in high-dimensional domains.

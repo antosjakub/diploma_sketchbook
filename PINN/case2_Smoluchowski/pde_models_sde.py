@@ -26,7 +26,7 @@ class SmoluchowskiGeneral:
     def V_laplace(self, x):
         raise NotImplementedError
 
-    def estimate_Z_full(self, spatial_domain, n_samples=200_000, proposal="uniform", gaussian_sigma=None, device='cpu'):
+    def estimate_Z_full(self, p_inf, d, spatial_domain, n_samples=200_000, proposal="uniform", gaussian_sigma=None, device='cpu'):
         """MC estimate of Z = ∫ exp(-beta*V(x)) dx over the box.
 
         proposal:
@@ -40,26 +40,59 @@ class SmoluchowskiGeneral:
         hi = spatial_domain[:, 1].to(device)
         if proposal == "uniform":
             vol = (hi - lo).prod().item()
-            X = lo + (hi - lo) * torch.rand(n_samples, self.d, device=device)
-            return vol * self.p_inf(X).mean().item()
+            X = lo + (hi - lo) * torch.rand(n_samples, d, device=device)
+            return vol * p_inf(X).mean().item()
         elif proposal == "gaussian":
             if gaussian_sigma is None:
-                gaussian_sigma = 0.5 * (hi - lo).max().item()
-            sigma = float(gaussian_sigma)
-            X = sigma * torch.randn(n_samples, self.d, device=device)
+                gaussian_sigma = 0.5 * (hi - lo).max()
+            sigma = gaussian_sigma
+            X = sigma * torch.randn(n_samples, d, device=device)
             # q(x) = (2π σ²)^(-d/2) · exp(-‖x‖² / (2σ²))
-            log_q = -0.5 * self.d * torch.log(2 * torch.pi * sigma * sigma) \
+            log_q = -0.5 * d * torch.log(2 * torch.pi * sigma * sigma) \
                     - 0.5 * (X * X).sum(dim=1) / (sigma * sigma)
             q = torch.exp(log_q).unsqueeze(1)
-            return (self.p_inf(X) / q).mean().item()
+            return (p_inf(X) / q).mean().item()
         else:
             raise ValueError(f"Unknown proposal '{proposal}'. Use 'uniform' or 'gaussian'.")
 
     def sample_x0(self, n_samples):
         return self.dist_initial.rsample((n_samples,))
     def sample_xinf(self, n_samples):
-        #TD - see scipy interpolate
-        return self.dist_initial.rsample((n_samples,))
+        """Sample approximately from the normalized stationary density p_inf.
+
+        Uses a simple random-walk Metropolis-Hastings kernel targeting p_inf.
+        This avoids relying on a box-dependent rejection sampler and works as
+        long as p_inf is evaluable up to normalization (here assumed normalized).
+        """
+        device = self.dist_initial.loc.device
+        dtype = self.dist_initial.loc.dtype
+
+        with torch.no_grad():
+            x = self.sample_x0(n_samples).to(device=device, dtype=dtype)
+            p_curr = self.p_inf(x).squeeze(1)
+
+            proposal_scale = torch.full(
+                (1, self.d),
+                max(float(self.sigma), 0.25),
+                device=device,
+                dtype=dtype,
+            )
+            n_burnin = 200
+            n_steps = 200
+
+            for _ in range(n_burnin + n_steps):
+                x_prop = x + proposal_scale * torch.randn_like(x)
+                p_prop = self.p_inf(x_prop).squeeze(1)
+                accept_prob = torch.minimum(
+                    torch.ones_like(p_curr),
+                    p_prop / (p_curr + 1e-16),
+                )
+                accepted = torch.rand(n_samples, device=device) < accept_prob
+                if accepted.any():
+                    x[accepted] = x_prop[accepted]
+                    p_curr[accepted] = p_prop[accepted]
+
+        return x
 
     def p_0(self, x):
         return torch.exp(self.dist_initial.log_prob(x)).unsqueeze(1)
@@ -156,7 +189,10 @@ class SmoluchowskiGeneral:
 
         def pde_residual_base(self, X, u, grad_u, spatial_laplace_u, precomputed=None):
             return grad_u[:,-1:] - (
-                1/self.beta * spatial_laplace_u.sum(dim=1).unsqueeze(dim=1)
+                1/self.beta * (
+                    spatial_laplace_u.sum(dim=1).unsqueeze(dim=1)
+                    + (grad_u**2).sum(dim=1).unsqueeze(dim=1)
+                )
                 + (precomputed["V_grad"] * grad_u[:,:-1]).sum(dim=1).unsqueeze(1)
                 + precomputed["V_laplace"]
             )
@@ -185,7 +221,7 @@ class SmoluchowskiGeneral:
                 } if X_pde is not None else {},
                 "bc": {},
                 "ic": {
-                    "ic": self.p_0(X_ic[:,:-1]).detach()
+                    "ic": self.q_0(X_ic[:,:-1]).detach()
                 } if X_ic is not None else {},
             }
 
@@ -401,5 +437,4 @@ class SmoluchowskiRastigin(SmoluchowskiGeneral):
 #    class LL_ODE(SmoluchowskiGeneral.LL_ODE):
 #        def __init__(self, score_sde_model, model_s):
 #            super().__init__(score_sde_model, model_s)
-
 

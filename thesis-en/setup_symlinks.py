@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 
 names = ["PINN", "SG", "HeatEq", "Smoluchowski"]
@@ -28,8 +29,11 @@ def create_symlink(source: Path, destination: Path) -> None:
         raise FileNotFoundError(f"Symlink source does not exist: {source}")
     if destination.exists() or destination.is_symlink():
         raise FileExistsError(f"Destination already exists: {destination}")
-    print(f"Creating symlink: {destination} -> {source}")
-    destination.symlink_to(source)
+    relative_source = Path(
+        os.path.relpath(source.resolve(), start=destination.parent.resolve())
+    )
+    print(f"Creating symlink: {destination} -> {relative_source}")
+    destination.symlink_to(relative_source)
 
 
 if LINK_CHAPTERS:

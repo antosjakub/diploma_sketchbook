@@ -33,8 +33,8 @@ main_runner.add_common_args(parser)
 
 parser.set_defaults(
     # FIXED (smol eq specific)
-    L_min=-2.25,
-    L_max=2.25,
+    L_min=-2.5,
+    L_max=2.5,
     T=2.0,
     f_pde_trajs=0,
     f_pde_full_domain=1,
@@ -43,26 +43,33 @@ parser.set_defaults(
     # defaults
     glorot_init=True,
     one_batch_per_epoch=True,
-    use_lbfgs=False,
 
     use_hard_constrains=True,
     mode="class_pde", #TD
     #mode="log_pde",
 
-    #act_fn='softplus',
-    #act_fn='tanh',
+    #act_fn='',
+    act_fn='tanh',
     #act_fn='silu',
     lr=1e-3,
 
-    active_losses="pde,ic,bc,norm", #TD
+    #active_losses="pde,ic,bc,norm", #TD
+    active_losses="pde,ic", #TD
     #lambda_pde=1.0,
     #lambda_ic=1000.0,
     #lambda_norm=0.1,
     #lambda_bc=10.0,
+
     lambda_pde=10.0,
-    lambda_ic=100.0,
-    lambda_norm=0.1,
-    lambda_bc=10.0,
+    lambda_ic=200.0,
+    ##lambda_norm=0.1,
+    lambda_norm=0.05,
+    lambda_bc=100.0,
+
+    #lambda_pde=100.0,
+    #lambda_ic=1000.0,
+    #lambda_norm=1.0,
+    #lambda_bc=1000.0,
     bc_type='neu',
     lambda_strategy="fixed",
     #lambda_strategy="gradnorm_adapt",
@@ -70,7 +77,8 @@ parser.set_defaults(
 
     d=2,
     #layers="128,128,128,128",
-    layers="64,64,64,64",
+    layers="96,96,96,96",
+    #layers="64,64,64,64",
 
     bs=1024,
     resampling_frequency=100,
@@ -78,20 +86,38 @@ parser.set_defaults(
     prevent_resampling=False,
 
     bs_norm=2048,
+    #bs_norm=1024,
     n_loss_norm_slices=6,
     test_norm_slices="0.0, 0.5, 1.0, 2.0",
+    #test_norm_slices="0.0, 0.15, 0.3",
 
     # 10x more?
-    n_trajs=1024,
-    nt_steps=100,
+    #n_trajs=1024,
+    #nt_steps=100,
 
-    #n_steps=10_000,
-    n_steps=1000,
+    #n_steps=20_000,
+    #n_steps_decay=800, # 25x decay
+    #logging_frequency=100,
+
+    #n_steps=100,
+    #n_steps_decay=50,
+    #logging_frequency=5,
+    #use_lbfgs=True,
+    #output_dir = 'run_adam_lbfgs',
+    #time_strategy = "none",
+    #starting_model=f"run_adam_time_adapt_resample_best/model.pth",
+
+
+    n_steps=10_000,
     n_steps_decay=400, # 25x decay
     logging_frequency=50,
-
-    #time_strategy = "none",
+    use_lbfgs=False,
+    output_dir = 'run_adam_test',
     #time_strategy="time_adapt_sampl",
+    time_strategy="none",
+    starting_model=None,
+    #starting_model=f"run_adam_time_adapt_resample_best/model.pth",
+
     #time_strategy="causal_loss",
     t_discr = "0.0, 0.25, 0.5, 0.75, 2.0",
 
@@ -104,17 +130,16 @@ parser.set_defaults(
     sdgd_num_dims=2,
 
     use_rbas = False,
-    rbas_k = 0.5,
+    #use_rbas = True,
+    rbas_k = 2.0,
     rbas_c = 0.0,
-    rbas_chunk_size = 100,
+    rbas_chunk_size = 2048,
 
     #crit_loss_val=1e-6,
     enable_profiler = False,
     enable_memory_tracking = True,
 
     clear_dir = True,
-    #starting_model=f"run_adam/model.pth",
-    output_dir = 'run_adam',
 )
 
 
@@ -135,7 +160,7 @@ dir_name = run_utils.setup_dir(args)
 #a = 0.7 + 0.5*torch.rand(d)
 a = torch.tensor([0.8067, 1.0391, 1.0101, 0.7722, 1.0593, 1.0706, 0.9805, 0.9893, 0.9514, 1.1419])[:d]
 import pde_models_sde as pde_mod
-pde_model_base = pde_mod.SmoluchowskiDoubleWell(d=d, beta=1.0, a=a, Z=10.0)
+pde_model_base = pde_mod.SmoluchowskiDoubleWell(d=d, beta=1.0, a=a, Z=9.037)
 if args.mode == "log_pde":
     pde_model = pde_model_base.LogPDE(pde_model_base, args.bc_type)
 elif args.mode == 'class_pde':

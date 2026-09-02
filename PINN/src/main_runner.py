@@ -50,7 +50,8 @@ def add_common_args(parser):
     parser.add_argument("--bc_type", default="dir", type=str, help=["dir", "neu"])
     # normalization
     parser.add_argument("--bs_norm", default=1000, type=int, help="")
-    parser.add_argument("--n_norm_slices", default=4, type=int, help="")
+    parser.add_argument("--n_loss_norm_slices", default=4, type=int, help="")
+    parser.add_argument("--test_norm_slices", default="0.0, 0.5, 1.0", type=str, help="")
     # sampling
     parser.add_argument("--n_res_points", default=10_000, type=int, help="")
     parser.add_argument("--n_trajs", default=1_000, type=int, help="")
@@ -227,7 +228,7 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
             line_search_fn='strong_wolfe'
         )
         trainer.scheduler = torch.optim.lr_scheduler.ExponentialLR(trainer.optimizer, gamma=0.9)
-        losses_adam, test_log_rel_l2, test_log_linf = trainer.train_lbfgs(
+        losses_adam, rel_l2_data, linf_data, norm_data = trainer.train_lbfgs(
             n_steps=args.n_steps,
             n_steps_decay=args.n_steps_decay,
             resampling_frequency=args.resampling_frequency,
@@ -242,7 +243,7 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
             crit_loss_val=args.crit_loss_val,
         )
     else:
-        losses_adam, rel_l2_data, linf_data = trainer.train_adam_minibatch(
+        losses_adam, rel_l2_data, linf_data, norm_data = trainer.train_adam_minibatch(
             n_steps=args.n_steps,
             n_steps_decay=args.n_steps_decay,
             resampling_frequency=args.resampling_frequency,
@@ -310,8 +311,10 @@ def runner(args, dir_name, pde_model, sampling_settings, sampling_type, testing_
         ).max(dim=0).values
         visualize_training_metrics.plot_test_rel_l2(rel_l2_data, file_name+'_rel_l2', x=trainer.log_steps)
         visualize_training_metrics.plot_test_linf(linf_data, file_name+'_linf', x=trainer.log_steps)
+        visualize_training_metrics.plot_test_norm(norm_data, file_name+'_norm', x=trainer.log_steps)
         torch.save(rel_l2_data, f'{file_name}_rel_l2.pth')
         torch.save(linf_data, f'{file_name}_linf.pth')
+        torch.save(norm_data, f'{file_name}_norm.pth')
         report["test_rel_l2"] = {}
         report["test_linf"] = {}
         for term in list(testing_suite.analytic_terms)+['total']:

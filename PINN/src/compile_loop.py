@@ -12,6 +12,10 @@ args = parser.parse_args()
 args.compile_model = int(args.compile_model)
 
 torch.manual_seed(42)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if device.type == "cuda":
+    torch.cuda.manual_seed_all(42)
+print(f"- device = {device}")
 
 class PINN(nn.Module):
     def __init__(self, input_dim, layers=[64], output_dim=1, activn_fn=nn.Tanh):
@@ -33,7 +37,7 @@ class PINN(nn.Module):
 
 
 d = 6
-model = PINN(d, 3*[512], 1)
+model = PINN(d, 3*[512], 1).to(device)
 
 if args.compile_model:
     print("- compile_model = true")
@@ -98,6 +102,30 @@ def train_ff(x):
     loss.backward()
 
 import derivatives
+def train_jvp(x):
+    n_spatial = x.shape[1] - 1
+    basis = torch.eye(n_spatial, device=x.device, dtype=x.dtype)
+
+    def scalar_model(xi):
+        return model(xi.unsqueeze(0)).squeeze()
+
+    grad_fn = grad(scalar_model)
+
+    def lapl_point(xi):
+        def second_along(v):
+            tangent = torch.zeros_like(xi)
+            tangent[:n_spatial] = v
+            _, hvp = jvp(grad_fn, (xi,), (tangent,))
+            return hvp[:n_spatial] @ v
+
+        return vmap(second_along)(basis).sum()
+
+    lapl = vmap(lapl_point)(x)
+    loss = torch.mean(
+        lapl
+    )
+    loss.backward()
+
 def train_class(x):
     x.requires_grad_(True)
     u, grad_u, lapl_u = derivatives.compute_derivatives(model, x)
@@ -118,6 +146,8 @@ elif args.train_type == "train_fr":
     train = train_fr
 elif args.train_type == "train_rf":
     train = train_rf
+elif args.train_type == "train_jvp":
+    train = train_jvp
 elif args.train_type == "train_class":
     train = train_class
 print("- train_type =", train.__name__)
@@ -127,7 +157,7 @@ n_steps = 10
 n_warmup = 5
 bs = 500
 N = bs * (n_warmup + n_steps)
-X = torch.rand((N,d))
+X = torch.rand((N, d), device=device)
 
 import  os
 os.makedirs('compile_runs', exist_ok=True)
@@ -141,10 +171,14 @@ t_avrg = 0.0
 j = 0
 for i in range(n_warmup+n_steps):
     if i > n_warmup:
+        if device.type == "cuda":
+            torch.cuda.synchronize()
         t1 = time.time()
     train(X[bs*i:bs*(i+1),:])
     optimizer.step()
     if i > n_warmup:
+        if device.type == "cuda":
+            torch.cuda.synchronize()
         t2 = time.time()
         t_delta = t2-t1
         ts.append(t_delta)

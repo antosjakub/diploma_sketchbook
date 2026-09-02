@@ -34,16 +34,18 @@ main_runner.add_common_args(parser)
 parser.set_defaults(
     # FIXED (heat eq specific)
     mode="class_pde",
-    L_min=0,
-    L_max=1,
+
+    L_min=-4.0,
+    L_max=4.0,
     T=5.0,
+
     f_pde_trajs=0,
     f_pde_full_domain=1,
     f_ic_trajs=0,
     f_ic_full_domain=1,
     glorot_init=True,
     # nice defaults
-    d=2,
+    d=4,
     #layers="128,128,128,128",
     layers="64,64,64,64",
     active_losses="pde,ic",
@@ -58,30 +60,34 @@ parser.set_defaults(
     resampling_frequency=100,
 
 
-    #n_res_points=102400,
-    #prevent_resampling=False,
-
-    n_res_points=1024,
-    prevent_resampling=True,
+    n_res_points=102400,
+    prevent_resampling=False,
+    #n_res_points=1024,
+    #prevent_resampling=True,
 
 
     #n_steps=20_000,
-    n_steps=400,
+    n_steps=1_000,
     #n_steps_decay=333,
     #n_steps_decay=500,
-    n_steps_decay=800,
-    logging_frequency=10,
+    n_steps_decay=400,
+    logging_frequency=50,
 
     #n_steps=20_000,
     #n_steps_decay=666,
     #logging_frequency=80,
+    use_sdgd=True,
+    sdgd_num_dims=2,
+
+    #act_fn='silu',
 
 
     #lambda_strategy="gradnorm_adapt",
     #use_rbas=True
-    use_rbas = False,
-    rbas_k = 1.0,
+    use_rbas = True,
+    rbas_k = 0.5,
     rbas_c = 0.0,
+    rbas_chunk_size = 100,
 
     #crit_loss_val=1e-6,
     #time_strategy="causal_loss",
@@ -151,6 +157,7 @@ if args.enable_testing:
     sampling_settings["res_points"] = args.n_test_points
     testing_suite.make_test_data(lambda X: None, pde_model, test_sampling_type, sampling_settings, pde_model.u_analytic, f"{dir_name}/testing_data.pth", device)
     print(f"Testing suite ready: n_points={args.n_test_points}, n_chunk_size={args.n_test_chunk_size}.")
+    #sfsdf
 else:
     testing_suite = None
 

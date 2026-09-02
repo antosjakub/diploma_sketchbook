@@ -2,11 +2,13 @@ from torch import nn
 import torch
 import sys
 
-t = sys.argv[1]
-print(40*"==")
-print(40*"==")
-print("t =", t)
-t = int(t)
+#t = sys.argv[1]
+#print(40*"==")
+#print(40*"==")
+#print("t =", t)
+#t = int(t)
+
+t = 9
 
 
 #dtype = torch.float32
@@ -98,16 +100,16 @@ else:
     def train(x):
         u = model(x)
 
-        grad_u = vmap(jacrev(model))(X)
+        grad_u = vmap(jacrev(model))(x)
 
-        H = vmap(hessian(model))(X)
+        H = vmap(hessian(model))(x)
         lapl = H.diagonal(dim1=-2, dim2=-1).sum(dim=-1)
 
         loss = torch.mean(
             u + grad_u.sum(dim=-1) + lapl
         )
 
-        loss = torch.mean(u)
+        #loss = torch.mean(u)
         loss.backward()
 
     train_com = torch.compile(train)
