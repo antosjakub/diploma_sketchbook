@@ -952,6 +952,44 @@ def create_dataloaders(sampling_type, model, pde_model, settings, active_losses,
     return bundle
 
 
+def metropolis_sample(fun: Callable, sampling_settings):
+        """
+        Sample approximately from the un-normalized stationary density fun.
+        - simple random-walk Metropolis-Hastings
+            - obtain n samples in parallel - only store the last point
+        - get n x d tensor sampled from fun
+        """
+        d = sampling_settings["d"]
+        n_samples = sampling_settings.get("n_samples", 1000)
+        n_steps = sampling_settings.get("n_steps", 200)
+        step_size = sampling_settings.get("step_size", 0.025)
+        device = sampling_settings.get("device", 'cpu')
+        dtype = sampling_settings.get("dtype", torch.float32)
+
+        with torch.no_grad():
+            x = torch.rand(d, n_samples).to(device=device, dtype=dtype)
+            p_curr = fun(x)
+            assert p_curr.shape == (1, n_samples)
+            ss = torch.full(
+                (1, d),
+                step_size,
+                device=device,
+                dtype=dtype,
+            )
+            n_burnin = 100
+
+            for _ in range(n_burnin + n_steps):
+                x_prop = x + ss * torch.randn_like(x)
+                p_prop = fun(x_prop)
+                accept_prob = torch.minimum(
+                    torch.ones_like(p_curr),
+                    p_prop / (p_curr + 1e-16),
+                )
+                accepted = torch.rand(n_samples, device=device) < accept_prob
+                if accepted.any():
+                    x[accepted] = x_prop[accepted]
+                    p_curr[accepted] = p_prop[accepted]
+        return x
 
 
 #if __name__ == "__main__":

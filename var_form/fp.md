@@ -46,7 +46,7 @@ $$
 
 
 ---
-perform discretization in time (backward euler), so that instead of $\tilde\rho = \tilde\rho(t,x)$, we have $\tilde\rho_n = \tilde\rho_n(x)$
+perform discretization in time (backward euler), so that instead of $\tilde\rho = \tilde\rho(t,x)$, we work with $\tilde\rho_n = \tilde\rho_n(x)$
 $$
 \frac{\tilde\rho_{n+1}-\tilde\rho_n}{\delta t} e^{-\beta V}
 = \nabla\cdot\left(\frac{\alpha}{\beta} e^{-\beta V} \nabla\tilde\rho_{n+1}\right) \\
@@ -231,7 +231,7 @@ $$
 $$
 
 
-### slightly more formal treatment
+### c) slightly more formal treatment
 
 given $\tilde\rho_n$, minimize the following to obtain $\tilde\rho_{n+1}$
 
@@ -262,7 +262,7 @@ start with the IC $\tilde\rho_0$ and train the network $f_{1}$ by using $S(\tild
 
 
 ### 1b) single spatial network with N outputs
-(pretty much same as 1a but instead of a sequence of networks with spatial input we have a single network with spatial input with a sequence of outputs)
+(pretty much same as 1a but instead of a sequence of networks with spatial input we have a single network with spatial input and a sequence of outputs)
 
 - discretize temporal domain $\{t_n\}_{n=0}^N,\,t_0 = 0, t_N = T\,.$
 
@@ -283,7 +283,7 @@ start with IC $\tilde\rho_0$ and train only the first output of the network to a
 - train a single network $f(t,x)$ sequantially
     - $f:(0,T)\times\Omega\to\mathbb R$
 
-start with IC $\tilde\rho_0$ and train the network to approximate the minimizer at $t_1$: $f(x,t_1)\approx\tilde\rho_1$ by using $S(\tilde\rho_0)[f(t_1,\cdot)]$ as the loss function, then use network $f$ now trained at $t_1$ to train it at $t_2$ via $S(f(t_1,\cdot))[f(t_2,\cdot)]$
+start with IC $\tilde\rho_0$ and train the network to approximate the minimizer at $t_1$: $f(x,t_1)\approx\tilde\rho_1$ by using $S(\tilde\rho_0)[f(t_1,\cdot)]$ as the loss function, then use network $f$ now trained at $t_1$ to train it at $t_2$ via $S(f(t_1,\cdot))[f(t_2,\cdot)]$ etc.
 
 
 ### 2) just sum all $S$ together
@@ -303,7 +303,7 @@ $$
 S_{tot} = \sum_{n=1}^{N-1} S(f_{n+1})
 
 =
-\sum_{n=1}^{N-1} S(f_{n+1})
+\sum_{n=1}^{N-1}
 \sum_{x\sim\frac{e^{-\beta V}}{z}} 
 \left(
 \frac{1}{2\,\delta t}
@@ -312,6 +312,7 @@ S_{tot} = \sum_{n=1}^{N-1} S(f_{n+1})
 \right)
 $$
 
+For each term in the sum, detach $f_n$ and only let the network optimize the weights for $f_{n+1}$.
 
 
 ### 3) operator learning
@@ -338,6 +339,7 @@ We can thus train a network to solve this problem for general $v$ - which is bas
 The learned network will then be an operator on some space of functions, $X(\Omega)$:
 
 $f:X(\Omega)\to X(\Omega)$
+
 
 
 

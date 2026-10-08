@@ -3,6 +3,7 @@ import torch
 
 import derivatives
 import utility
+import sampling
 
 class SmoluchowskiGeneral:
     """
@@ -437,4 +438,87 @@ class SmoluchowskiRastigin(SmoluchowskiGeneral):
 #    class LL_ODE(SmoluchowskiGeneral.LL_ODE):
 #        def __init__(self, score_sde_model, model_s):
 #            super().__init__(score_sde_model, model_s)
+
+
+
+
+
+class SmoluchowskiVariational:
+    """
+    formulated in variational form
+
+    w = e^{-\beta V}
+    \rho = \tilde\rho w
+
+    custom ic for \rho - needs to be edited for \tilde\rho
+    """
+    def __init__(self, gibbs_pot_model, d, alpha=1.0, beta=1.0, dt=0.1):
+        self.d = d
+        self.alpha = alpha
+        self.beta = beta
+        self.dt = dt
+        self.dist_initial = torch.distributions.MultivariateNormal(
+            loc=torch.zeros(d),
+            covariance_matrix=torch.eye(d)
+        )
+        self.gibbs_pot_model = gibbs_pot_model
+        Z = 0.0
+        self.Z = torch.tensor(Z)
+        self.tilde_rho_prev = None
+    def V(self, x):
+        return self.gibbs_pot_model.V(x)
+    def V_grad(self, x):
+        return self.gibbs_pot_model.V_grad(x)
+    def w(self, x):
+        return torch.exp(-self.beta*self.V(x))
+
+    def _map_from_tilde(self, y, x):
+        return y * self.w(x)
+    def _map_to_tilde(self, y, x):
+        return y / self.w(x)
+
+    def rho_0(self, x):
+        return torch.exp(self.dist_initial.log_prob(x)).unsqueeze(1)
+    def rho_inf(self, x):
+        return torch.exp(-1.0*self.beta*self.V(x)) / self.Z
+    def tilde_rho_0(self, x):
+        return self._map_to_tilde(self.rho_0(x), x)
+    def tilde_rho_inf(self, x):
+        return self._map_to_tilde(self.rho_inf(x), x)
+
+    def var_fun(self, x, model, precomputed={}):
+        """
+        L_{n+1} = 
+        """
+        tilde_rho = model(x)
+        tilde_tho_grad = derivatives.compute_grad(x, tilde_rho, torch.ones_like(tilde_rho))
+        #tilde_rho, tilde_rho_grad = derivatives.compute_u_grad_u(model, x)
+        return 0.5*( (tilde_rho-precomputed["tilde_rho_prev"])**2/self.dt + \
+            self.alpha/self.beta * torch.sum(tilde_tho_grad**2, dim=1, keepdim=True) )
+
+    def get_pde_metadata(self):
+        return {
+            "d": self.d,
+            "alpha": self.alpha,
+            "beta": self.beta,
+        }
+    def dump_pde_metadata(self, file_path) -> None:
+        pde_params = self.get_pde_metadata()
+        utility.json_dump(file_path, {"pde_class": type(self).__name__, "params": pde_params})
+
+    def precompute(self, X):
+        return self.tilde_rho_prev(X)
+        #return {"tilde_rho_prev": self.tilde_rho_prev(X)}
+
+    #class ClassPDE:
+    #    def __init__(self, base_pde_model, bc_type='dir'):
+    #        self.base_pde_model = base_pde_model
+    #        if bc_type == 'dir':
+    #            self.bc_residual = self.bc_residual_dirichlet
+    #        elif bc_type == 'neu':
+    #            self.bc_residual = self.bc_residual_neumann
+    #        else:
+    #            NameError
+    #    def __getattr__(self, name):
+    #        return getattr(self.base_pde_model, name)
 

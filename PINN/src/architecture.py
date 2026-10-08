@@ -281,6 +281,27 @@ def init_glorot_weights(m):
 
 
 
+class PINN_spatial(nn.Module):
+    """
+        input - d (only spatial)
+        output - list of values at different time slices
+    """
+    def __init__(self, input_dim, output_dim, layers=[64, 64, 64], activation_fn=nn.Tanh):
+        super().__init__()
+
+        net_layers = []
+        for l1, l2 in zip(layers[:-1], layers[1:]):
+            net_layers.append(nn.Linear(l1, l2))
+            net_layers.append(activation_fn())
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, layers[0]), activation_fn(),
+            *net_layers,
+            nn.Linear(layers[-1], output_dim)
+        )
+
+    def forward(self, X):
+        return self.net(X)
+
 
 import os, sys
 def load_model_from_json(model_path: str, device='cpu'):
