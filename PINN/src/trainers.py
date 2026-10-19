@@ -892,7 +892,9 @@ class PINN_Trainer_VarFun:
 
     def _build_dataset(self):
         dataset_raw = sampling.metropolis_sample(self.pde_model.w, self.sampling_settings)
-        precomputed_raw = self.pde_model.v(dataset_raw),
+        # ``v_fun`` supplies the previous implicit-Euler snapshot.  Keep this
+        # tensor detached: it is a fixed target while optimizing the new one.
+        precomputed_raw = self.v_fun(dataset_raw).detach()
         self.dataset = {
             "X": dataset_raw,
             "precomputed": precomputed_raw,
@@ -949,7 +951,10 @@ class PINN_Trainer_VarFun:
         self.resampling_frequency = resampling_frequency
         self.n_steps = n_steps
 
-        loss_hist = []
+        # Keep this on the trainer as well as locally so callers can save a
+        # useful partial run after an interrupt.
+        self.loss_history = []
+        loss_hist = self.loss_history
         #test_rel_l2 = {term: [] for term in self.testing_suite.analytic_terms}
         #test_linf = {term: [] for term in self.testing_suite.analytic_terms}
         #test_norm = {str(term): [] for term in self.testing_suite.test_norm_slices}
@@ -1016,7 +1021,7 @@ class PINN_Trainer_VarFun:
                 if memory_sample is not None:
                     mem_log = f" - {self.memory_tracker.format_sample(memory_sample)}"
                     print(mem_log)
-                print(f" - {next(self.model.parameters()).device}, {loss_value.device}, {batch_term_obj.device.type}")
+                print(f" - model={next(self.model.parameters()).device}, loss={loss_value.device}, batch={batch_term_obj[0].device}")
 
             #frac = si / n_steps
             #frac_target = 0.5
@@ -1046,5 +1051,5 @@ class PINN_Trainer_VarFun:
 
         #X = self._fast_batch_sources['pde']['X']
         #torch.save({f"X_last": X}, f"RAR_X_last.pth")
-        return loss_hist, test_rel_l2, test_linf, test_norm
-
+        # Variational snapshot training has no space-time test suite yet.
+        return loss_hist, {}, {}, {}

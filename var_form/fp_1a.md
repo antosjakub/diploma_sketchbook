@@ -262,7 +262,7 @@ start with the IC $\tilde\rho_0$ and train the network $f_{1}$ by using $S(\tild
 ### features
 
 - clean, transparent setup - easy to analyze
-- does not need $\lambda_{bc}, \lamba_{ic}, $ etc... - embedded in the formulation
+- does not need $\lambda_{bc}, \lambda_{ic}, $ etc... - embedded in the formulation
 - sampling - just importance from Gibbs. perhaps later add lhs or residual-based - for covering transient regions
 - does not need second derivatives
 - how do choose $\delta t$ ?

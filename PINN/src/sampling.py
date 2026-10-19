@@ -967,9 +967,13 @@ def metropolis_sample(fun: Callable, sampling_settings):
         dtype = sampling_settings.get("dtype", torch.float32)
 
         with torch.no_grad():
-            x = torch.rand(d, n_samples).to(device=device, dtype=dtype)
+            x = torch.rand(n_samples, d, device=device, dtype=dtype)
             p_curr = fun(x)
-            assert p_curr.shape == (1, n_samples)
+            if p_curr.shape != (n_samples, 1):
+                raise ValueError(
+                    "The Metropolis target must return shape (n_samples, 1); "
+                    f"received {tuple(p_curr.shape)}."
+                )
             ss = torch.full(
                 (1, d),
                 step_size,
@@ -985,7 +989,7 @@ def metropolis_sample(fun: Callable, sampling_settings):
                     torch.ones_like(p_curr),
                     p_prop / (p_curr + 1e-16),
                 )
-                accepted = torch.rand(n_samples, device=device) < accept_prob
+                accepted = torch.rand(n_samples, device=device) < accept_prob.squeeze(1)
                 if accepted.any():
                     x[accepted] = x_prop[accepted]
                     p_curr[accepted] = p_prop[accepted]

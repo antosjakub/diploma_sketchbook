@@ -462,9 +462,9 @@ class SmoluchowskiVariational:
             covariance_matrix=torch.eye(d)
         )
         self.gibbs_pot_model = gibbs_pot_model
-        Z = 0.0
+        Z = 1.0
         self.Z = torch.tensor(Z)
-        self.tilde_rho_prev = None
+        #self.tilde_rho_prev = None
     def V(self, x):
         return self.gibbs_pot_model.V(x)
     def V_grad(self, x):
@@ -480,7 +480,7 @@ class SmoluchowskiVariational:
     def rho_0(self, x):
         return torch.exp(self.dist_initial.log_prob(x)).unsqueeze(1)
     def rho_inf(self, x):
-        return torch.exp(-1.0*self.beta*self.V(x)) / self.Z
+        return self.w(x) / self.Z
     def tilde_rho_0(self, x):
         return self._map_to_tilde(self.rho_0(x), x)
     def tilde_rho_inf(self, x):
@@ -490,10 +490,13 @@ class SmoluchowskiVariational:
         """
         L_{n+1} = 
         """
+        # The sampled locations are data, not trainable parameters, but they
+        # must participate in autograd to evaluate the spatial gradient.
+        x = x.detach().requires_grad_(True)
         tilde_rho = model(x)
         tilde_tho_grad = derivatives.compute_grad(x, tilde_rho, torch.ones_like(tilde_rho))
         #tilde_rho, tilde_rho_grad = derivatives.compute_u_grad_u(model, x)
-        return 0.5*( (tilde_rho-precomputed["tilde_rho_prev"])**2/self.dt + \
+        return 0.5*( (tilde_rho-precomputed)**2/self.dt + \
             self.alpha/self.beta * torch.sum(tilde_tho_grad**2, dim=1, keepdim=True) )
 
     def get_pde_metadata(self):
@@ -506,9 +509,9 @@ class SmoluchowskiVariational:
         pde_params = self.get_pde_metadata()
         utility.json_dump(file_path, {"pde_class": type(self).__name__, "params": pde_params})
 
-    def precompute(self, X):
-        return self.tilde_rho_prev(X)
-        #return {"tilde_rho_prev": self.tilde_rho_prev(X)}
+        #def precompute(self, X):
+        #    return self.tilde_rho_prev(X)
+        #    #return {"tilde_rho_prev": self.tilde_rho_prev(X)}
 
     #class ClassPDE:
     #    def __init__(self, base_pde_model, bc_type='dir'):
@@ -521,4 +524,3 @@ class SmoluchowskiVariational:
     #            NameError
     #    def __getattr__(self, name):
     #        return getattr(self.base_pde_model, name)
-
