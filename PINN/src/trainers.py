@@ -1053,3 +1053,234 @@ class PINN_Trainer_VarFun:
         #torch.save({f"X_last": X}, f"RAR_X_last.pth")
         # Variational snapshot training has no space-time test suite yet.
         return loss_hist, {}, {}, {}
+
+
+
+class PINN_Trainer_IC:
+    """
+    loss - just L2 diff: model vs IC
+    dataset / batch - every n steps, just sample a large dataset and then split it into batches to feed into the NN
+    """
+    def __init__(
+        self, model, optimizer, scheduler, pde_model,
+        sampling_settings,
+        testing_suite,
+        profiler=None, device='cpu', dir_name=None, grad_clip_norm=None,
+        memory_tracker=None,
+    ):
+        self.model = model
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+        self.pde_model = pde_model
+        self.sampling_settings = sampling_settings
+        self.profiler = profiler
+        self.testing_suite = testing_suite
+        self.device = device
+        self.d = self.pde_model.d
+        self.dir_name = dir_name
+        self.grad_clip_norm = grad_clip_norm
+        self.memory_tracker = memory_tracker
+        self.memory_history = self.memory_tracker.history if self.memory_tracker is not None else None
+        self.dataset = {}
+        self.dataset_iteration = 0
+
+    def _build_dataset(self):
+        # dataset = metropolis + LHS (+ RBAS)
+
+        # A. metropolis-hastings
+        #dataset_raw = sampling.metropolis_sample(self.pde_model.w, self.sampling_settings)
+
+        d = self.sampling_settings["d"]
+        n_samples = self.sampling_settings.get("n_samples", 1000)
+        device = self.sampling_settings.get("device", 'cpu')
+        dtype = self.sampling_settings.get("dtype", torch.float32)
+
+        # B. uniform at [-2.15, 2.15]
+        dataset_raw = 2.15 * ( 2*torch.rand(n_samples, d, device=device, dtype=dtype)-1.0)
+
+        # C. Normal cut at radius 2.0
+        #dataset_raw = torch.randn(2*n_samples, d, device=device, dtype=dtype)
+        #indx = torch.sqrt(torch.sum(dataset_raw**2, dim=1)) < 2.0
+        #dataset_raw = dataset_raw[indx, :][:n_samples, :]
+        #assert dataset_raw.shape[0] == n_samples
+
+        # B. + C.
+        #dataset_raw_n = torch.randn(n_samples, d, device=device, dtype=dtype)
+        #indx = torch.sqrt(torch.sum(dataset_raw_n**2, dim=1)) < 2.0
+        #dataset_raw_n = dataset_raw_n[indx, :][:n_samples, :]
+        #dataset_raw_u = 2.15 * ( 2*torch.rand(n_samples-dataset_raw_n.shape[0], d, device=device, dtype=dtype)-1.0)
+        #dataset_raw = torch.concatenate( (dataset_raw_n, dataset_raw_u), dim=0 )
+        #print(dataset_raw_n.shape[0] / n_samples)
+
+        # D. metropolis-hastings cut at radius 2.0
+        #self.sampling_settings["n_samples"] = 2 * n_samples
+        #dataset_raw = sampling.metropolis_sample(self.pde_model.w, self.sampling_settings)
+        #indx = torch.sqrt(torch.sum(dataset_raw**2, dim=1)) < 2.0
+        #dataset_raw = dataset_raw[indx, :][:n_samples, :]
+        #self.sampling_settings["n_samples"] = n_samples
+
+
+        # store the sampled dataset for later inspection
+        if self.dataset_iteration < 10:
+            print(f"SAVING TO: {self.dir_name}/dataset_raw_v{self.dataset_iteration}.pth")
+            torch.save(dataset_raw, f"{self.dir_name}/dataset_raw_v{self.dataset_iteration}.pth")
+        self.dataset_iteration += 1
+        precomputed_raw = self.pde_model.tilde_rho_0(dataset_raw)
+        self.dataset = {
+            "X": dataset_raw,
+            "precomputed": precomputed_raw,
+            "batch_size": self.sampling_settings["batch_size"],
+            "n_samples": self.sampling_settings["n_samples"],
+            "perm": torch.randperm(self.sampling_settings["n_samples"], device=self.sampling_settings["device"]),
+            "pos": 0,
+        }
+
+    def _next_batch(self) -> Tuple:
+        src = self.dataset
+        if src["pos"] >= src["n_samples"]:
+            src["perm"] = torch.randperm(src["n_samples"], device=src["X"].device)
+            src["pos"] = 0
+        end = min(src["pos"] + src["batch_size"], src["n_samples"])
+        idx = src["perm"][src["pos"]:end]
+        src["pos"] = end
+        return (src["X"][idx], src["precomputed"][idx])
+
+    def _loss_term(self, batch_term_obj: Tuple):
+        b = batch_term_obj
+        res = self.pde_model.ic_residual(b[0], self.model, b[1])
+        return torch.mean(res**2)
+
+    def train_adam_step(self, batch_term_obj: Tuple):
+        """
+        batch_term_obj = (X, precomputed)
+        """
+        self.optimizer.zero_grad()
+        with record_function("loss"):
+            loss_value = self._loss_term(batch_term_obj)
+        with record_function("backward"):
+            loss_value.backward()
+        if self.grad_clip_norm is not None:
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip_norm)
+        with record_function("optimizer_step"):
+            self.optimizer.step()
+        return loss_value
+
+
+    def train_adam_minibatch(self,
+        n_steps, n_steps_decay, resampling_frequency=2000, logging_frequency=100,
+        prevent_resampling=False,
+        gradnorm_update_freq=50,
+        crit_loss_val=None,
+    ):
+        """Train the model using Adam optimizer.
+
+        If one_batch_per_epoch=True, each `si` performs a single gradient step
+        (one batch from each active loader). Otherwise iterates over all batches
+        of the bundle per `si`.
+        """
+
+        self.resampling_frequency = resampling_frequency
+        self.n_steps = n_steps
+
+        # Keep this on the trainer as well as locally so callers can save a
+        # useful partial run after an interrupt.
+        self.loss_history = []
+        loss_hist = self.loss_history
+        #test_rel_l2 = {term: [] for term in self.testing_suite.analytic_terms}
+        #test_linf = {term: [] for term in self.testing_suite.analytic_terms}
+        #test_norm = {str(term): [] for term in self.testing_suite.test_norm_slices}
+        self.log_steps = []
+
+        if self.profiler: self.profiler.make()
+
+        self._build_dataset()
+
+        #allow_first_save = True
+        #allow_first_save_RAR = True
+        for si in range(n_steps):
+            self.si = si
+            memory_sample = None
+            if self.memory_tracker is not None:
+                memory_sample = self.memory_tracker.sample(si + 1)
+
+            if self.profiler: self.profiler.start(si)
+
+            if (not prevent_resampling) and ( (si + 1) % resampling_frequency == 0 ):
+            #if (si + 1) % resampling_frequency == 0:
+                print("New training data arrived!")
+                with record_function("resample"):
+                    self._build_dataset()
+
+            ## create a new iterator and get the entire dataset
+            #batch_term_objs = {
+            #    k: next(iter(self.bundle[k]))
+            #    for k in self.active_losses
+            #}
+            # iterate to the next batch
+            batch_term_obj = self._next_batch()
+            loss_value = self.train_adam_step(batch_term_obj)
+            loss_hist.append(loss_value.item())
+
+            if (si + 1) % n_steps_decay == 0:
+                self.scheduler.step()
+
+            if self.profiler: self.profiler.exit(si)
+
+            if (si + 1) % logging_frequency == 0:
+                self.log_steps.append(si+1)
+                parts = [f"Step {si+1}/{n_steps}", f"Loss: {loss_value.item():.8f}"]
+                parts.append(f"lr: {self.optimizer.param_groups[0]['lr']:.6f}")
+                log = ", ".join(parts)
+                print(log)
+                if self.testing_suite is not None:
+                    test_dict_rel_l2, test_dict_linf, test_dict_norm = self.testing_suite.test_model(self.model, self.pde_model, device=self.device) #,test_bs=self.sampling_settings["bs"])
+                    test_log_rel_l2 = " - Testing: rel L2  | "
+                    for k,v in test_dict_rel_l2.items():
+                        test_rel_l2[k].append(v)
+                        test_log_rel_l2 += f"{k}: {v:.6f}, "
+                    print(test_log_rel_l2[:-2]) # no ', '
+                    test_log_linf = " - Testing: Linf  | "
+                    for k,v in test_dict_linf.items():
+                        test_linf[k].append(v)
+                        test_log_linf += f"{k}: {v:.6f}, "
+                    print(test_log_linf[:-2]) # no ', '
+                    test_log_norm = " - Testing: Norm  | "
+                    for k,v in test_dict_norm.items():
+                        test_norm[k].append(v)
+                        test_log_norm += f"t={k}: {v:.6f}, "
+                    print(test_log_norm[:-2]) # no ', '
+                if memory_sample is not None:
+                    mem_log = f" - {self.memory_tracker.format_sample(memory_sample)}"
+                    print(mem_log)
+                print(f" - model={next(self.model.parameters()).device}, loss={loss_value.device}, batch={batch_term_obj[0].device}")
+
+            #frac = si / n_steps
+            #frac_target = 0.5
+            #if allow_first_save_RAR and (frac > frac_target):
+            #    X = self._fast_batch_sources['pde']['X']
+            #    torch.save({f"{self.dir_name}/X_{frac_target}": X}, f"RAR_X_{frac_target}.pth")
+            #    allow_first_save_RAR = False
+
+            #if allow_first_save and (loss_value < 1e-5):
+            #    print("++++++++++++++++++++++++++++++++++++++")
+            #    print("Saving the model!!")
+            #    print("++++++++++++++++++++++++++++++++++++++")
+            #    torch.save(self.model.state_dict(), f'{self.dir_name}/model_1e-5_{si}.pth')
+            #    print("\nModel saved.")
+            #    allow_first_save = False
+            #if loss_value < 1e-6:
+            #    print("++++++++++++++++++++++++++++++++++++++")
+            #    print("Saving the model!!")
+            #    print("++++++++++++++++++++++++++++++++++++++")
+            #    torch.save(self.model.state_dict(), f'{self.dir_name}/model_1e-6_{si}.pth')
+            #    print("\nModel saved.")
+            #    return losses_hist_dict, test_rel_l2, test_linf
+
+
+            #if (crit_loss_val is not None) and loss_value < crit_loss_val:
+            #    return losses_hist_dict, test_rel_l2, test_linf, test_norm
+
+        #X = self._fast_batch_sources['pde']['X']
+        #torch.save({f"X_last": X}, f"RAR_X_last.pth")
+        # Variational snapshot training has no space-time test suite yet.
+        return loss_hist, {}, {}, {}

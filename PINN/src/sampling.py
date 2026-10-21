@@ -967,7 +967,8 @@ def metropolis_sample(fun: Callable, sampling_settings):
         dtype = sampling_settings.get("dtype", torch.float32)
 
         with torch.no_grad():
-            x = torch.rand(n_samples, d, device=device, dtype=dtype)
+            x = 2*torch.rand(n_samples, d, device=device, dtype=dtype)-1.0
+            #x = torch.rand(n_samples, d, device=device, dtype=dtype)
             p_curr = fun(x)
             if p_curr.shape != (n_samples, 1):
                 raise ValueError(

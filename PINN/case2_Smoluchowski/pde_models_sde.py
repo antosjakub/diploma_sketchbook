@@ -509,10 +509,6 @@ class SmoluchowskiVariational:
         pde_params = self.get_pde_metadata()
         utility.json_dump(file_path, {"pde_class": type(self).__name__, "params": pde_params})
 
-        #def precompute(self, X):
-        #    return self.tilde_rho_prev(X)
-        #    #return {"tilde_rho_prev": self.tilde_rho_prev(X)}
-
     #class ClassPDE:
     #    def __init__(self, base_pde_model, bc_type='dir'):
     #        self.base_pde_model = base_pde_model
@@ -524,3 +520,11 @@ class SmoluchowskiVariational:
     #            NameError
     #    def __getattr__(self, name):
     #        return getattr(self.base_pde_model, name)
+
+    def ic_residual(self, X, model, precomputed=None):
+        return model(X) - precomputed
+
+    def ic_loss(self, X, model, precomputed):
+        res = self.ic_residual(X, model, precomputed)
+        return torch.mean(res**2)
+
