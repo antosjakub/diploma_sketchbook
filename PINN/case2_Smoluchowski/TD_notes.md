@@ -37,7 +37,7 @@ uniform is good overall
 gaussian gives visibly good results at the center of the IC
 
 
-
+moving from 50k to  100k steps makes the err 2-4x smaller (plot_variational_step.png)
 
 
 

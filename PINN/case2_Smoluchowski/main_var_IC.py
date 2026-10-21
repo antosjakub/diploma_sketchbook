@@ -1,5 +1,7 @@
 """
 Train the IC step for the Smoluchowski equation.
+
+python main_var_IC.py --n_steps=50000 --gamma=0.99 --n_steps_decay=200
 """
 
 import argparse

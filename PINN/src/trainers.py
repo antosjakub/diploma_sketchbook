@@ -891,7 +891,21 @@ class PINN_Trainer_VarFun:
         self.dataset = {}
 
     def _build_dataset(self):
-        dataset_raw = sampling.metropolis_sample(self.pde_model.w, self.sampling_settings)
+        
+        # A. MC
+        #dataset_raw = sampling.metropolis_sample(self.pde_model.w, self.sampling_settings)
+
+        d = self.sampling_settings["d"]
+        n_samples = self.sampling_settings.get("n_samples", 1000)
+        device = self.sampling_settings.get("device", 'cpu')
+        dtype = self.sampling_settings.get("dtype", torch.float32)
+
+        # B. uniform at [-2.15, 2.15]
+        dataset_raw = 2.15 * ( 2*torch.rand(n_samples, d, device=device, dtype=dtype)-1.0)
+
+
+
+
         # ``v_fun`` supplies the previous implicit-Euler snapshot.  Keep this
         # tensor detached: it is a fixed target while optimizing the new one.
         precomputed_raw = self.v_fun(dataset_raw).detach()

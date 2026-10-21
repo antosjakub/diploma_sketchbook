@@ -4,6 +4,8 @@ The network represents ``tilde_rho_{n+1}(x)`` only; it has no time input.
 Repeated time steps require feeding the previous trained snapshot back as the
 next step's ``tilde_rho_prev``. This script trains the first step, whose
 previous state is the analytic initial condition.
+
+python main_var.py --n_steps=50000 --gamma=0.99 --n_steps_decay=200
 """
 
 import argparse
@@ -30,22 +32,25 @@ def build_parser() -> argparse.ArgumentParser:
     """Return the command-line parser with variational-training defaults."""
     parser = argparse.ArgumentParser(description=__doc__)
     main_runner.add_common_args(parser)
+    parser.add_argument("--n_mc_steps", default=1000, type=int, help="Number of Metropolis-Hastings MC steps")
     parser.set_defaults(
         T=2.0,
         glorot_init=True,
         act_fn="tanh",
         lr=1e-3,
+        gamma=0.99,
         d=2,
         layers="64,64,64,64",
-        bs=2048,
+        bs=1024,
         resampling_frequency=100,
-        n_res_points=204800,
+        #n_res_points=102400,
         prevent_resampling=False,
         n_steps=90,
+        n_mc_steps=100,
         n_steps_decay=40,
         logging_frequency=10,
         output_dir="run_adam_var",
-        starting_model=None,
+        starting_model="run_adam_ic/model.pth",
         enable_testing=False,
         enable_profiler=False,
         enable_memory_tracking=True,
@@ -143,7 +148,7 @@ def main(argv: list[str] | None = None) -> None:
         "d": args.d,
         "batch_size": args.bs,
         "n_samples": args.bs * args.resampling_frequency,
-        "n_steps": args.n_steps,
+        "n_steps": args.n_mc_steps,
         "device": device,
     }
 
@@ -193,6 +198,8 @@ def main(argv: list[str] | None = None) -> None:
         # want a single figure with 2 rows and 3 columns
         # - tilda_rho_n (given as IC) vs tilda_model at n & n+1
         # - rho_n (given as IC) vs model at n & n+1
+        args.L_min = -2.0
+        args.L_max = 2.0
         plot_results.plot_variational_step(
             dir_name,
             model,
