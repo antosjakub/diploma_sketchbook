@@ -73,3 +73,34 @@ moving from 50k to  100k steps makes the err 2-4x smaller (plot_variational_step
 
 
 
+Test
+- accuracy
+- mass conservation
+- computational cost
+- training stability
+- first- vs second-order autodiff
+- convergence with $\Delta t$
+- scaling with dimension.
+
+
+
+
+## Thesis building up plan
+
+# Part 1
+1. compare agains strong 2d
+2. correct
+3. compare agains strong 2d
+etc.
+
+- both for pinn & comb-tech
+
+# Part 2
+scale to higher dimes and look at accuracy metrics:
+- mass consrvation
+- IC and TC error
+
+
+
+
+
