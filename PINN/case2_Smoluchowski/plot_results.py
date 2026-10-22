@@ -113,7 +113,7 @@ def plot_viz(dir_name, model, pde_model, score_sde_model, args, device, model_s=
         raise ValueError(f"Unknown mode: {mode}")
 
 
-def plot_variational_step(dir_name, model, pde_model, previous_timestep_fn, args, device):
+def plot_variational_step(dir_name, model, pde_model, previous_timestep_fn, args, device, titles):
     """Save a 2x3 comparison of the previous and current variational states.
 
     Columns are the prescribed state at time level ``n``, the trained state at
@@ -155,7 +155,6 @@ def plot_variational_step(dir_name, model, pde_model, previous_timestep_fn, args
         with torch.no_grad():
             tilde_n = previous_timestep_fn(x)
             tilde_model_np1 = model(x)
-
             rho_n = pde_model._map_from_tilde(tilde_n, x)
             rho_model_np1 = pde_model._map_from_tilde(tilde_model_np1, x)
 
@@ -163,25 +162,18 @@ def plot_variational_step(dir_name, model, pde_model, previous_timestep_fn, args
         tilde_model_np1 = values_for_plot(tilde_model_np1, "model tilde rho_(n+1)")
         rho_n = values_for_plot(rho_n, "given rho_n")
         rho_model_np1 = values_for_plot(rho_model_np1, "model rho_(n+1)")
-
         rows = (
             (
-                r"$\tilde\rho$",
                 tilde_n,
                 tilde_model_np1,
-                r"$\tilde\rho_n$ (given)",
-                r"$\tilde\rho_{n+1}$ (trained)",
-            ),
+            ) + titles[0],
             (
-                r"$\rho$",
                 rho_n,
                 rho_model_np1,
-                r"$\rho_n$ (given)",
-                r"$\rho_{n+1}$ (trained)",
-            ),
+            ) + titles[1]
         )
         fig, axes = plt.subplots(2, 3, figsize=(15, 8), constrained_layout=True)
-        for row_index, (quantity, value_n, value_np1, title_n, title_np1) in enumerate(rows):
+        for row_index, (value_n, value_np1, title_n, title_np1, title_diff) in enumerate(rows):
             difference = value_np1 - value_n
             value_min = min(value_n.min().item(), value_np1.min().item())
             value_max = max(value_n.max().item(), value_np1.max().item())
@@ -203,17 +195,17 @@ def plot_variational_step(dir_name, model, pde_model, previous_timestep_fn, args
                 axis.set_title(title)
                 axis.set_xlabel("x0")
                 axis.set_ylabel("x1")
-            fig.colorbar(contour, ax=axes[row_index, :2], label=quantity)
+            fig.colorbar(contour, ax=axes[row_index, :2])
 
             difference_contour = axes[row_index, 2].contourf(
                 grid.X_grid.cpu(), grid.Y_grid.cpu(),
                 difference.detach().reshape(grid.N, grid.N).cpu(),
                 levels=difference_levels, cmap="RdBu_r",
             )
-            axes[row_index, 2].set_title(r"$\Delta$" + f"{quantity} " + r"(trained$-$provided)")
+            axes[row_index, 2].set_title(title_diff)
             axes[row_index, 2].set_xlabel("x0")
             axes[row_index, 2].set_ylabel("x1")
-            fig.colorbar(difference_contour, ax=axes[row_index, 2], label=f"delta {quantity}")
+            fig.colorbar(difference_contour, ax=axes[row_index, 2])
 
         path = f"{dir_name}/viz/plot_variational_step.png"
         fig.savefig(path, dpi=150)

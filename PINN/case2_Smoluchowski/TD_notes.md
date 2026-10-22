@@ -54,3 +54,22 @@ moving from 50k to  100k steps makes the err 2-4x smaller (plot_variational_step
 
 - Metropolis sampling takes a long time, perhaps let it run in parallel on cpu ?
 
+
+
+### how to confirm it all right?
+
+## IC and last loop TC
+- lmax
+- l2 err
+- rel l2 ?
+
+### every loop:
+- loss
+- mass conservation
+
+## other
+- compare with comb-tech
+- exact solver in low dims ?
+
+
+

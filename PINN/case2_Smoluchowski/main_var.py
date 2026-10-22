@@ -33,6 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     main_runner.add_common_args(parser)
     parser.add_argument("--n_mc_steps", default=1000, type=int, help="Number of Metropolis-Hastings MC steps")
+    parser.add_argument("--dt", default=0.01, type=float, help="Step size of backward Euler")
     parser.set_defaults(
         T=2.0,
         glorot_init=True,
@@ -45,7 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
         resampling_frequency=100,
         #n_res_points=102400,
         prevent_resampling=False,
-        n_steps=90,
+        n_steps=100,
         n_mc_steps=100,
         n_steps_decay=40,
         logging_frequency=10,
@@ -74,7 +75,7 @@ def activation_class(name: str) -> type[torch.nn.Module]:
         raise ValueError(f"Unknown activation {name!r}; choose one of: {choices}.") from exc
 
 
-def build_pde_model(d: int) -> pde_models_sde.SmoluchowskiVariational:
+def build_pde_model(d: int, dt=0.01) -> pde_models_sde.SmoluchowskiVariational:
     """Construct the double-well model and its first-step variational form."""
     well_depths = torch.tensor(
         [0.8067, 1.0391, 1.0101, 0.7722, 1.0593, 1.0706, 0.9805, 0.9893, 0.9514, 1.1419]
@@ -93,7 +94,7 @@ def build_pde_model(d: int) -> pde_models_sde.SmoluchowskiVariational:
         d=d,
         alpha=1.0,
         beta=1.0,
-        dt=0.01,
+        dt=dt,
     )
 
 
@@ -111,7 +112,7 @@ def summarize_losses(losses: list[float]) -> dict[str, float]:
     }
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None, var_step:int=0) -> None:
     parser = build_parser()
     args = run_utils.parse_args_with_config(parser, argv)
     if args.enable_testing:
@@ -126,7 +127,7 @@ def main(argv: list[str] | None = None) -> None:
     run_utils.save_input_config(dir_name, args)
 
     start_time = time.time()
-    pde_model = build_pde_model(args.d)
+    pde_model = build_pde_model(args.d, args.dt)
     pde_model.dump_pde_metadata(f"{dir_name}/pde_metadata.json")
 
     layers = utility.layers_from_string(args.layers)
@@ -136,11 +137,32 @@ def main(argv: list[str] | None = None) -> None:
         layers=layers,
         activation_fn=activation_class(args.act_fn),
     ).to(device)
+
     if args.glorot_init:
         model.apply(architecture.init_glorot_weights)
     if args.starting_model:
+        # init weights
         model.load_state_dict(torch.load(args.starting_model, map_location=device, weights_only=True))
         model.train()
+        # use the prev trained model for the term in the action
+        v_model = architecture.PINN_spatial(
+            args.d,
+            output_dim=1,
+            layers=layers,
+            activation_fn=activation_class(args.act_fn),
+        ).to(device)
+        v_model.load_state_dict(torch.load(args.starting_model, map_location=device, weights_only=True))
+        # freeze the pre-trained model
+        v_model.eval()
+        for p in v_model.parameters():
+            p.requires_grad_(False)
+        # the thing
+        @torch.no_grad()
+        def v_fun(x):
+            return v_model(x)
+    else:
+        v_fun=pde_model.tilde_rho_0
+
 
     optimizer, scheduler = run_utils.make_optim(model, args)
     profiler = run_utils.make_profiler(dir_name, args, device)
@@ -152,7 +174,7 @@ def main(argv: list[str] | None = None) -> None:
         "device": device,
     }
 
-    print(f"Training variational PINN for one {args.d}D implicit-Euler step on {device}.")
+    print(f"Training variational PINN for one {args.d}D implicit-Euler step with dt={args.dt} on the {device}.")
     trainer = PINN_Trainer_VarFun(
         model=model,
         optimizer=optimizer,
@@ -160,7 +182,7 @@ def main(argv: list[str] | None = None) -> None:
         pde_model=pde_model,
         sampling_settings=sampling_settings,
         testing_suite=None,
-        v_fun=pde_model.tilde_rho_0,
+        v_fun=v_fun,
         profiler=profiler,
         device=device,
         dir_name=dir_name,
@@ -200,13 +222,26 @@ def main(argv: list[str] | None = None) -> None:
         # - rho_n (given as IC) vs model at n & n+1
         args.L_min = -2.0
         args.L_max = 2.0
+
         plot_results.plot_variational_step(
             dir_name,
             model,
             pde_model,
-            pde_model.tilde_rho_0,
+            v_fun,
             args,
             device,
+            titles = (
+                (
+                    fr"$\tilde\rho_{var_step}$ (given)",
+                    fr"$\tilde\rho_{var_step+1}$ (trained)",
+                    r"$\Delta\tilde\rho$ (trained $-$ given)"
+                ),
+                (
+                    fr"$\rho_{var_step}$ (given)",
+                    fr"$\rho_{var_step+1}$ (trained)",
+                    r"$\Delta\rho$ (trained $-$ given)"
+                ),
+            )
         )
     report = {
         "device": device.type,

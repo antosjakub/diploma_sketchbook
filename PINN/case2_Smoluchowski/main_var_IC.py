@@ -41,7 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
         resampling_frequency=100,
         #n_res_points=102400,
         prevent_resampling=False,
-        n_steps=90,
+        n_steps=100,
         n_mc_steps=100,
         n_steps_decay=40,
         logging_frequency=10,
@@ -202,6 +202,19 @@ def main(argv: list[str] | None = None) -> None:
             pde_model.tilde_rho_0,
             args,
             device,
+            titles = (
+                (
+                    r"IC $\tilde\rho_0$ (given)",
+                    r"$\tilde\rho_0$ (trained)",
+                    r"$\Delta\tilde\rho$ (trained $-$ given)",
+                ),
+                (
+                    r"IC $\rho_0$ (given)",
+                    r"$\rho_0$ (trained)",
+                    r"$\Delta\rho$ (trained $-$ given)",
+                ),
+            )
+
         )
     report = {
         "device": device.type,

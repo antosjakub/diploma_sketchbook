@@ -1135,7 +1135,7 @@ class PINN_Trainer_IC:
 
 
         # store the sampled dataset for later inspection
-        if self.dataset_iteration < 10:
+        if self.dataset_iteration < 3:
             print(f"SAVING TO: {self.dir_name}/dataset_raw_v{self.dataset_iteration}.pth")
             torch.save(dataset_raw, f"{self.dir_name}/dataset_raw_v{self.dataset_iteration}.pth")
         self.dataset_iteration += 1
