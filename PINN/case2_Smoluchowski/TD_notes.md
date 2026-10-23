@@ -82,7 +82,21 @@ Test
 - convergence with $\Delta t$
 - scaling with dimension.
 
+- interpolation accuracy metric
+    - double the n of interpl points, how does the L2 err change
+        - possible math theor handling - theorems etc
+    - decrease teh time delta, does the accuracy change much ?
+    - increase decrease numer of netwrok params
 
+    - activaitons - softplus not tanh
+
+    - julia Voronoi package 
+
+    - in case of MC, presample the points at once, then jsut take batches
+
+    - sample a large pool of 100,000 poitns before training,
+        - then, every k-th step, do a few more steps of metropolis on the large pool
+        - parallel on gpu
 
 
 ## Thesis building up plan
@@ -101,6 +115,14 @@ scale to higher dimes and look at accuracy metrics:
 - IC and TC error
 
 
+-----------------------
 
+Reference sol in lower dims - FEM ?
+
+
+
+Combitech
+- tried FE, failed
+- FVM discret perpahps better ?
 
 
